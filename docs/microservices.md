@@ -42,9 +42,14 @@ Responsibility
 
 1. LogPilot Bulk Loader
 
-Ephemeral Job
-
-A temporary process (Kubernetes Job) that runs once. It mounts the archive storage, processes 5 years of logs into Parquet, loads them, and dies.
+A- **Name**: `bulk-loader`
+- **Type**: Batch Job (Python Script: `log_loader.py`)
+- **Responsibility**:
+    - Read historical log files from `data/landing_zone/`.
+    - Perform initial Template Mining (Drain3).
+    - Populate the `logs` table in DuckDB.
+- **Key Dependencies**: `duckdb`, `drain3`.
+- **Scaling**: Can be parallelized by partitioning files (e.g., one job per year), but for MVP it's a single process.
 
 2. LogPilot Collector
 
@@ -77,6 +82,8 @@ Responsibility
 Service
 
 Handles Auth and routing user chat requests.
+- **Authentication**: Integrates with OIDC/OAuth2 (Google/Okta) for user identity.
+- **Authorization**: Enforces RBAC policies (Admin/Analyst/Viewer) before passing requests to the Orchestrator.
 
 6. Pilot Orchestrator
 
@@ -89,6 +96,14 @@ The "Brain" (LangChain). Routes questions to SQL or Vector DB.
 Service
 
 The SQL Generator and RAG Retriever APIs.
+
+8. Lifecycle Manager
+
+Service
+
+Background service that manages Data Tiering.
+- **Task**: Runs daily to move logs > 30 days from DuckDB (Hot) to S3 Parquet (Warm), and logs > 1 year to Glacier (Cold).
+- **Compliance**: Executes "Right to be Forgotten" purge requests.
 
 3. Phased Ingestion Strategy
 

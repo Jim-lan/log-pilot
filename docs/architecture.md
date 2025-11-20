@@ -72,6 +72,18 @@ Agent Output: {"user_id": "index 2", "ip_address": "index 6", "event": "login_fa
 
 Fast Application: The system saves this rule. Future logs matching this template are parsed using standard string splitting (very fast), not the LLM.
 
+3.2 Dynamic Schema Evolution
+
+One of the biggest challenges in log management is handling new fields without breaking the schema.
+
+- **The Problem**: A developer adds a new field `latency_ms` to the Payment Service logs.
+- **The Old Way**: The ETL pipeline breaks, or we have to manually `ALTER TABLE`.
+- **The LogPilot Way**:
+    - The `Schema Discovery Agent` detects the new pattern.
+    - It maps `latency_ms` to the `context` JSON column automatically.
+    - The `Golden Standard` columns remain untouched.
+    - **Result**: Zero downtime. The new field is immediately queryable via `context->>'latency_ms'`.
+
 4. The "Golden Standard" Log Schema
 
 Based on industry standards (OpenTelemetry, W3C Common Log Format), we define the following Mandatory Fields that every log must be mapped to during ingestion.
@@ -98,39 +110,17 @@ STRING
 
 Standardized level. Map legacy levels (e.g., "Crit", "Fatal") to these 5.
 
-DEBUG, INFO, WARN, ERROR, FATAL
-
-service_name
-
-STRING
-
-The system or microservice generating the log.
-
-PaymentGateway, AuthService, PostgresDB
-
-trace_id
-
-STRING
-
-(Optional) Distributed tracing ID to correlate across services.
-
-a1b2c3d4e5
-
-body
-
-STRING
-
-The Template or sanitized message (PII removed).
-
-User <User> failed login
-
-context
-
-JSON
-
-The "Catch-All" bucket for all specific features.
-
-{"user_id": "u1", "ip": "10.0.0.1"}
+- `timestamp`: (DateTime) When it happened.
+- `severity`: (String) INFO, ERROR, WARN.
+- `service_name`: (String) Who generated it.
+- `trace_id`: (String, Optional) For distributed tracing.
+- `body`: (String) The **template** (mined), not the raw message.
+- `environment`: (String, Optional) prod, staging, dev.
+- `app_id`: (String, Optional) Unique application identifier.
+- `department`: (String, Optional) Owner department.
+- `host`: (String, Optional) Hostname or IP.
+- `region`: (String, Optional) Cloud region.
+- `context`: (JSON) The dynamic blob containing variable parts (user_id, amount, etc.) and any other metadata.
 
 5. Deep Dive: The "JSON Context" Pattern
 
@@ -246,8 +236,79 @@ Action: Vector search on the error messages associated with those User IDs.
 
 7. Next Steps
 
-Ingestion Script: We will write a Python script to read your raw logs.
+### Phase 1: The Bootstrap Job (Historical Data)
+**Goal**: Ingest 5 years of historical logs to build the initial "Knowledge Base" of templates.
 
-Apply Standards: The script will map your specific log format to the Golden Standard table structure defined in Section 4.
+- **Component**: `services/bulk-loader` (Script: `log_loader.py`)
+- **Input**: Raw log files in `data/landing_zone/`.
+- **Process**:
+    1.  **Scan**: Reads files from the landing zone.
+    2.  **Parse**: Extracts timestamp, severity, service, and standard metadata (env, app_id, etc.).
+    3.  **Mine**: Runs `Drain3` (or mock) to extract templates.
+    4.  **Load**: Inserts into DuckDB (`data/logs.duckdb`).
 
-Load DB: We will insert these mapped records into a local DuckDB instance to prove the "JSON Context" querying works.
+8. Future Phases & Roadmap Extensions
+
+Based on the "Refined Requirements" (docs/refined requirements.md), the following features are designated for future phases to prioritize the core MVP.
+
+8.1 Predictive Analytics (Phase 3)
+- **Requirement**: Predict system issues (bottlenecks, degradation) before they occur.
+- **Architecture Add-on**:
+    - **Forecasting Service**: A new microservice running time-series models (Prophet, ARIMA, or LSTM).
+    - **Input**: Aggregated metrics from DuckDB (e.g., error_rate per hour).
+    - **Output**: "Risk Scores" written back to DuckDB for the Agent to query.
+
+8.2 Workflow Integrations (Phase 3)
+- **Requirement**: Connect AI outputs to Jira/ServiceNow.
+- **Architecture Add-on**:
+    - **Action Tools**: New tools for the `tool-service` (e.g., `jira_ticket_creator`, `slack_notifier`).
+    - **Approval Flow**: The Agent will propose an action ("Shall I create a ticket?"), and the user must approve via the Chat UI before the tool executes.
+
+8.3 Real-Time vs. Near Real-Time
+- **Optimization**: For sub-second latency requirements in the future, we can switch the Ingestion Worker to a streaming engine (e.g., Flink or Spark Streaming) without changing the downstream Query Layer.
+
+9. Enterprise Readiness & Non-Functional Requirements
+
+To ensure LogPilot meets enterprise standards, we incorporate the following architectural pillars:
+
+9.1 Security & Access Control
+- **RBAC (Role-Based Access Control)**:
+    - **Admin**: Full access to system config and all logs.
+    - **Analyst**: Read-only access to logs and dashboards.
+    - **Viewer**: Restricted access (e.g., can only see logs for their specific `department`).
+- **Encryption**:
+    - **At Rest**: All DuckDB files and Vector indices are encrypted using AES-256.
+    - **In Transit**: All internal service communication (gRPC/REST) and user traffic uses TLS 1.3.
+- **Audit Trails**:
+    - Every user query ("Show me errors...") is itself logged to a separate `audit_logs` table for compliance review.
+
+9.2 Data Lifecycle Management (Tiered Storage)
+To balance performance and cost, we use a tiered storage strategy:
+- **Hot Tier (DuckDB)**:
+    - **Retention**: 30 Days.
+    - **Storage**: High-speed NVMe SSD.
+    - **Use Case**: Real-time debugging, recent trend analysis.
+- **Warm Tier (Parquet/S3)**:
+    - **Retention**: 1 Year.
+    - **Storage**: S3 Standard / GCS.
+    - **Use Case**: Monthly reporting, deep historical analysis.
+- **Cold Tier (Glacier/Archive)**:
+    - **Retention**: 5-7 Years (Compliance).
+    - **Storage**: S3 Glacier.
+    - **Use Case**: Legal hold, regulatory audits.
+- **Lifecycle Manager**: A background service automatically moves data between tiers based on timestamp.
+
+9.3 Compliance & Privacy
+- **PII Masking**:
+    - The `Ingestion Worker` automatically detects and hashes sensitive data (Credit Cards, SSNs) *before* it hits the database.
+- **Right to be Forgotten**:
+    - Supported via the `user_id` key in the `context` column. A "Purge Job" can delete all records associated with a specific user ID across all tiers.
+
+9.4 High Availability (HA) & Scalability
+- **Ingestion Layer**:
+    - The `Ingestion Worker` is stateless and can scale horizontally (K8s ReplicaSet) to handle 10TB+/day.
+    - Kafka acts as the backpressure buffer.
+- **Query Layer**:
+    - **Read Replicas**: We can spin up multiple read-only DuckDB instances pointing to the same underlying storage (or replicated storage) to handle high concurrent user queries.
+- **API Gateway**:
+    - Load balanced behind an Nginx/Cloud Load Balancer.
