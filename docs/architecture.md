@@ -34,6 +34,11 @@ graph TD
         Vectorizer --> VectorDB[(ChromaDB/Qdrant)]
     end
 
+    subgraph "Security Layer"
+        IngestSvc[Ingestion Worker] --> |Raw Log| PIIMasker[PII Masker (Regex)]
+        PIIMasker --> |Clean Log| TemplateMiner
+    end
+
     subgraph "Intelligence Layer (LogPilot Agent)"
         User[User Query] --> ChatUI[Chat Interface]
         ChatUI --> Router[Pilot Router / Orchestrator]
@@ -304,7 +309,18 @@ To balance performance and cost, we use a tiered storage strategy:
 - **Right to be Forgotten**:
     - Supported via the `user_id` key in the `context` column. A "Purge Job" can delete all records associated with a specific user ID across all tiers.
 
-9.4 High Availability (HA) & Scalability
+9.4 End-to-End Data Flow (with Security)
+
+graph LR
+    Raw[Raw Log Stream] --> Ingest[Ingestion Worker]
+    Ingest --> PII[PII Masker (shared/utils.py)]
+    PII --> |Cleaned| Miner[Template Miner]
+    Miner --> |Template| Registry[Schema Registry]
+    Registry --> |Schema| DB[(DuckDB)]
+    
+    style PII fill:#f9f,stroke:#333,stroke-width:2px
+
+10. High Availability (HA) & Scalability
 - **Ingestion Layer**:
     - The `Ingestion Worker` is stateless and can scale horizontally (K8s ReplicaSet) to handle 10TB+/day.
     - Kafka acts as the backpressure buffer.

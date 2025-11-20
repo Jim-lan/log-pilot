@@ -3,12 +3,14 @@ import os
 import time
 import random
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Add project root to python path to allow importing shared modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from shared.log_schema import LogEvent
+from shared.db_connectors import DuckDBConnector
+from shared.utils import PIIMasker
 
 class MockKafkaConsumer:
     """Simulates a Kafka Consumer yielding raw log lines."""
@@ -18,82 +20,137 @@ class MockKafkaConsumer:
             "2025-11-20 10:00:02 ERROR auth-service: Login failed for user=admin ip=192.168.1.5 reason=bad_password",
             "2025-11-20 10:00:03 WARN db-service: Slow query detected on table=users duration=500ms",
             "2025-11-20 10:00:04 INFO payment-service: Payment processed for user_id=102 amount=25.00",
-            "2025-11-20 10:00:05 ERROR auth-service: Login failed for user=guest ip=10.0.0.1 reason=locked_out"
+            "2025-11-20 10:00:05 ERROR auth-service: Login failed for user=guest ip=10.0.0.1 reason=locked_out",
+            # PII Examples
+            "2025-11-20 10:00:06 INFO email-service: Sending email to john.doe@example.com",
+            "2025-11-20 10:00:07 INFO billing-service: Charging card 4111-1111-1111-1111 for $99.99"
         ]
 
     def __iter__(self):
         for log in self.logs:
-            time.sleep(0.5) # Simulate network latency
+            time.sleep(0.2) # Simulate network latency
             yield log
 
-class MockDrain3:
-    """Simulates Drain3 template mining."""
-    def transform(self, content: str) -> str:
+class MockSchemaRegistry:
+    """Simulates a Schema Registry that caches known templates."""
+    def __init__(self):
+        self.known_templates = {} # content -> template
+
+    def get_template(self, content: str) -> str:
+        # In a real system, this would check a Redis cache or API
+        # Here we simulate the "Drain3" logic or lookup
+        
         # Simple heuristic for the prototype: mask numbers and IPs
-        # In real Drain3, this is done via tree clustering
         template = content
-        # Mask user_id
         if "user_id=" in template:
             parts = template.split("user_id=")
             template = parts[0] + "user_id=<*>" + " " + " ".join(parts[1].split(" ")[1:])
-        # Mask amount
         if "amount=" in template:
              parts = template.split("amount=")
              template = parts[0] + "amount=<*>"
-        # Mask user
         if "user=" in template:
             parts = template.split("user=")
             template = parts[0] + "user=<*>" + " " + " ".join(parts[1].split(" ")[1:])
-        # Mask ip
         if "ip=" in template:
             parts = template.split("ip=")
             template = parts[0] + "ip=<*>" + " " + " ".join(parts[1].split(" ")[1:])
         
+        # Mask PII in template itself if any leaked (though PII masker runs before this usually)
+        # But here we are simulating "Template Mining" which happens on raw text
         return template.strip()
 
 class LogIngestor:
     def __init__(self):
         self.consumer = MockKafkaConsumer()
-        self.miner = MockDrain3()
+        self.registry = MockSchemaRegistry()
+        self.db = DuckDBConnector()
+        self.pii_masker = PIIMasker()
+        self.batch_size = 5
+        self.batch_buffer = []
 
     def parse_log(self, raw_log: str) -> LogEvent:
-        # Simple parsing logic for the prototype
+        # 1. Parse Raw String (Simple logic for prototype)
         parts = raw_log.split(" ")
         timestamp_str = f"{parts[0]} {parts[1]}"
         severity = parts[2]
         service_name = parts[3].replace(":", "")
         body = " ".join(parts[4:])
         
-        # 1. Mine Template
-        template = self.miner.transform(body)
+        # 2. Mask PII in the body immediately
+        safe_body = self.pii_masker.mask_text(body)
         
-        # 2. Extract Context (Naive extraction for prototype)
+        # 3. Get Template (Schema Registry)
+        # Note: We pass the SAFE body to the registry so templates don't contain PII
+        template = self.registry.get_template(safe_body)
+        
+        # 4. Extract Context
         context = {}
         for part in parts[4:]:
             if "=" in part:
                 k, v = part.split("=")
-                context[k] = v
+                # Mask PII in values
+                context[k] = self.pii_masker.mask_text(v)
 
         return LogEvent(
             timestamp=datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S"),
             severity=severity,
             service_name=service_name,
-            body=template, # We store the TEMPLATE in the body, not the raw message
+            body=template, 
             context=context
         )
 
+    def flush_batch(self):
+        if not self.batch_buffer:
+            return
+        
+        print(f"💾 Flushing batch of {len(self.batch_buffer)} logs to DuckDB...")
+        try:
+            self.db.insert_batch(self.batch_buffer)
+            self.batch_buffer = []
+        except Exception as e:
+            print(f"❌ Error flushing batch: {e}")
+
     def run(self):
-        print("🚀 Starting Ingestion Worker (Prototype Mode)...")
-        for raw_log in self.consumer:
-            event = self.parse_log(raw_log)
-            print(f"\n📥 Received: {raw_log}")
-            print(f"✨ Processed LogEvent:")
-            print(f"   ├── Timestamp: {event.timestamp}")
-            print(f"   ├── Service:   {event.service_name}")
-            print(f"   ├── Severity:  {event.severity}")
-            print(f"   ├── Template:  {event.body}")
-            print(f"   └── Context:   {event.context}")
+        print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
+        print("🔒 PII Masking Enabled")
+        print("🗄️  DuckDB Persistence Enabled")
+        
+        try:
+            for raw_log in self.consumer:
+                try:
+                    event = self.parse_log(raw_log)
+                    
+                    # Add to buffer
+                    self.batch_buffer.append(event.model_dump())
+                    
+                    print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
+                    
+                    if len(self.batch_buffer) >= self.batch_size:
+                        self.flush_batch()
+                        
+                except Exception as e:
+                    print(f"⚠️ Failed to process log: {raw_log} -> {e}")
+            
+            # Flush remaining
+            self.flush_batch()
+            
+            # Verification Query
+            print("\n🔎 Verifying Data in DuckDB:")
+            count = self.db.query("SELECT count(*) FROM logs")[0][0]
+            print(f"   Total Rows: {count}")
+            
+            print("   Sample Rows (Check PII Masking):")
+            samples = self.db.query("SELECT body, context FROM logs ORDER BY timestamp DESC LIMIT 3")
+            for row in samples:
+                print(f"   - Body: {row[0]}")
+                print(f"   - Context: {row[1]}")
+
+        except KeyboardInterrupt:
+            print("\n🛑 Stopping worker...")
+            self.flush_batch()
+            self.db.close()
 
 if __name__ == "__main__":
     ingestor = LogIngestor()
     ingestor.run()
+

@@ -163,7 +163,31 @@ The Handover: Phase 1 saves these regex rules to the Schema Registry.
 
 Benefit: When Phase 2 starts, it doesn't need to ask the LLM "What is this log?" because Phase 1 already defined it. Phase 2 runs extremely fast because the "cache" is pre-warmed.
 
-5. Extensibility Scenarios
+5. Developer Guide: Implementation Details
+
+To help new developers understand the current implementation state and extend functionality:
+
+5.1 Shared Utilities (`shared/`)
+- **PII Masking (`shared/utils.py`)**:
+    - **Class**: `PIIMasker`
+    - **Capabilities**: Uses regex to detect and redact:
+        - Emails (`<EMAIL_REDACTED>`)
+        - IPv4 Addresses (`<IP_REDACTED>`)
+        - Credit Cards (`<CC_REDACTED>`)
+        - SSNs (`<SSN_REDACTED>`)
+    - **Usage**: Applied automatically in the Ingestion Worker before data reaches the DB.
+
+5.2 Ingestion Worker Internals (`services/ingestion-worker/`)
+- **Mocking Strategy (Prototype Phase)**:
+    - **Kafka**: `MockKafkaConsumer` generates synthetic logs (including PII scenarios) to simulate a stream without a real broker.
+    - **Schema Registry**: `MockSchemaRegistry` simulates the "Drain3" template mining logic in-memory.
+- **Performance Patterns**:
+    - **Batch Processing**: Logs are buffered in memory (`self.batch_buffer`) and bulk-inserted into DuckDB every N records (default: 5) or on shutdown. This reduces I/O overhead.
+- **Persistence**:
+    - Data is stored in `data/logs.duckdb`.
+    - Schema: Defined in `shared/db_connectors.py`.
+
+6. Extensibility Scenarios
 
 Adding a New Log Type
 
