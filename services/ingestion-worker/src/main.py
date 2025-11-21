@@ -31,38 +31,19 @@ class MockKafkaConsumer:
             time.sleep(0.2) # Simulate network latency
             yield log
 
-class MockSchemaRegistry:
-    """Simulates a Schema Registry that caches known templates."""
-    def __init__(self):
-        self.known_templates = {} # content -> template
+from shared.utils.template_miner import LogTemplateMiner
 
-    def get_template(self, content: str) -> str:
-        # In a real system, this would check a Redis cache or API
-        # Here we simulate the "Drain3" logic or lookup
-        
-        # Simple heuristic for the prototype: mask numbers and IPs
-        template = content
-        if "user_id=" in template:
-            parts = template.split("user_id=")
-            template = parts[0] + "user_id=<*>" + " " + " ".join(parts[1].split(" ")[1:])
-        if "amount=" in template:
-             parts = template.split("amount=")
-             template = parts[0] + "amount=<*>"
-        if "user=" in template:
-            parts = template.split("user=")
-            template = parts[0] + "user=<*>" + " " + " ".join(parts[1].split(" ")[1:])
-        if "ip=" in template:
-            parts = template.split("ip=")
-            template = parts[0] + "ip=<*>" + " " + " ".join(parts[1].split(" ")[1:])
-        
-        # Mask PII in template itself if any leaked (though PII masker runs before this usually)
-        # But here we are simulating "Template Mining" which happens on raw text
-        return template.strip()
+class MockSchemaRegistry:
+    """
+    (Deprecated) Replaced by LogTemplateMiner.
+    Keeping class for reference if needed, but logic is now in shared/utils/template_miner.py
+    """
+    pass
 
 class LogIngestor:
     def __init__(self):
         self.consumer = MockKafkaConsumer()
-        self.registry = MockSchemaRegistry()
+        self.miner = LogTemplateMiner(persistence_file="data/drain3_state.bin")
         self.db = DuckDBConnector()
         self.pii_masker = PIIMasker()
         self.batch_size = 5
@@ -79,9 +60,9 @@ class LogIngestor:
         # 2. Mask PII in the body immediately
         safe_body = self.pii_masker.mask_text(body)
         
-        # 3. Get Template (Schema Registry)
-        # Note: We pass the SAFE body to the registry so templates don't contain PII
-        template = self.registry.get_template(safe_body)
+        # 3. Get Template (Drain3)
+        # Note: We pass the SAFE body to the miner so templates don't contain PII
+        template = self.miner.mine_template(safe_body)
         
         # 4. Extract Context
         context = {}

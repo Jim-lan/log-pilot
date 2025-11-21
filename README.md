@@ -52,10 +52,15 @@ graph TB
 | Component | Tech Stack | Function | Status |
 |-----------|------------|----------|--------|
 | **Ingestion Worker** | Python, Kafka | Real-time log streaming & PII masking | ✅ Complete |
-| **Schema Registry** | Python, Regex | Template mining & dynamic schema | ✅ Complete |
-| **Pilot Orchestrator** | **LangGraph** | Stateful agent with self-correction loops | 🚧 In Progress |
-| **Knowledge Base** | **LlamaIndex** | RAG engine for semantic search | 🚧 In Progress |
-| **API Gateway** | **FastAPI** | Headless REST interface | 🚧 In Progress |
+| **Schema Registry** | Python, Regex | Template mining### 3. **Intelligence Layer (The "Brain")**
+*   **Pilot Orchestrator (LangGraph)**: A cyclic state machine that routes queries to the right tool (SQL vs. RAG), handles self-correction, and synthesizes answers.
+*   **Knowledge Base (LlamaIndex)**: RAG engine for semantic search over unstructured logs and documentation.
+*   **Schema Discovery Agent**: LLM-powered agent that automatically generates and validates regex patterns for new log types.
+
+### 4. **Interface & Evaluation**
+*   **API Gateway (FastAPI)**: RESTful interface for external clients.
+*   **Evaluator Service**: Framework for benchmarking agent performance against golden datasets.
+eway** | **FastAPI** | Headless REST interface | 🚧 In Progress |
  
 ---
  
@@ -99,9 +104,9 @@ pytest tests/
 ---
  
 ## 📚 Documentation
- 
-- **[Architecture Design](docs/architecture.md)**: High-level design & enterprise features
-- **[Detailed Workflow](docs/workflow.md)**: Diagrams of Data Plane & Control Plane loops
+*   **[Business Overview](docs/business_overview.md)**: High-level explanation of the architecture and value (Start Here!).
+*   **[Architecture](docs/architecture.md)**: Detailed technical specifications.
+*   **[Workflow](docs/workflow.md)**: Data flow diagrams.
 - **[Agent Framework](docs/agent_design.md)**: LangGraph & LlamaIndex design details
 - **[System Components](docs/system_components.md)**: Service breakdown
 - **[Testing Strategy](docs/testing_strategy.md)**: Unit, Integration, E2E standards

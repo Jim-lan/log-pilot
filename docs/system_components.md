@@ -67,14 +67,38 @@ The always-on worker. It stays paused during Phase 1. Once Phase 1 finishes, it 
 
 Service
 
-Shared by both phases. Stores the regex rules## 6. Pilot Orchestrator (Control Plane)
-**Tech Stack**: Python, LangGraph, LangChain
+Shared by both phases. Stores the regex rules### 4. **Pilot Orchestrator (Service)**
+*   **Path**: `services/pilot_orchestrator/`
+*   **Tech**: LangGraph, LangChain
+*   **Role**: The central brain. Receives queries, classifies intent, generates SQL, or retrieves from Knowledge Base.
+*   **Key Components**:
+    *   `graph.py`: Defines the cyclic state machine.
+    *   `nodes.py`: Implements the logic for each step (Classifier, SQL, RAG).
 
-The central "Brain" that manages user interactions and coordinates tools.
+### 5. **Knowledge Base (Service)**
+*   **Path**: `services/knowledge_base/`
+*   **Tech**: LlamaIndex, ChromaDB
+*   **Role**: Stores and retrieves unstructured log data and documentation.
+*   **Key Components**:
+    *   `store.py`: Manages the vector index.
+    *   `converter.py`: Transforms raw logs into semantic documents.
 
-### Responsibilities
-- **State Management**: Maintains conversation history and context using LangGraph.
-- **Orchestration**: Executes the "Pilot Graph" (Classify -> Plan -> Act -> Observe).
+### 6. **Schema Discovery (Service)**
+*   **Path**: `services/schema_discovery/`
+*   **Tech**: LLM, Regex
+*   **Role**: Automatically learns how to parse new log formats.
+*   **Key Components**:
+    *   `generator.py`: LLM-based regex generation.
+    *   `validator.py`: Strict regex validation against samples.
+
+### 7. **Evaluator (Service)**
+*   **Path**: `services/evaluator/`
+*   **Tech**: Pandas, Scikit-Learn
+*   **Role**: Benchmarks agent performance.
+*   **Key Components**:
+    *   `runner.py`: Executes agents against golden datasets.
+    *   `scorer.py`: Calculates accuracy metrics.
+aph" (Classify -> Plan -> Act -> Observe).
 - **Error Handling**: Implements self-correction loops for failed tool executions.
 
 ### Key Components

@@ -255,13 +255,20 @@ Action: Vector search on the error messages associated with those User IDs.
 
 Based on the "Refined Requirements" (docs/refined requirements.md), the following features are designated for future phases to prioritize the core MVP.
 
-8.1 API Gateway (Interface Layer)
-**Tech Stack**: Python, FastAPI
+## 5. Interface Layer (API Gateway)
 
-The entry point for all external interactions. LogPilot is designed as an **API-First (Headless)** platform.
+The **API Gateway** (`services/api_gateway`) serves as the single entry point for all external interactions.
+- **Technology**: FastAPI + Uvicorn.
+- **Endpoints**: `POST /query` (Natural Language Interface).
+- **Integration**: Direct invocation of the Pilot Orchestrator's LangGraph.
 
-### Responsibilities
-- **REST API**: Exposes endpoints for chat (`POST /chat`), log ingestion (`POST /logs`), and system health (`GET /health`).
+## 6. Evaluation & Optimization
+
+The **Evaluator Service** (`services/evaluator`) ensures reliability and performance.
+- **Golden Datasets**: Curated examples for Schema Discovery, SQL Generation, and RAG.
+- **Scoring**: Automated metrics (Regex Match, SQL Execution Match, Semantic Similarity).
+- **Benchmarking**: CLI tools to compare different LLM models and prompts.
+(`POST /chat`), log ingestion (`POST /logs`), and system health (`GET /health`).
 - **Authentication**: Validates API keys or JWT tokens.
 - **Documentation**: Auto-generates Swagger/OpenAPI docs for easy integration.
 

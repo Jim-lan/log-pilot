@@ -99,23 +99,6 @@ We will still use Jinja2 templates, but they will be loaded into LangChain `Prom
 *   `prompts/pilot/sql_gen.j2`
 *   `prompts/pilot/sql_fix.j2` (New!)
 
-## 5. Implementation Strategy
-
-### Step 1: Setup Environment
-*   Install `langgraph`, `langchain`, `llama-index`.
-
-### Step 2: Define State
-```python
-from typing import TypedDict, Annotated
-from langgraph.graph.message import add_messages
-
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    sql_query: str
-    sql_result: str
-    error: str
-```
-
 ### Step 3: Build Nodes
 Implement each node as a function that takes `AgentState` and returns an update.
 
