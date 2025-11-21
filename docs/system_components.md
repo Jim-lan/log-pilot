@@ -67,31 +67,35 @@ The always-on worker. It stays paused during Phase 1. Once Phase 1 finishes, it 
 
 Service
 
-Shared by both phases. Stores the regex rules so Phase 2 doesn't relearn patterns Phase 1 already solved.
+Shared by both phases. Stores the regex rules## 6. Pilot Orchestrator (Control Plane)
+**Tech Stack**: Python, LangGraph, LangChain
 
-B. The Control Plane (The Agent)
+The central "Brain" that manages user interactions and coordinates tools.
 
-Service Name
+### Responsibilities
+- **State Management**: Maintains conversation history and context using LangGraph.
+- **Orchestration**: Executes the "Pilot Graph" (Classify -> Plan -> Act -> Observe).
+- **Error Handling**: Implements self-correction loops for failed tool executions.
 
-Type
+### Key Components
+- **Graph Definition**: Defines nodes (Classifier, SQLGen, RAG) and edges.
+- **State Schema**: TypedDict defining the agent's memory structure.
 
-Responsibility
+---
 
-5. API Gateway
+## 7. Tool Service & Knowledge Base
+**Tech Stack**: Python, LlamaIndex, DuckDB
 
-Service
+### 7.1 SQL Tool
+- **Function**: Text-to-SQL generation.
+- **Backend**: DuckDB.
 
-Handles Auth and routing user chat requests.
-- **Authentication**: Integrates with OIDC/OAuth2 (Google/Okta) for user identity.
-- **Authorization**: Enforces RBAC policies (Admin/Analyst/Viewer) before passing requests to the Orchestrator.
-
-6. Pilot Orchestrator
-
-Service
-
-The "Brain" (LangChain). Routes questions to SQL or Vector DB.
-
-7. Tool Services
+### 7.2 Knowledge Base (LlamaIndex)
+- **Function**: RAG (Retrieval-Augmented Generation).
+- **Backend**: ChromaDB (Vector Store).
+- **Features**:
+    - **Ingestion Pipeline**: Loads documents/runbooks.
+    - **Query Engine**: Semantic search with re-ranking.rvices
 
 Service
 

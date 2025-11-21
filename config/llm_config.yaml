@@ -1,0 +1,24 @@
+llm:
+  default_provider: "openai"
+  providers:
+    openai:
+      api_key_env: "OPENAI_API_KEY"
+      models:
+        fast: "gpt-4o-mini"
+        reasoning: "gpt-4o"
+    gemini:
+      api_key_env: "GEMINI_API_KEY"
+      models:
+        fast: "gemini-1.5-flash"
+        reasoning: "gemini-1.5-pro"
+
+agents:
+  schema_discovery:
+    model_type: "fast"
+    temperature: 0.0
+    max_tokens: 1000
+  
+  pilot_orchestrator:
+    model_type: "reasoning"
+    temperature: 0.2
+    recursion_limit: 5

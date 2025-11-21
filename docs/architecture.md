@@ -251,19 +251,32 @@ Action: Vector search on the error messages associated with those User IDs.
     2.  **Parse**: Extracts timestamp, severity, service, and standard metadata (env, app_id, etc.).
     3.  **Mine**: Runs `Drain3` (or mock) to extract templates.
     4.  **Load**: Inserts into DuckDB (`data/logs.duckdb`).
-
 8. Future Phases & Roadmap Extensions
 
 Based on the "Refined Requirements" (docs/refined requirements.md), the following features are designated for future phases to prioritize the core MVP.
 
-8.1 Predictive Analytics (Phase 3)
+8.1 API Gateway (Interface Layer)
+**Tech Stack**: Python, FastAPI
+
+The entry point for all external interactions. LogPilot is designed as an **API-First (Headless)** platform.
+
+### Responsibilities
+- **REST API**: Exposes endpoints for chat (`POST /chat`), log ingestion (`POST /logs`), and system health (`GET /health`).
+- **Authentication**: Validates API keys or JWT tokens.
+- **Documentation**: Auto-generates Swagger/OpenAPI docs for easy integration.
+
+### Why API-First?
+- **Flexibility**: Can be consumed by a CLI, a Web Dashboard (React/Vue), or a Chatbot (Slack/Discord).
+- **Decoupling**: Separates the "Brain" (Orchestrator) from the "Mouth" (Interface).
+
+8.2 Predictive Analytics (Phase 3)
 - **Requirement**: Predict system issues (bottlenecks, degradation) before they occur.
 - **Architecture Add-on**:
     - **Forecasting Service**: A new microservice running time-series models (Prophet, ARIMA, or LSTM).
     - **Input**: Aggregated metrics from DuckDB (e.g., error_rate per hour).
     - **Output**: "Risk Scores" written back to DuckDB for the Agent to query.
 
-8.2 Workflow Integrations (Phase 3)
+8.3 Workflow Integrations (Phase 3)
 - **Requirement**: Connect AI outputs to Jira/ServiceNow.
 - **Architecture Add-on**:
     - **Action Tools**: New tools for the `tool-service` (e.g., `jira_ticket_creator`, `slack_notifier`).
