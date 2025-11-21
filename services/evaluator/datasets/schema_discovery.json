@@ -1,0 +1,18 @@
+[
+    {
+        "id": "auth_log_001",
+        "logs": [
+            "2023-10-27 10:00:01 ERROR auth-service Login failed for user=admin ip=192.168.1.5",
+            "2023-10-27 10:00:02 INFO auth-service Login success for user=john ip=192.168.1.6"
+        ],
+        "expected_regex": "(?P<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<severity>\\w+) (?P<service>[\\w-]+) (?P<message>.*)"
+    },
+    {
+        "id": "payment_log_001",
+        "logs": [
+            "[2023-10-27T10:05:00] [INFO] [payment] Processing order #12345",
+            "[2023-10-27T10:05:01] [ERROR] [payment] Payment declined for order #12345"
+        ],
+        "expected_regex": "\\[(?P<timestamp>[^\\]]+)\\] \\[(?P<severity>\\w+)\\] \\[(?P<service>\\w+)\\] (?P<message>.*)"
+    }
+]

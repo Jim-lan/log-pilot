@@ -1,0 +1,70 @@
+import os
+import chromadb
+from typing import List
+from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.core import Settings
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+# Import from sibling module
+try:
+    from .converter import LogConverter
+except ImportError:
+    from converter import LogConverter
+
+from shared.log_schema import LogEvent
+
+class KnowledgeStore:
+    """
+    Manages the Knowledge Base using LlamaIndex and ChromaDB.
+    """
+    def __init__(self, persist_dir: str = "data/vector_store"):
+        self.persist_dir = persist_dir
+        self._init_store()
+
+    def _init_store(self):
+        """
+        Initialize ChromaDB and LlamaIndex.
+        """
+        # Ensure directory exists
+        os.makedirs(self.persist_dir, exist_ok=True)
+
+        # 1. Setup ChromaDB Client
+        # Using persistent client to save data to disk
+        db = chromadb.PersistentClient(path=self.persist_dir)
+        chroma_collection = db.get_or_create_collection("log_pilot_kb")
+
+        # 2. Setup Vector Store
+        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+        self.storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+        # 3. Setup Embedding Model (Mock or Real)
+        # For now, we assume OPENAI_API_KEY is set, or we could use a local model.
+        # Settings.embed_model = OpenAIEmbedding() 
+        
+        # 4. Load Index (or create empty)
+        # In LlamaIndex, we usually create index from documents. 
+        # If we want to load existing, we use VectorStoreIndex.from_vector_store
+        self.index = VectorStoreIndex.from_vector_store(
+            vector_store,
+            storage_context=self.storage_context
+        )
+
+    def add_logs(self, logs: List[LogEvent]):
+        """
+        Converts logs to documents and adds them to the index.
+        """
+        documents = LogConverter.to_documents(logs)
+        # Insert into index
+        # Note: This updates the underlying ChromaDB automatically
+        for doc in documents:
+            self.index.insert(doc)
+        print(f"✅ Added {len(logs)} logs to Knowledge Base.")
+
+    def query(self, query_str: str) -> str:
+        """
+        Queries the Knowledge Base using LlamaIndex Query Engine.
+        """
+        query_engine = self.index.as_query_engine()
+        response = query_engine.query(query_str)
+        return str(response)

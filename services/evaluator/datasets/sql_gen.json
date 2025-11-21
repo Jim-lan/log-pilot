@@ -1,0 +1,12 @@
+[
+    {
+        "id": "sql_001",
+        "query": "How many errors in auth-service?",
+        "expected_sql": "SELECT count(*) FROM logs WHERE service_name = 'auth-service' AND severity = 'ERROR'"
+    },
+    {
+        "id": "sql_002",
+        "query": "List the last 5 logs",
+        "expected_sql": "SELECT * FROM logs ORDER BY timestamp DESC LIMIT 5"
+    }
+]

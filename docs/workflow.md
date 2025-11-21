@@ -1,88 +1,100 @@
-# Detailed System Workflow
+# Detailed System Workflow (V2)
 
 ## 1. High-Level Architecture Flow
 
 ```text
-┌──────────────────────────────┐
-│ source_systems               │
-│ • data/landing_zone (Files)  │
-│ • Kafka Stream (Mock)        │
-└──────────────┬───────────────┘
-               ▼
-┌──────────────────────────────┐
-│ ingestion_layer              │
-│ • BulkLoaderJob (History)    │
-│ • LogIngestor (Real-Time)    │
-│ • PIIMasker (Governance)     │
-└──────────────┬───────────────┘
-               ▼
-┌──────────────────────────────┐
-│ standardization_engine       │
-│ • Drain3 (Template Mining)   │
-│ • Schema Registry (Cache)    │
-│ • LogEvent (Golden Schema)   │
-└──────────────┬───────────────┘
-               ▼
-┌──────────────────────────────┐
-│ storage_layer (Lakehouse)    │
-│ • DuckDB (Structured Logs)   │
-│ • JSON Context (Dynamic)     │
-└──────────────┬───────────────┘
-               ▼
-┌──────────────────────────────┐
-│ intelligence_layer (Planned) │
-│ • ChromaDB (Vector Store)    │
-│ • Pilot Orchestrator (Agent) │
-└──────────────┬───────────────┘
-               ▼
-┌──────────────────────────────┐
-│ api_gateway (Planned)        │
-│ • Chat Interface             │
-│ • REST Endpoints             │
-└──────────────────────────────┘
+┌────────────────┐
+│ source_systems │  ← Log Files, Kafka Streams
+└──────┬─────────┘
+       ▼
+┌─────────────────────────┐
+│ ingestion_layer         │  ← Ingestion Worker (PII Masking, Template Mining)
+└──────┬──────────────────┘
+       ▼
+┌─────────────────────────┐
+│ storage_layer           │  ← DuckDB (Structured) + ChromaDB (Vectors)
+└──────┬──────────────────┘
+       ▼
+┌────────────────┐
+│ intelligence   │  ← Pilot Orchestrator (LangGraph) + Knowledge Base (LlamaIndex)
+└──────┬─────────┘
+       ▼
+┌─────────────────────────┐
+│ api_gateway             │  ← FastAPI (REST Interface)
+└──────┬──────────────────┘
+       ▼
+┌─────────────┐
+│ user_clients│  ← CLI, Web UI, Chatbot
+└─────────────┘
 ```
 
-## 2. Detailed Data Flow (Step-by-Step)
+## 2. Data Zones & Usage
 
-### Phase 1: Bulk Loader (Historical Data)
-**File**: `services/bulk-loader/src/log_loader.py`
+| Zone                 | Component                                | Purpose                                                              |
+|----------------------|------------------------------------------|----------------------------------------------------------------------|
+| **Landing Zone**     | `data/landing_zone`                      | Raw log files waiting for ingestion.                                 |
+| **Bronze Layer**     | `Ingestion Worker`                       | In-memory processing, PII masking, and template extraction.          |
+| **Silver Layer**     | `DuckDB (logs table)`                    | Structured, queryable log data with JSON context.                    |
+| **Gold Layer**       | `ChromaDB (Embeddings)`                  | Semantic vectors for RAG and knowledge retrieval.                    |
+| **Intelligence**     | `Pilot Orchestrator`                     | Agentic reasoning, SQL generation, and self-correction loops.        |
 
-1.  **Initialization**: `BulkLoaderJob` initializes `DuckDBConnector` and `MockDrain3`.
-2.  **File Scanning**: `run()` scans `data/landing_zone/` for `.log` files.
-3.  **Line Processing** (`process_file`):
-    *   **Read**: Iterates through file line by line.
-    *   **Parse**: Splits line into standard fields (Timestamp, Severity, Service, Body).
-    *   **Template Mining**: Calls `self.miner.transform(body)` to convert "User 123" -> "User <*>".
-    *   **Context Extraction**: Parses key-value pairs (e.g., `user_id=101`) into a `context` dictionary.
-    *   **Standardization**: Creates a `LogEvent` object.
-4.  **Batch Insertion**:
-    *   Accumulates logs in a list.
-    *   When list size >= 100, calls `db.insert_batch()`.
+## 3. Component Workflows
 
-### Phase 2: Ingestion Worker (Real-Time)
-**File**: `services/ingestion-worker/src/main.py`
 
-1.  **Initialization**: `LogIngestor` initializes `MockKafkaConsumer`, `MockSchemaRegistry`, `DuckDBConnector`, and `PIIMasker`.
-2.  **Consumption**: `run()` iterates over `self.consumer` (simulating Kafka stream).
-3.  **Log Parsing** (`parse_log`):
-    *   **Raw Split**: Separates metadata from the message body.
-    *   **PII Masking (Body)**: Calls `self.pii_masker.mask_text(body)` to redact sensitive info (Emails, IPs, CCs, SSNs) *before* further processing.
-    *   **Template Lookup**: Calls `self.registry.get_template(safe_body)` to get the standardized template.
-    *   **Context Extraction**: Extracts `key=value` pairs from the log.
-    *   **PII Masking (Context)**: Iterates through context values and applies `mask_text` again to ensure no PII leaks in structured data.
-    *   **Object Creation**: Returns a `LogEvent` model.
-4.  **Batching**:
-    *   Appends `LogEvent` to `self.batch_buffer`.
-    *   Checks if buffer size >= 5.
-5.  **Persistence** (`flush_batch`):
-    *   Calls `self.db.insert_batch(buffer)`.
-    *   `DuckDBConnector` serializes the `context` dict to JSON and executes the SQL `INSERT`.
+### 2.1 Data Plane: Ingestion Pipeline
+**Components**: `Ingestion Worker`, `Schema Registry`, `DuckDB`
 
-## 3. Key Functions & Components
+1.  **Ingest**: Read from Kafka/File.
+2.  **Mask**: Apply Regex to redact PII (Email, IP, SSN).
+3.  **Mine**:
+    *   Check `Schema Registry` for existing template.
+    *   If new, use LLM (Schema Discovery Agent) to generate Regex.
+4.  **Store**:
+    *   **Structured**: Insert `LogEvent` into DuckDB.
+    *   **Unstructured**: Generate embedding and insert into ChromaDB (LlamaIndex).
 
-| Component | Function | Description | Source File |
-|-----------|----------|-------------|-------------|
-| **PII Masker** | `mask_text(text)` | Applies regex patterns to redact sensitive data. | `shared/utils.py` |
-| **Schema Registry** | `get_template(content)` | Returns the standardized template for a log line. | `services/ingestion-worker/src/main.py` |
-| **DB Connector** | `insert_batch(logs)` | Inserts a list of LogEvents into DuckDB efficiently. | `shared/db_connectors.py` |
-| **Log Event** | `LogEvent` (Class) | Pydantic model defining the Golden Standard Schema. | `shared/log_schema.py` |
+### 2.2 Control Plane: Pilot Orchestrator (LangGraph)
+**The "Brain" uses a Cyclic Graph to handle complex queries.**
+
+```mermaid
+graph TD
+    Start([User Query]) --> Classify{Classify Intent}
+    
+    %% SQL Branch
+    Classify -->|Analytical| SQL_Gen[Generate SQL]
+    SQL_Gen --> Execute_SQL{Execute}
+    
+    Execute_SQL -->|Success| Synthesize[Synthesize Answer]
+    Execute_SQL -->|Error| Fix_SQL[Self-Correction]
+    Fix_SQL -->|Retry| SQL_Gen
+    
+    %% RAG Branch
+    Classify -->|Knowledge| RAG_Search[Vector Search]
+    RAG_Search --> Synthesize
+    
+    %% Ambiguous Branch
+    Classify -->|Unclear| Ask_User[Ask Clarification]
+    Ask_User --> End([Wait for Input])
+    
+    Synthesize --> End([Final Answer])
+```
+
+#### Workflow Steps:
+1.  **Classify**: LLM determines if the user wants data (`SQL`) or explanation (`RAG`).
+2.  **SQL Loop**:
+    *   **Generate**: Create SQL based on `LogEvent` schema.
+    *   **Execute**: Run against DuckDB.
+    *   **Observe**: If error (e.g., "Column not found"), loop back to **Generate** with error context.
+3.  **RAG Step**:
+    *   **Retrieve**: Query LlamaIndex for similar logs/docs.
+    *   **Synthesize**: Combine retrieved chunks into an answer.
+
+### 2.3 Schema Discovery (Agentic)
+**Triggered when a new log pattern is detected.**
+
+1.  **Detect**: `TemplateMiner` sees a log that doesn't match known Regex.
+2.  **Analyze**: Send sample to `SchemaDiscoveryAgent` (LLM).
+3.  **Generate**: LLM outputs a Regex pattern and field extraction rules.
+4.  **Validate**: Test Regex against the sample.
+5.  **Register**: Save to `Schema Registry`.
+

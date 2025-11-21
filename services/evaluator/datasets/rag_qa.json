@@ -1,0 +1,7 @@
+[
+    {
+        "id": "rag_001",
+        "query": "Why did the payment fail?",
+        "expected_answer": "The payment failed because the transaction was declined for order #12345."
+    }
+]
