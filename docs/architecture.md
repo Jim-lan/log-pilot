@@ -28,7 +28,8 @@ The system follows a **Data Lakehouse + RAG** architecture, composed of three la
 ```mermaid
 graph TD
     subgraph "Smart Ingestion Layer"
-        RawLogs[Raw Log Files] --> |File Watcher| TemplateMiner[Template Miner]
+        RawLogs[Raw Log Files] --> |File Watcher| PIIMasker["PII Masker (Regex)"]
+        PIIMasker --> |Clean Log| TemplateMiner[Template Miner]
         TemplateMiner -- "New Pattern?" --> SchemaAgent["Schema Discovery Agent (LLM)"]
         SchemaAgent -- "Define Rules" --> RuleStore[Extraction Rules]
         TemplateMiner -- "Known Pattern" --> Extractor[Fast Feature Extractor]
@@ -40,11 +41,6 @@ graph TD
         Branch --> |"Metadata & Metrics"| TimeSeriesDB[("DuckDB/ClickHouse")]
         Branch --> |"Unstructured Context"| Vectorizer[Embedding Model]
         Vectorizer --> VectorDB[("ChromaDB/Qdrant")]
-    end
-
-    subgraph "Security Layer"
-        IngestSvc[Ingestion Worker] --> |Raw Log| PIIMasker["PII Masker (Regex)"]
-        PIIMasker --> |Clean Log| TemplateMiner
     end
 
     subgraph "Intelligence Layer (LogPilot Agent)"

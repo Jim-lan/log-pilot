@@ -7,7 +7,7 @@ from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 from services.knowledge_base.src.store import KnowledgeStore
-from shared.db_connectors import DuckDBConnector
+from shared.db.duckdb_client import DuckDBConnector
 from shared.log_schema import LogEvent
 
 def ingest_kb():

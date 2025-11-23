@@ -7,8 +7,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 from scripts.generate_logs import generate_logs
 
+import argparse
+
 def reset_environment():
-    print("🧹 Starting Environment Reset...")
+    parser = argparse.ArgumentParser(description="Reset LogPilot Demo Environment")
+    parser.add_argument("--count", type=int, default=2000, help="Number of mock logs to generate")
+    args = parser.parse_args()
+
+    print(f"🧹 Starting Environment Reset (Generating {args.count} logs)...")
     
     # 1. Define paths to clean
     paths_to_clean = [
@@ -36,7 +42,7 @@ def reset_environment():
     
     # 4. Generate Mock Data
     print("\n📝 Generating Fresh Mock Data...")
-    generate_logs(output_dir="data/landing_zone", count=2000)
+    generate_logs(output_dir="data/landing_zone", count=args.count)
     
     print("\n✅ Environment Reset Complete!")
     print("👉 Next Steps:")

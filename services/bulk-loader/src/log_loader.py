@@ -10,7 +10,7 @@ from typing import List
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from shared.log_schema import LogEvent
-from shared.db_connectors import DuckDBConnector
+from shared.db.duckdb_client import DuckDBConnector
 
 class MockDrain3:
     """Simulates Drain3 template mining (Reused from prototype)."""

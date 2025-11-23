@@ -6,7 +6,8 @@ echo "🚀 Starting LogPilot Demo Restart..."
 # 1. Reset Environment (Clean + Generate Mock Data)
 echo "-----------------------------------"
 echo "🧹 Step 1: Resetting Environment..."
-python3 scripts/reset_demo.py
+# Pass all arguments (e.g., --count 5000) to reset_demo.py
+python3 scripts/reset_demo.py "$@"
 
 # 2. Bulk Load into DuckDB
 echo "-----------------------------------"

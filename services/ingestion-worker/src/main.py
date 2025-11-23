@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from shared.log_schema import LogEvent
-from shared.db_connectors import DuckDBConnector
+from shared.db.duckdb_client import DuckDBConnector
 from shared.utils import PIIMasker
 
 class MockKafkaConsumer:
