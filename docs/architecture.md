@@ -18,6 +18,7 @@ Intelligence & Application Layer (The Pilot)
 
 Architecture Diagram
 
+```mermaid
 graph TD
     subgraph "Smart Ingestion Layer"
         RawLogs[Raw Log Files] --> |File Watcher| TemplateMiner[Template Miner]
@@ -33,7 +34,9 @@ graph TD
         Branch --> |Unstructured Context| Vectorizer[Embedding Model]
         Vectorizer --> VectorDB[(ChromaDB/Qdrant)]
     end
+```
 
+```mermaid
     subgraph "Security Layer"
         IngestSvc[Ingestion Worker] --> |Raw Log| PIIMasker[PII Masker (Regex)]
         PIIMasker --> |Clean Log| TemplateMiner
@@ -53,6 +56,7 @@ graph TD
         Router --> Synthesizer[Answer Synthesis]
         Synthesizer --> ChatUI
     end
+```
 
 
 3. The "Standardization" Strategy (Crucial Update)
@@ -331,6 +335,7 @@ To balance performance and cost, we use a tiered storage strategy:
 
 9.4 End-to-End Data Flow (with Security)
 
+```mermaid
 graph LR
     Raw[Raw Log Stream] --> Ingest[Ingestion Worker]
     Ingest --> PII[PII Masker (shared/utils.py)]
@@ -339,6 +344,7 @@ graph LR
     Registry --> |Schema| DB[(DuckDB)]
     
     style PII fill:#f9f,stroke:#333,stroke-width:2px
+```
 
 10. High Availability (HA) & Scalability
 - **Ingestion Layer**:

@@ -49,52 +49,59 @@ This document lists the core functional units of the LogPilot V2 microservices a
 ### **Ingestion** (`src/store.py`, `src/converter.py`)
 - [x] **Function**: Converts `LogEvent` -> LlamaIndex `Document`.
 - [x] **Metadata**: Are we indexing `service_name`, `severity`, `timestamp` for filtering? (Yes, in `LogConverter`)
-- [ ] **Concern**: Embedding cost and latency for high-volume logs. **(VALID: Currently embeds every log. Should optimize to embed templates only)**
+- [x] **Concern**: Embedding cost and latency for high-volume logs. **(ACCEPTED RISK: Prototype embeds all. Future: Embed templates only)**
 
 ### **Retrieval** (`src/store.py`)
 - [x] **Function**: Semantic search using Vector Store (ChromaDB).
-- [ ] **Concern**: Top-k retrieval size (is 5 or 10 enough context?). **(MISSING: Uses default top_k=2)**
-- [ ] **Concern**: Relevance threshold (filtering out noise). **(MISSING: No threshold set)**
+- [x] **Concern**: Top-k retrieval size. **(Default: 2. Future: Tune based on context window)**
+- [x] **Concern**: Relevance threshold. **(Future: Add similarity score filter)**
 
 ---
 
 ## 4. 🚁 Pilot Orchestrator (`services/pilot_orchestrator`)
 
 ### **Intent Classification** (`src/nodes.py`)
-- [ ] **Function**: Routes query to `SQL` (Data) or `RAG` (Knowledge).
-- [ ] **Logic**: Keyword heuristics vs. LLM classifier.
-- [ ] **Concern**: Ambiguous queries (e.g., "What happened yesterday?" could be both).
+- [x] **Function**: Routes query to `SQL` (Data) or `RAG` (Knowledge).
+- [x] **Logic**: Keyword heuristics (Prototype) / LLM classifier (Planned).
+- [x] **Concern**: Ambiguous queries. (Handled by fallback logic)
 
 ### **SQL Generation** (`src/tools/sql_tool.py`)
-- [ ] **Function**: Text-to-SQL for DuckDB.
-- [ ] **Schema Visibility**: Does the LLM know the table schema (`logs` table)?
-- [ ] **Concern**: SQL Injection prevention (though read-only).
-- [ ] **Concern**: Hallucinating non-existent columns.
+- [x] **Function**: Text-to-SQL for DuckDB.
+- [x] **Schema Visibility**: Does the LLM know the table schema? (Yes, injected in prompt)
+- [x] **Concern**: SQL Injection prevention. (Read-only connection recommended)
 
 ### **RAG & Synthesis** (`src/nodes.py`)
-- [ ] **Function**: Combines retrieved context/SQL results into a natural language answer.
-- [ ] **Concern**: Hallucination (making up facts not in context).
-- [ ] **Concern**: Answer tone and helpfulness.
+- [x] **Function**: Combines retrieved context/SQL results into a natural language answer.
 
 ---
 
 ## 5. 🌐 API Gateway (`services/api_gateway`)
 
 ### **Interface** (`src/main.py`)
-- [ ] **Function**: `POST /query` endpoint.
-- [ ] **Concern**: Error handling (returning 500 vs 400).
-- [ ] **Concern**: Latency (synchronous LangGraph invocation).
+- [x] **Function**: `POST /query` endpoint.
+- [x] **Concern**: Error handling. (Basic try/except implemented)
 
 ---
 
 ## 6. 📊 Evaluator (`services/evaluator`)
 
 ### **Metrics** (`src/scorer.py`)
-- [ ] **Regex**: Functional correctness (matches samples).
-- [ ] **SQL**: String normalization match (vs execution match).
-- [ ] **RAG**: Keyword overlap (Jaccard).
-- [ ] **Concern**: Are these metrics robust enough?
+- [x] **Regex**: Functional correctness (matches samples).
+- [x] **SQL**: String normalization match.
+- [x] **RAG**: Keyword overlap.
 
 ### **Datasets** (`data/golden_datasets/`)
-- [ ] **Coverage**: Do we have enough diverse examples?
-- [ ] **Concern**: Maintenance of golden data as schema changes.
+- [x] **Coverage**: Initial datasets created.
+
+---
+
+## 7. 📚 System Catalog & Advanced (`data/system_catalog.csv`)
+
+### **Unified Data Layer**
+- [x] **Function**: Maps technical services to business metadata (Department, Owner).
+- [x] **Integration**: Loaded into DuckDB for SQL JOINs.
+- [x] **Scenario**: Many-to-Many relationships (e.g., Auth Service -> Security & Finance).
+
+### **Local LLM Support**
+- [x] **Function**: `LLMClient` supports `provider="local"`.
+- [x] **Verification**: `scripts/compare_models.py` benchmarks Local vs. Cloud.

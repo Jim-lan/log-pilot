@@ -4,8 +4,8 @@ GenAI LogPilot: Microservices Architecture & Process Flow
 
 We divide the lifecycle into two distinct phases: Bootstrap (History) and Steady State (Real-Time). They do not run simultaneously.
 
+```mermaid
 graph TD
-    %% -- PHASE 1: HISTORY (Run Once, Then Stop) --
     subgraph "Phase 1: Bootstrap Job (History)"
         Archive[S3 / Cold Storage] --> |Read Files| BulkJob[Step 1: Bulk Loader Job]
         
@@ -18,7 +18,6 @@ graph TD
         BulkJob -.-> |"Done! Last Timestamp: T1"| Coordinator[Migration Coordinator]
     end
 
-    %% -- PHASE 2: LIVE (Run Forever) --
     subgraph "Phase 2: Steady State Service (Live)"
         Coordinator --> |"Start Consumers from T1"| IngestSvc[Step 2: Ingestion Service]
         
@@ -28,6 +27,7 @@ graph TD
         IngestSvc --> |Insert| SQL_DB
         IngestSvc --> |Vectorize| Vector_DB
     end
+```
 
 
 2. Microservices Breakdown
@@ -67,7 +67,9 @@ The always-on worker. It stays paused during Phase 1. Once Phase 1 finishes, it 
 
 Service
 
-Shared by both phases. Stores the regex rules### 4. **Pilot Orchestrator (Service)**
+Shared by both phases. Stores the regex rules
+
+### 4. **Pilot Orchestrator (Service)**
 *   **Path**: `services/pilot_orchestrator/`
 *   **Tech**: LangGraph, LangChain
 *   **Role**: The central brain. Receives queries, classifies intent, generates SQL, or retrieves from Knowledge Base.
