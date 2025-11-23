@@ -29,17 +29,17 @@ The system follows a **Data Lakehouse + RAG** architecture, composed of three la
 graph TD
     subgraph "Smart Ingestion Layer"
         RawLogs[Raw Log Files] --> |File Watcher| TemplateMiner[Template Miner]
-        TemplateMiner -- New Pattern? --> SchemaAgent[Schema Discovery Agent (LLM)]
-        SchemaAgent -- Define Rules --> RuleStore[Extraction Rules]
-        TemplateMiner -- Known Pattern --> Extractor[Fast Feature Extractor]
+        TemplateMiner -- "New Pattern?" --> SchemaAgent["Schema Discovery Agent (LLM)"]
+        SchemaAgent -- "Define Rules" --> RuleStore[Extraction Rules]
+        TemplateMiner -- "Known Pattern" --> Extractor[Fast Feature Extractor]
         RuleStore --> Extractor
-        Extractor --> |Standardized + Dynamic Features| Branch{Splitter}
+        Extractor --> |"Standardized + Dynamic Features"| Branch{Splitter}
     end
 
     subgraph "Storage Layer (Hybrid)"
-        Branch --> |Metadata & Metrics| TimeSeriesDB[(DuckDB/ClickHouse)]
-        Branch --> |Unstructured Context| Vectorizer[Embedding Model]
-        Vectorizer --> VectorDB[(ChromaDB/Qdrant)]
+        Branch --> |"Metadata & Metrics"| TimeSeriesDB[("DuckDB/ClickHouse")]
+        Branch --> |"Unstructured Context"| Vectorizer[Embedding Model]
+        Vectorizer --> VectorDB[("ChromaDB/Qdrant")]
     end
 
     subgraph "Security Layer"
