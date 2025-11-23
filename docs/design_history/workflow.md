@@ -78,7 +78,14 @@ graph TD
     
     Synthesize --> End([Final Answer])
 ```
-
+##  The Flow
+1.  **Ingestion Worker**: Reads the Raw Log.
+2.  **Parser**: Extracts timestamp/service (Regex).
+3.  **Miner**: Extracts the Template (Drain3).
+4.  **Router**:
+    *   --> **DuckDB**: Inserts the structured row immediately.
+    *   --> **Knowledge Base**: (Async) Embeds the log/template for semantic search.
+    
 #### Workflow Steps:
 1.  **Classify**: LLM determines if the user wants data (`SQL`) or explanation (`RAG`).
 2.  **SQL Loop**:

@@ -215,6 +215,14 @@ To help new developers understand the current implementation state and extend fu
     - Data is stored in `data/logs.duckdb`.
     - Schema: Defined in `shared/db_connectors.py`.
 
+5.3 System Catalog (Data Source)
+- **File**: `data/system_catalog.csv`
+- **Purpose**: Maps technical service names to business metadata (Department, Owner, Criticality).
+- **Ingestion**:
+    - **Mechanism**: `DuckDBConnector.load_catalog()` reads the CSV directly into the `system_catalog` table.
+    - **Trigger**: Automatically loaded on service startup if the file exists.
+    - **Schema**: `system_name` (PK), `department`, `owner_email`, `criticality`.
+
 6. Extensibility Scenarios
 
 Adding a New Log Type

@@ -10,6 +10,19 @@ class DuckDBConnector:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.conn = duckdb.connect(self.db_path)
         self._init_schema()
+        # Auto-load catalog if present
+        if os.path.exists("data/system_catalog.csv"):
+            self.load_catalog("data/system_catalog.csv")
+
+    def load_catalog(self, csv_path: str):
+        """Loads the system catalog CSV into a table."""
+        print(f"📖 Loading System Catalog from {csv_path}...")
+        try:
+            # Create or Replace the table directly from CSV
+            self.conn.execute(f"CREATE OR REPLACE TABLE system_catalog AS SELECT * FROM read_csv_auto('{csv_path}')")
+            print("✅ System Catalog loaded.")
+        except Exception as e:
+            print(f"❌ Failed to load catalog: {e}")
 
     def _init_schema(self):
         """Initializes the logs table with the Golden Standard schema."""

@@ -60,6 +60,7 @@ This document serves as a comprehensive catalog of all executable scripts and mo
 | `llm/prompt_factory.py` | `PromptFactory` class | **Prompt Management**: Loads and renders Jinja2 prompt templates. |
 | `db/duckdb_client.py` | `DuckDBConnector` class | **Database Access**: Handles DuckDB connections and batch insertions. |
 | `utils/pii_masker.py` | `PIIMasker` class | **Security**: Redacts sensitive info (Email, IP, SSN) using Regex. |
+| `utils/log_parser.py` | `LogParser` class | **Parsing**: Robust Regex-based parsing with UTC normalization. |
 | `log_schema.py` | `LogEvent` class | **Data Model**: Defines the Golden Standard Schema (Pydantic model). |
 
 ## 🛠️ Configuration

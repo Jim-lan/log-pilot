@@ -18,9 +18,14 @@ class EvalRunner:
     Runs evaluations for specific agents.
     """
     
-    def __init__(self, dataset_dir: str = "services/evaluator/datasets"):
+    def __init__(self, dataset_dir: str = "services/evaluator/datasets", provider: str = "openai"):
         self.dataset_dir = dataset_dir
         self.scorer = EvalScorer()
+        self.provider = provider
+        # In a real scenario, we'd pass the provider to the agents
+        # self.discovery_agent = DiscoveryAgent(llm_provider=provider)
+        self.discovery_agent = DiscoveryAgent() 
+        self.sql_generator = SQLGenerator()
 
     def load_dataset(self, name: str) -> List[Dict[str, Any]]:
         path = os.path.join(self.dataset_dir, f"{name}.json")

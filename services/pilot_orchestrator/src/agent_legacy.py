@@ -2,12 +2,19 @@ import sys
 import os
 from typing import Dict, Any
 
-# Add project root and service src paths to python path
+# Add project root to python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../tool-service/src")))
 
-from sql_gen import SQLGenerator
-from rag_retriever import RAGRetriever
+from services.pilot_orchestrator.src.tools.sql_tool import SQLGenerator
+from services.knowledge_base.src.store import KnowledgeStore
+
+class RAGRetriever:
+    """Adapter for KnowledgeStore to match legacy interface."""
+    def __init__(self):
+        self.store = KnowledgeStore()
+        
+    def retrieve(self, query: str):
+        return self.store.query(query)
 
 class LogPilotAgent:
     """

@@ -11,6 +11,13 @@ llm:
       models:
         fast: "gemini-1.5-flash"
         reasoning: "gemini-1.5-pro"
+    local:
+      api_base: "http://localhost:11434/v1" # Example: Ollama
+      default_model: "llama3"
+      api_key_env: "LOCAL_API_KEY" # Optional
+      # models: # Example for local models if needed
+      #   fast: "llama3"
+      #   reasoning: "codellama"
 
 agents:
   schema_discovery:

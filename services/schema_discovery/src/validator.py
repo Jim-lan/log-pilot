@@ -23,9 +23,9 @@ class RegexValidator:
                 print(f"❌ Regex failed to match sample: {sample}")
                 return False
             
-            # Optional: Check for named groups
+            # Enforce named groups to prevent ".*" cheating
             if not match.groupdict():
-                print(f"⚠️ Regex matched but captured no named groups: {sample}")
-                # We might want to enforce capturing groups, but for now let's just warn
+                print(f"⚠️ Regex matched but captured no named groups (too broad): {sample}")
+                return False
                 
         return True

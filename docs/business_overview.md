@@ -90,3 +90,17 @@ graph LR
     Validator -->|Yes| Registry[Schema Registry]
     Validator -->|No| Discovery
 ```
+    Validator -->|No| Discovery
+```
+
+---
+
+## 6. Design Point: Business Context (System Catalog)
+**"Knowing Who Owns What"**
+
+Logs tell us *what* broke. The System Catalog tells us *who* cares.
+By combining logs with a "Phone Book" of the company (System Catalog), LogPilot can answer questions like:
+*   "Which **Department** is having the worst week?"
+*   "Alert the **Owner** of the Payment Service."
+
+This turns technical noise into business intelligence.

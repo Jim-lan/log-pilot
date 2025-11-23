@@ -1,11 +1,10 @@
 import sys
 import os
-
-# Add project root and agent src path to python path
+import pytest
+# Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from agent import LogPilotAgent
+from services.pilot_orchestrator.src.agent_legacy import LogPilotAgent
 
 def test_agent():
     print("🧪 Starting Agent Verification...")

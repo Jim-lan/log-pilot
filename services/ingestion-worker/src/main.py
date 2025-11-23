@@ -40,42 +40,43 @@ class MockSchemaRegistry:
     """
     pass
 
+from shared.utils.log_parser import LogParser
+
 class LogIngestor:
     def __init__(self):
         self.consumer = MockKafkaConsumer()
         self.miner = LogTemplateMiner(persistence_file="data/drain3_state.bin")
         self.db = DuckDBConnector()
         self.pii_masker = PIIMasker()
+        self.parser = LogParser()
         self.batch_size = 5
         self.batch_buffer = []
 
     def parse_log(self, raw_log: str) -> LogEvent:
-        # 1. Parse Raw String (Simple logic for prototype)
-        parts = raw_log.split(" ")
-        timestamp_str = f"{parts[0]} {parts[1]}"
-        severity = parts[2]
-        service_name = parts[3].replace(":", "")
-        body = " ".join(parts[4:])
+        # 1. Robust Regex Parsing + UTC Normalization
+        parsed = self.parser.parse(raw_log)
         
         # 2. Mask PII in the body immediately
-        safe_body = self.pii_masker.mask_text(body)
+        safe_body = self.pii_masker.mask_text(parsed["body"])
         
         # 3. Get Template (Drain3)
-        # Note: We pass the SAFE body to the miner so templates don't contain PII
         template = self.miner.mine_template(safe_body)
         
-        # 4. Extract Context
+        # 4. Extract Context (Simple Key-Value extraction from body)
         context = {}
-        for part in parts[4:]:
+        # Simple heuristic: look for k=v patterns in the message
+        for part in safe_body.split(" "):
             if "=" in part:
-                k, v = part.split("=")
-                # Mask PII in values
-                context[k] = self.pii_masker.mask_text(v)
+                try:
+                    k, v = part.split("=", 1)
+                    context[k] = v
+                except ValueError:
+                    pass
 
         return LogEvent(
-            timestamp=datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S"),
-            severity=severity,
-            service_name=service_name,
+            timestamp=parsed["timestamp"],
+            severity=parsed["severity"],
+            service_name=parsed["service_name"],
             body=template, 
             context=context
         )

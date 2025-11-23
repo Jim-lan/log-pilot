@@ -14,47 +14,47 @@ This document lists the core functional units of the LogPilot V2 microservices a
 - [x] **Concern**: Are we missing any custom PII patterns (e.g., API keys, internal IDs)?
 - [x] **Concern**: Is masking applied *before* any storage or LLM processing?
 
-### **Template Mining** (`Drain3`)
+### **Template Mining** (`Drain3` : `shared/utils/template_miner.py`)
 - [x] **Function**: Extracts constant templates from variable log messages.
 - [x] **Concern**: Is the `sim_th` (similarity threshold) tuned correctly? (Set to 0.5 in `shared/utils/template_miner.py`)
 - [x] **Concern**: How do we handle template drift over time? (Handled by `Drain3` tree evolution & persistence)
 
-### **Log Parsing**
-- [ ] **Function**: structured extraction of `timestamp`, `severity`, `service`, `message`.
-- [ ] **Concern**: Handling of multi-line logs (stack traces).
-- [ ] **Concern**: Timezone normalization (UTC).
+### **Log Parsing** (`shared/utils/log_parser.py`)
+- [x] **Function**: structured extraction of `timestamp`, `severity`, `service`, `message`. (Updated to use Regex)
+- [x] **Concern**: Handling of multi-line logs (stack traces). (Supported via `re.DOTALL` in `LogParser`)
+- [x] **Concern**: Timezone normalization (UTC). (Implemented in `LogParser`)
 
 ---
 
 ## 2. 🕵️ Schema Discovery (`services/schema_discovery`)
 
 ### **Regex Generator** (`src/generator.py`)
-- [ ] **Function**: LLM generates Python regex from raw log samples.
-- [ ] **Prompting**: Does the prompt enforce named groups (`?P<name>`)?
-- [ ] **Concern**: Handling of varying log formats within the same service.
+- [x] **Function**: LLM generates Python regex from raw log samples.
+- [x] **Prompting**: Does the prompt enforce named groups (`?P<name>`)? (Yes, prompt updated)
+- [x] **Concern**: Handling of varying log formats within the same service. (LLM handles this via generalization)
 
 ### **Regex Validator** (`src/validator.py`)
-- [ ] **Function**: Compiles and tests regex against *all* provided samples.
-- [ ] **Strictness**: Does it require 100% match?
-- [ ] **Concern**: Preventing "too broad" regexes (e.g., `.*`) that match everything but extract nothing.
+- [x] **Function**: Compiles and tests regex against *all* provided samples.
+- [x] **Strictness**: Does it require 100% match? (Yes, `pattern.match`)
+- [x] **Concern**: Preventing "too broad" regexes (e.g., `.*`) that match everything but extract nothing. (Fixed: Enforces named groups)
 
 ### **Orchestration** (`src/agent.py`)
-- [ ] **Function**: Retry loop (Generate -> Validate -> Retry).
-- [ ] **Concern**: Max retries configuration.
+- [x] **Function**: Retry loop (Generate -> Validate -> Retry).
+- [x] **Concern**: Max retries configuration. (Default 3)
 
 ---
 
 ## 3. 🧠 Knowledge Base (`services/knowledge_base`)
 
 ### **Ingestion** (`src/store.py`, `src/converter.py`)
-- [ ] **Function**: Converts `LogEvent` -> LlamaIndex `Document`.
-- [ ] **Metadata**: Are we indexing `service_name`, `severity`, `timestamp` for filtering?
-- [ ] **Concern**: Embedding cost and latency for high-volume logs.
+- [x] **Function**: Converts `LogEvent` -> LlamaIndex `Document`.
+- [x] **Metadata**: Are we indexing `service_name`, `severity`, `timestamp` for filtering? (Yes, in `LogConverter`)
+- [ ] **Concern**: Embedding cost and latency for high-volume logs. **(VALID: Currently embeds every log. Should optimize to embed templates only)**
 
 ### **Retrieval** (`src/store.py`)
-- [ ] **Function**: Semantic search using Vector Store (ChromaDB).
-- [ ] **Concern**: Top-k retrieval size (is 5 or 10 enough context?).
-- [ ] **Concern**: Relevance threshold (filtering out noise).
+- [x] **Function**: Semantic search using Vector Store (ChromaDB).
+- [ ] **Concern**: Top-k retrieval size (is 5 or 10 enough context?). **(MISSING: Uses default top_k=2)**
+- [ ] **Concern**: Relevance threshold (filtering out noise). **(MISSING: No threshold set)**
 
 ---
 

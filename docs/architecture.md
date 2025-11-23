@@ -348,3 +348,22 @@ graph LR
     - **Read Replicas**: We can spin up multiple read-only DuckDB instances pointing to the same underlying storage (or replicated storage) to handle high concurrent user queries.
 - **API Gateway**:
     - Load balanced behind an Nginx/Cloud Load Balancer.
+
+11. System Catalog Integration (Unified Data Layer)
+To answer business-centric questions (e.g., "Which department has the most errors?"), we integrate a **System Catalog** directly into the structured storage.
+
+- **Source**: `data/system_catalog.csv` (System Name, Department, Owner, Criticality).
+- **Mechanism**: Loaded into DuckDB as the `system_catalog` table.
+- **Relationship**: **Many-to-Many**. A single service (e.g., `auth-service`) can belong to multiple departments (e.g., `Security` and `Finance`).
+- **Usage**: The Agent uses SQL `JOIN` operations.
+    - *Impact Analysis*: "Show all departments affected by auth-service errors" -> Returns both Security and Finance.
+    - *Note*: Aggregating errors by Department will count the same error multiple times (once per department). This is intentional for impact assessment.
+
+12. Design History & References
+Detailed design documents for specific components have been archived for reference:
+
+- **[Agent Design](design_history/agent_design.md)**: Deep dive into LangGraph state machine.
+- **[Testing Strategy](design_history/testing_strategy.md)**: Unit, Integration, and E2E testing standards.
+- **[Data Sources](design_history/data_sources.md)**: Explanation of the "Single Input, Dual View" philosophy.
+- **[Schema Discovery](design_history/schema_discovery_deep_dive.md)**: Analysis of the regex generation loop.
+- **[Workflow Diagrams](design_history/workflow.md)**: Detailed ASCII and Mermaid data flow diagrams.

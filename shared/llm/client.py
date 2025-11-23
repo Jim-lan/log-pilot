@@ -30,20 +30,22 @@ class LLMClient:
             # In production, raise error. For prototype, just warn.
             print(f"⚠️  WARNING: {env_var} not set. LLM calls will fail.")
 
-    def generate(self, prompt: str, model_type: str = "fast", **kwargs) -> str:
+    def generate(self, prompt: str, provider: str = "openai", model_type: str = "fast") -> str:
         """
-        Generates text using the configured provider and model type.
-        model_type: 'fast' or 'reasoning'
+        Generates text from the LLM.
         """
-        model_name = self.provider_config["models"].get(model_type)
-        if not model_name:
-            raise ValueError(f"Unknown model type: {model_type}")
-
-        # Mock Implementation for now (until we add real API calls)
-        # This allows us to test the framework without paying for tokens yet.
-        print(f"🤖 [LLM Mock] Provider: {self.provider_name}, Model: {model_name}")
-        print(f"📝 [Prompt]: {prompt[:50]}...")
+        # Mock Implementation for Prototype
+        print(f"🤖 LLM Call ({provider}): {prompt[:50]}...")
         
-        if "SQL" in prompt:
-            return "SELECT count(*) FROM logs"
-        return "Mock LLM Response"
+        if provider == "local":
+            return self._generate_local(prompt)
+            
+        return "Mock LLM Response: [Regex: (?P<timestamp>...)]"
+
+    def _generate_local(self, prompt: str) -> str:
+        """
+        Simulates a local LLM call (e.g., to Ollama).
+        """
+        # In a real implementation, this would use requests.post("http://localhost:11434/api/generate", ...)
+        print("   💻 Running on Local M4 Chip...")
+        return "Local LLM Response: [Regex: (?P<ts>...)]"
