@@ -60,7 +60,6 @@
 graph TD
     Start([User Query]) --> Classify{Classify Intent}
     
-    %% SQL Branch
     Classify -->|Analytical| SQL_Gen[Generate SQL]
     SQL_Gen --> Execute_SQL{Execute}
     
@@ -68,11 +67,9 @@ graph TD
     Execute_SQL -->|Error| Fix_SQL[Self-Correction]
     Fix_SQL -->|Retry| SQL_Gen
     
-    %% RAG Branch
     Classify -->|Knowledge| RAG_Search[Vector Search]
     RAG_Search --> Synthesize
     
-    %% Ambiguous Branch
     Classify -->|Unclear| Ask_User[Ask Clarification]
     Ask_User --> End([Wait for Input])
     
