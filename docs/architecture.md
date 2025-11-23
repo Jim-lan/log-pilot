@@ -43,13 +43,13 @@ graph TD
     end
 
     subgraph "Security Layer"
-        IngestSvc[Ingestion Worker] --> |Raw Log| PIIMasker[PII Masker (Regex)]
+        IngestSvc[Ingestion Worker] --> |Raw Log| PIIMasker["PII Masker (Regex)"]
         PIIMasker --> |Clean Log| TemplateMiner
     end
 
     subgraph "Intelligence Layer (LogPilot Agent)"
         User[User Query] --> ChatUI[Chat Interface]
-        ChatUI --> Router[Pilot Router / Orchestrator]
+        ChatUI --> Router["Pilot Router / Orchestrator"]
         
         Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator]
         Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search]
