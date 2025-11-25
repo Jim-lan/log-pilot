@@ -19,7 +19,7 @@ Modern applications generate millions of log lines daily. Most of this is repeti
 
 The system follows a **Data Lakehouse + RAG** architecture, composed of three layers:
 
-1.  **Ingestion Layer**: Cleans, masks PII, and structures raw logs.
+1.  **Ingestion Layer**: Cleans, masks PII, and structures raw logs. Supports **Standard, JSON, Syslog, and Nginx** formats via a robust multi-strategy parser.
 2.  **Storage Layer**: Hybrid storage using **DuckDB** (Structured) and **ChromaDB** (Unstructured).
 3.  **Intelligence Layer**: The "Pilot" agent that interacts with the user.
 
@@ -63,11 +63,36 @@ graph TD
 
 ## 3. Core Design Patterns
 
-### 3.1 The "Standardization" Strategy (Drain3)
-We cannot run an LLM on every log line. Instead, we run it on **Log Templates**.
-*   **Raw**: `User 123 failed login from 192.168.1.1`
-*   **Template**: `User <*> failed login from <*>`
-*   **Benefit**: We store 1 template instead of 1 million strings.
+### 3.1 Deep Dive: The Standardization Engine (Drain3)
+
+We cannot run an LLM on every log line (too slow/expensive). Instead, we use **Drain3**, a tree-based clustering algorithm, to group logs into **Templates**.
+
+#### 1. How it Works (The Logic)
+*   **Initialization**: Sets up the `TemplateMiner` engine with a similarity threshold (e.g., `sim_th=0.5`).
+*   **Mining Process**:
+    *   **Input**: `User 123 failed login`
+    *   **Traversal**: Drain3 navigates its internal tree (e.g., `Length=4` -> `Token1="User"`).
+    *   **Decision**: Finds a matching node or creates a new one.
+    *   **Output**: `User <ID> failed login` (The "Template").
+
+#### 2. Persistence (`data/drain3_state.bin`)
+This file is the **Brain** of the miner.
+*   **The Problem**: If the script restarts, it would forget all learned patterns.
+*   **The Solution**: Every time a new template is learned, the internal tree is saved to this binary file.
+*   **Analogy**:
+    *   **The Script**: The student.
+    *   **The Log**: The lesson.
+    *   **`drain3_state.bin`**: The notebook. Even if the student sleeps (restart), the notes remain.
+
+#### 3. Template vs. Schema (The "Secret Sauce")
+They look similar but serve different purposes:
+
+| Feature | **Template** (Drain3) | **Schema** (LLM / Regex) |
+| :--- | :--- | :--- |
+| **What is it?** | The **Shape** of the text. | The **Meaning** of the data. |
+| **Example** | `User <*> failed` | `User (?P<user_id>\w+) failed` |
+| **Creator** | Drain3 (Fast, ms). | LLM (Slow, seconds). |
+| **Purpose** | **Grouping**. "These 1M logs are Type A." | **Extraction**. "Get me the User ID from Type A." |
 
 ### 3.2 Schema Discovery (Self-Healing)
 When a new log format appears, the **Schema Discovery Agent**:

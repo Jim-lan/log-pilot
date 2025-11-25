@@ -8,7 +8,7 @@ class LogTemplateMiner:
     Wrapper around Drain3 for log template mining.
     Extracts constant templates from variable log messages.
     """
-    def __init__(self, persistence_file: str = "data/drain3_state.bin", sim_th: float = 0.5):
+    def __init__(self, persistence_file: str = "data/state/drain3_state.bin", sim_th: float = 0.5):
         self.config = TemplateMinerConfig()
         self.config.load(os.path.join(os.path.dirname(__file__), "drain3.ini")) if os.path.exists("drain3.ini") else None
         self.config.profiling_enabled = False
@@ -30,3 +30,10 @@ class LogTemplateMiner:
 
     def get_total_clusters(self) -> int:
         return len(self.miner.drain.clusters)
+
+    def save_state(self):
+        """Saves the current state to disk."""
+        import pickle
+        # Convert clusters to list if it's a view, then pickle
+        state = pickle.dumps(list(self.miner.drain.clusters))
+        self.persistence.save_state(state)

@@ -20,6 +20,24 @@ LogPilot is an **enterprise-grade log management platform** that goes beyond tra
 
 ---
 
+## 🧠 Design Philosophy & Core Decisions
+
+### Decision #1: Hybrid Storage (The "Dual-Brain")
+We do **not** put all logs into a Vector DB (too expensive/slow).
+*   **DuckDB**: Stores 100% of logs (Metadata + Metrics + JSON Context) for quantitative answers ("How many errors?").
+*   **ChromaDB**: Stores only unique **Log Templates** for qualitative answers ("Why is it failing?").
+
+### Decision #2: Template Mining (The "Standardization" Layer)
+Instead of processing millions of raw lines, we use **Drain3** to cluster logs into Templates (e.g., `User <*> failed`).
+*   **Benefit**: We embed the Template once, not the 1 million occurrences.
+
+### Decision #3: The "Golden Standard" Schema
+To handle heterogeneous logs (Firewall vs. App), we use a hybrid schema:
+*   **Golden Fields**: `timestamp`, `severity`, `service` (Fixed Columns).
+*   **Context**: `{"latency": 500, "ip": "10.0.0.1"}` (JSON Column for dynamic fields).
+
+---
+
 ## 🏗️ Architecture Overview
  
 LogPilot follows a **Data Lakehouse + RAG** architecture with a **Hybrid Agentic Control Plane**:

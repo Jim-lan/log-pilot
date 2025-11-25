@@ -18,7 +18,7 @@ class KnowledgeStore:
     """
     Manages the Knowledge Base using LlamaIndex and ChromaDB.
     """
-    def __init__(self, persist_dir: str = "data/vector_store"):
+    def __init__(self, persist_dir: str = "data/target/vector_store"):
         self.persist_dir = persist_dir
         self._init_store()
 

@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 import os
 
 class DuckDBConnector:
-    def __init__(self, db_path: str = "data/logs.duckdb"):
+    def __init__(self, db_path: str = "data/target/logs.duckdb"):
         self.db_path = db_path
         # Ensure data directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)

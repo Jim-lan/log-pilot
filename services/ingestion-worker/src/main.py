@@ -33,19 +33,14 @@ class MockKafkaConsumer:
 
 from shared.utils.template_miner import LogTemplateMiner
 
-class MockSchemaRegistry:
-    """
-    (Deprecated) Replaced by LogTemplateMiner.
-    Keeping class for reference if needed, but logic is now in shared/utils/template_miner.py
-    """
-    pass
+
 
 from shared.utils.log_parser import LogParser
 
 class LogIngestor:
     def __init__(self):
         self.consumer = MockKafkaConsumer()
-        self.miner = LogTemplateMiner(persistence_file="data/drain3_state.bin")
+        self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
         self.db = DuckDBConnector()
         self.pii_masker = PIIMasker()
         self.parser = LogParser()

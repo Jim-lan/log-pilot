@@ -18,11 +18,10 @@ def reset_environment():
     
     # 1. Define paths to clean
     paths_to_clean = [
-        "data/logs.duckdb",
-        "data/chroma_db",
-        "data/landing_zone",
-        "data/schema_registry.json", # If exists
-        "data/drain3_state.bin"      # If exists
+        "data/target/logs.duckdb",
+        "data/target/vector_store",
+        "data/source/landing_zone",
+        "data/state/drain3_state.bin"
     ]
     
     # 2. Clean up
@@ -37,12 +36,12 @@ def reset_environment():
             print(f"   Skipping {path} (Not found)")
             
     # 3. Re-create Landing Zone
-    os.makedirs("data/landing_zone", exist_ok=True)
-    print("   Created empty data/landing_zone/")
+    os.makedirs("data/source/landing_zone", exist_ok=True)
+    print("   Created empty data/source/landing_zone/")
     
     # 4. Generate Mock Data
     print("\n📝 Generating Fresh Mock Data...")
-    generate_logs(output_dir="data/landing_zone", count=args.count)
+    generate_logs(output_dir="data/source/landing_zone", count=args.count)
     
     print("\n✅ Environment Reset Complete!")
     print("👉 Next Steps:")

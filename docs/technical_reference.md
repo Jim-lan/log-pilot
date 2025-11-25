@@ -41,7 +41,7 @@ graph TD
 #### A. Data Plane (Ingestion)
 | Service | Type | Responsibility |
 |---------|------|----------------|
-| **Bulk Loader** | Batch Job | Reads historical files, mines templates, loads DuckDB. |
+| **Bulk Loader** | Batch Job | Reads historical files (JSON/Syslog/Standard), mines templates, loads DuckDB. |
 | **Ingestion Worker** | Service | Consumes Kafka stream, masks PII, inserts into DB/Vector Store. |
 | **Schema Registry** | Service | Stores regex rules discovered by the Agent. |
 
@@ -67,6 +67,7 @@ graph TD
 | `services/schema_discovery/` | `src/generator.py` | LLM-based regex generation. |
 | `services/evaluator/` | `src/runner.py` | Runs evaluation benchmarks. |
 | `services/ingestion-worker/` | `src/main.py` | Real-time ingestion loop. |
+| `services/bulk-loader/` | `src/log_loader.py` | Bulk loader with multi-format support (`--landing_zone`). |
 
 ### 📦 Shared Libraries (`shared/`)
 | File | Class | Purpose |
@@ -74,13 +75,21 @@ graph TD
 | `llm/client.py` | `LLMClient` | Unified interface for OpenAI/Gemini/Local LLMs. |
 | `db/duckdb_client.py` | `DuckDBConnector` | Handles DuckDB connections and batch loading. |
 | `utils/pii_masker.py` | `PIIMasker` | Redacts Email, IP, SSN using regex. |
-| `utils/log_parser.py` | `LogParser` | Robust regex-based log parsing. |
+| `utils/log_parser.py` | `LogParser` | Robust parser for Standard, JSON, Syslog, Nginx. |
 | `log_schema.py` | `LogEvent` | Pydantic model for the Golden Standard Schema. |
+
+### 📂 Data Directory Structure
+| Path | Purpose |
+|------|---------|
+| `data/source/` | **Input**: Raw logs (`landing_zone`), reference data (`system_catalog.csv`). |
+| `data/target/` | **Output**: Structured DB (`logs.duckdb`), Vector Store (`vector_store`). |
+| `data/state/` | **Internal**: Persistence files (`drain3_state.bin`). |
 
 ### 📜 Utility Scripts (`scripts/`)
 | Script | Usage | Description |
 |--------|-------|-------------|
-| `reset_demo.py` | `python3 scripts/reset_demo.py` | **Reset**: Cleans DBs and generates fresh mock data. |
+| `reset_demo.py` | `python3 scripts/reset_demo.py --count N` | **Reset**: Cleans `data/target` & `data/state`, generates fresh logs in `data/source`. |
+| `generate_logs.py` | `python3 scripts/generate_logs.py --format json` | **Generate**: Creates mock logs in various formats. |
 | `compare_models.py` | `python3 scripts/compare_models.py` | **Benchmark**: Compares Local vs. Cloud LLM performance. |
 | `e2e_test.sh` | `./scripts/e2e_test.sh` | **Test**: Runs full end-to-end validation. |
 
@@ -92,6 +101,7 @@ graph TD
 - [x] **PII Masking**: Redacts Emails, IPs, Credit Cards.
 - [x] **Template Mining**: Extracts constant templates via Drain3.
 - [x] **Log Parsing**: Structured extraction of Timestamp, Severity, Service.
+    - [x] **Multi-Format Support**: Standard, JSON, Syslog, Nginx.
 
 ### 🧠 Knowledge Base
 - [x] **Ingestion**: Converts Logs -> LlamaIndex Documents.
