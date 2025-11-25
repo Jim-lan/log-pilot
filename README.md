@@ -43,25 +43,41 @@ To handle heterogeneous logs (Firewall vs. App), we use a hybrid schema:
 LogPilot follows a **Data Lakehouse + RAG** architecture with a **Hybrid Agentic Control Plane**:
  
 ```mermaid
-graph TB
-    subgraph "Phase 1 & 2: Data Plane"
-        Raw[Raw Logs] -->|Ingest| Worker[Ingestion Worker]
-        Worker -->|PII Masking| Clean[Cleaned Logs]
-        Clean -->|Template Mining| Registry[(Schema Registry)]
-        Clean -->|Batch Insert| DuckDB[(DuckDB)]
+graph TD
+    subgraph "Smart Ingestion Layer"
+        RawLogs[Raw Log Files] --> |File Watcher| PIIMasker["PII Masker (Regex)"]
+        PIIMasker --> |Clean Log| TemplateMiner[Template Miner]
+        
+        %% Schema Discovery Loop
+        TemplateMiner -- "New Pattern?" --> SchemaAgent["Schema Discovery Agent (LLM)"]
+        SchemaAgent -- "Define Rules" --> RuleStore[Extraction Rules]
+        RuleStore -.-> |"Update Rules"| TemplateMiner
+        
+        %% Extraction
+        TemplateMiner -- "Known Pattern" --> Extractor[Fast Feature Extractor]
+        RuleStore --> Extractor
+        Extractor --> |"Standardized + Dynamic Features"| Branch{Splitter}
     end
-    
-    subgraph "Phase 3 & 4: Control Plane (Agent)"
-        User[User API] -->|REST| Gateway[API Gateway]
-        Gateway -->|Chat| Pilot["Pilot Orchestrator (LangGraph)"]
+
+    subgraph "Storage Layer (Hybrid)"
+        Branch --> |"Metadata & Metrics"| TimeSeriesDB[("DuckDB/ClickHouse")]
+        Branch --> |"Unstructured Context"| Vectorizer[Embedding Model]
+        Vectorizer --> VectorDB[("ChromaDB/Qdrant")]
+    end
+
+    subgraph "Intelligence Layer (LogPilot Agent)"
+        User[User Query] --> ChatUI[Chat Interface]
+        ChatUI --> Router["Pilot Router / Orchestrator"]
         
-        Pilot -->|SQL| SQLTool[SQL Generator]
-        SQLTool --> DuckDB
+        Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator]
+        Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search]
+        Router --> |"Deep Analysis"| Anomaly_Tool[Pattern Analyzer]
         
-        Pilot -->|RAG| KB["Knowledge Base (LlamaIndex)"]
-        KB -->|Vector Search| Chroma[(ChromaDB)]
+        SQL_Tool <--> TimeSeriesDB
+        RAG_Tool <--> VectorDB
         
-        Pilot -->|Answer| Gateway
+        Router --> Synthesizer[Answer Synthesis]
+        Synthesizer --> ChatUI
     end
 ```
  

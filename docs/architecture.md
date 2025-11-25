@@ -30,8 +30,13 @@ graph TD
     subgraph "Smart Ingestion Layer"
         RawLogs[Raw Log Files] --> |File Watcher| PIIMasker["PII Masker (Regex)"]
         PIIMasker --> |Clean Log| TemplateMiner[Template Miner]
+        
+        %% Schema Discovery Loop
         TemplateMiner -- "New Pattern?" --> SchemaAgent["Schema Discovery Agent (LLM)"]
         SchemaAgent -- "Define Rules" --> RuleStore[Extraction Rules]
+        RuleStore -.-> |"Update Rules"| TemplateMiner
+        
+        %% Extraction
         TemplateMiner -- "Known Pattern" --> Extractor[Fast Feature Extractor]
         RuleStore --> Extractor
         Extractor --> |"Standardized + Dynamic Features"| Branch{Splitter}
@@ -107,6 +112,20 @@ To handle dynamic fields (e.g., `latency_ms` in Payment vs. `src_ip` in Firewall
 *   **Golden Fields**: `timestamp`, `service`, `severity` (Columns).
 *   **Context**: `{"latency_ms": 500, "src_ip": "10.0.0.1"}` (JSON Column).
 *   **Querying**: The Agent generates SQL like `SELECT context->>'latency_ms' ...`.
+
+### 3.4 Example Workflow: "Who owns the failing service?"
+This workflow demonstrates how the system combines Structured Data and Knowledge:
+
+1.  **Identify the Service (DuckDB)**
+    *   The Agent queries DuckDB: `SELECT system_name, owner_email FROM system_catalog JOIN logs ... ORDER BY error_count DESC LIMIT 1`.
+    *   *Result*: "Auth Service (Owner: sec-ops@example.com)".
+
+2.  **Retrieve Context (ChromaDB)**
+    *   The Agent searches the Knowledge Base for: *"Auth Service common failures and fixes"*.
+    *   *Result*: Retrieved Runbook: "If Auth Service fails with 503, restart the token-generator pod."
+
+3.  **Synthesize Answer**
+    *   *Final Output*: "The **Auth Service** is experiencing the most errors. It is owned by **sec-ops@example.com**. The recommended fix is to **restart the token-generator pod**."
 
 ---
 
