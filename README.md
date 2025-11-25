@@ -53,12 +53,12 @@ graph TB
     
     subgraph "Phase 3 & 4: Control Plane (Agent)"
         User[User API] -->|REST| Gateway[API Gateway]
-        Gateway -->|Chat| Pilot[Pilot Orchestrator (LangGraph)]
+        Gateway -->|Chat| Pilot["Pilot Orchestrator (LangGraph)"]
         
         Pilot -->|SQL| SQLTool[SQL Generator]
         SQLTool --> DuckDB
         
-        Pilot -->|RAG| KB[Knowledge Base (LlamaIndex)]
+        Pilot -->|RAG| KB["Knowledge Base (LlamaIndex)"]
         KB -->|Vector Search| Chroma[(ChromaDB)]
         
         Pilot -->|Answer| Gateway
