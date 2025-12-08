@@ -21,7 +21,7 @@ The system follows a **Data Lakehouse + RAG** architecture, composed of three la
 
 1.  **Ingestion Layer**: Cleans, masks PII, and structures raw logs. Supports **Standard, JSON, Syslog, and Nginx** formats via a robust multi-strategy parser.
 2.  **Storage Layer**: Hybrid storage using **DuckDB** (Structured) and **ChromaDB** (Unstructured).
-3.  **Intelligence Layer**: The "Pilot" agent that interacts with the user.
+3.  **Intelligence Layer**: The "Pilot" agent that interacts with the user via a **REST API**.
 
 ### 2.1 Unified LLM Strategy
 The system uses a **Unified Interface** (via the `openai` library) to support both Cloud and Local LLMs seamlessly.
@@ -56,7 +56,8 @@ graph TD
 
     subgraph "Intelligence Layer (LogPilot Agent)"
         User[User Query] --> ChatUI[Chat Interface]
-        ChatUI --> Router["Pilot Router / Orchestrator"]
+        ChatUI --> API[API Gateway (FastAPI)]
+        API --> Router["Pilot Router / Orchestrator"]
         
         Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator (LLM)]
         Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search + Metadata Filter]

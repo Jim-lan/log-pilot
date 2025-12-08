@@ -48,6 +48,17 @@ services:
     networks:
       - pilot-net
 
+  # 4. Frontend UI (Web Interface)
+  frontend:
+    build:
+      context: .
+      dockerfile: services/frontend/Dockerfile
+    container_name: log-pilot-ui
+    ports:
+      - "3000:80"
+    networks:
+      - pilot-net
+
 volumes:
   ollama_data:
 

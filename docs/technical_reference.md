@@ -193,3 +193,20 @@ Regardless of the input format, the parser normalizes data into these **Golden F
      local:
        api_base: "http://llm-service:11434/v1" # Docker service name
  ```
+ 
+ ## 5. Testing Strategy
+ The system uses a comprehensive testing pyramid.
+ 
+ ### 5.1 Unit & Integration Tests
+ *   **Shared Libs**: `shared/tests/` (LLM Client, DB Connector).
+ *   **Knowledge Base**: `services/knowledge_base/tests/` (Store, Filtering).
+ *   **Pilot Orchestrator**: `services/pilot_orchestrator/tests/` (Nodes, Prompts, API).
+ 
+ ### 5.2 End-to-End (E2E) Tests
+ *   **Location**: `tests/e2e/test_full_flow.py`
+ *   **Scope**: Simulates a full user query via the API (`POST /query`).
+ *   **Method**: Mocks the LLM and DB to ensure deterministic verification of the orchestration logic.
+ 
+ ### 5.3 Benchmarking
+ *   **Script**: `scripts/compare_models.py`
+ *   **Purpose**: Compares accuracy of different LLM models (Cloud vs. Local) on standard tasks like schema discovery.
