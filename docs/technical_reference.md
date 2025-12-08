@@ -44,8 +44,41 @@ graph TD
 | **Bulk Loader** | Batch Job | Reads historical files (JSON/Syslog/Standard), mines templates, loads DuckDB. |
 | **Ingestion Worker** | Service | Consumes Kafka stream, masks PII, inserts into DB/Vector Store. |
 | **Schema Registry** | Service | Stores regex rules discovered by the Agent. |
-
-### 1.3 Deep Dive: Log Parsing Logic (`LogParser`)
+ 
+ ### 1.4 LLM Configuration
+ The system uses a centralized configuration file `config/llm_config.yaml` to manage LLM providers.
+ 
+ #### Structure
+ ```yaml
+ llm:
+   default_provider: "openai" # or "local"
+   providers:
+     openai:
+       api_key_env: "OPENAI_API_KEY"
+       models:
+         fast: "gpt-4o-mini"
+         reasoning: "gpt-4o"
+     local:
+       api_base: "http://localhost:11434/v1"
+       default_model: "llama3"
+ ```
+ *   **`default_provider`**: Controls which provider is active system-wide.
+ *   **`providers`**: Defines connection details for each provider.
+ *   **`models`**: Maps abstract roles (`fast`, `reasoning`) to concrete model names.
+ 
+ ### 1.5 Model Selection Guide
+ Choose the right model based on your available hardware and performance needs.
+ 
+ | Category | Model | Params | Min RAM | Best For | Notes |
+ | :--- | :--- | :--- | :--- | :--- | :--- |
+ | **Consumer** | `llama3` | 8B | 8GB | **General Purpose** | Recommended default for M-series Macs. |
+ | **Consumer** | `mistral` | 7B | 8GB | Reasoning | Strong logic, efficient. |
+ | **Consumer** | `phi3` | 3.8B | 4GB | Speed / Simple Tasks | Ultra-lightweight. |
+ | **Server** | `llama3:70b` | 70B | 48GB | **Complex Reasoning** | GPT-4 class. Requires heavy hardware. |
+ | **Server** | `mixtral:8x7b` | 47B | 26GB | Context / RAG | Mixture-of-Experts. Good efficiency. |
+ | **Server** | `qwen2.5:72b` | 72B | 48GB | Coding / Math | Top-tier for technical tasks. |
+ 
+ ### 1.6 Deep Dive: Log Parsing Logic (`LogParser`)
 The `LogParser` acts as a **Normalization Layer**, converting raw strings into a structured dictionary.
 
 **1. Strategy Pattern (The "Waterfall")**
@@ -65,7 +98,7 @@ Regardless of the input format, the parser normalizes data into these **Golden F
 #### B. Control Plane (Intelligence)
 | Service | Tech | Responsibility |
 |---------|------|----------------|
-| **Pilot Orchestrator** | LangGraph + Jinja2 | Central brain. Routes queries, generates SQL via LLM, retrieves knowledge. |
+| **Pilot Orchestrator** | LangGraph + Jinja2 | Central brain. Routes queries, generates SQL via LLM, retrieves knowledge. Uses a **State Machine** for robust flow control. |
 | **Knowledge Base** | LlamaIndex | Manages ChromaDB for semantic search (RAG) with Metadata Filtering. |
 | **Schema Discovery** | LLM | Learns new log formats and generates regex rules. |
 | **Evaluator** | Scikit-Learn | Benchmarks agent performance against golden datasets. |
@@ -138,3 +171,25 @@ Regardless of the input format, the parser normalizes data into these **Golden F
 ### 📚 System Catalog & Advanced
 - [x] **Unified Data Layer**: Maps Services -> Departments (Many-to-Many).
 - [x] **Local LLM**: Supports `provider="local"` (M4 Chip).
+ 
+ ## 4. Deployment (Docker)
+ The system is fully containerized for easy deployment.
+ 
+ ### 4.1 Quick Start
+ ```bash
+ # Start all services (LLM, Ingestion, Pilot)
+ docker-compose up --build
+ ```
+ *   **`llm-service`**: Starts Ollama and pulls `llama3` automatically.
+ *   **`ingestion-worker`**: Begins processing logs from `data/source`.
+ *   **`pilot-orchestrator`**: Starts the agent API.
+ 
+ ### 4.2 Configuration
+ To use the internal Docker LLM, update `config/llm_config.yaml`:
+ ```yaml
+ llm:
+   default_provider: "local"
+   providers:
+     local:
+       api_base: "http://llm-service:11434/v1" # Docker service name
+ ```

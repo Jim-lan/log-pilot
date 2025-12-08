@@ -23,6 +23,12 @@ The system follows a **Data Lakehouse + RAG** architecture, composed of three la
 2.  **Storage Layer**: Hybrid storage using **DuckDB** (Structured) and **ChromaDB** (Unstructured).
 3.  **Intelligence Layer**: The "Pilot" agent that interacts with the user.
 
+### 2.1 Unified LLM Strategy
+The system uses a **Unified Interface** (via the `openai` library) to support both Cloud and Local LLMs seamlessly.
+*   **Cloud Mode**: Connects to OpenAI (GPT-4) or Gemini (via adapter) for maximum reasoning capability.
+*   **Local Mode**: Connects to local inference servers (Ollama/vLLM) running on consumer hardware (e.g., M4 Chip) for privacy and cost savings.
+*   **Configuration**: Switching providers is a simple toggle in `config/llm_config.yaml`.
+
 ### Architecture Diagram
 
 ```mermaid
@@ -127,6 +133,20 @@ This workflow demonstrates how the system combines Structured Data and Knowledge
 
 3.  **Synthesize Answer**
     *   *Final Output*: "The **Auth Service** is experiencing the most errors. It is owned by **sec-ops@example.com**. The recommended fix is to **restart the token-generator pod**."
+
+### 3.5 Pilot Orchestration (LangGraph)
+The Pilot is not a single prompt; it is a **State Machine** built with **LangGraph**.
+
+#### The Flow
+1.  **Classifier Agent**: An LLM analyzes the query and determines the intent (`sql`, `rag`, or `ambiguous`) using **Few-Shot Prompting**.
+2.  **Router**: Directs the flow based on intent.
+3.  **Specialized Agents**:
+    *   **SQL Agent**: Generates DuckDB SQL (with retry loops on error).
+    *   **RAG Agent**: Retrieves context from ChromaDB.
+4.  **Synthesizer**: Combines data/context into a final natural language response.
+
+#### Resilience
+*   **Self-Correction**: If the SQL Agent generates invalid SQL, the execution node catches the error and loops back to the generator with the error message, allowing the LLM to fix its mistake.
 
 ---
 

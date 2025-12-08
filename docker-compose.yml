@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # 1. Local LLM Service (The Brain)
+  llm-service:
+    image: ollama/ollama:latest
+    container_name: log-pilot-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Entrypoint script to pull model if missing
+    entrypoint: /bin/sh
+    command: -c "ollama serve & sleep 5 && ollama pull llama3 && wait"
+    networks:
+      - pilot-net
+
+  # 2. Ingestion Worker (Data Plane)
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: services/ingestion-worker/Dockerfile
+    container_name: log-pilot-ingestion
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    depends_on:
+      - llm-service
+    networks:
+      - pilot-net
+
+  # 3. Pilot Orchestrator (Control Plane)
+  pilot-orchestrator:
+    build:
+      context: .
+      dockerfile: services/pilot_orchestrator/Dockerfile
+    container_name: log-pilot-brain
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./prompts:/app/prompts
+    environment:
+      - LOCAL_API_KEY=dummy
+    ports:
+      - "8000:8000"
+    depends_on:
+      - llm-service
+    networks:
+      - pilot-net
+
+volumes:
+  ollama_data:
+
+networks:
+  pilot-net:
+    driver: bridge

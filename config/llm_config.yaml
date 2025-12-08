@@ -13,11 +13,40 @@ llm:
         reasoning: "gemini-1.5-pro"
     local:
       api_base: "http://localhost:11434/v1" # Example: Ollama
-      default_model: "llama3"
-      api_key_env: "LOCAL_API_KEY" # Optional
-      # models: # Example for local models if needed
-      #   fast: "llama3"
-      #   reasoning: "codellama"
+      default_model: "llama3" # 8B - Excellent balance for M4 Mac
+      # --- Model Selection Guide ---
+      #
+      # [Category A] Lightweight / Consumer Hardware (e.g., M1/M2/M3/M4 Mac, Consumer GPU)
+      # 1. "llama3" (8B) - [RECOMMENDED DEFAULT]
+      #    - Capability: Excellent general purpose, good instruction following.
+      #    - Requirement: ~8GB RAM (runs comfortably on 16GB machines).
+      #    - Performance: Very fast on Apple Silicon.
+      #
+      # 2. "mistral" (7B)
+      #    - Capability: Strong reasoning, very efficient context usage.
+      #    - Requirement: ~8GB RAM.
+      #    - Performance: Comparable to Llama 3.
+      #
+      # 3. "phi3" (3.8B)
+      #    - Capability: Punching above its weight, great for simple tasks/summarization.
+      #    - Requirement: ~4GB RAM.
+      #    - Performance: Blazing fast, minimal resource footprint.
+      #
+      # [Category B] Heavy Duty / Server Grade (e.g., A100, H100, Mac Studio Ultra)
+      # 1. "llama3:70b"
+      #    - Capability: GPT-4 class performance. Deep reasoning and nuance.
+      #    - Requirement: ~48GB VRAM/RAM.
+      #    - Performance: Slower, requires significant hardware.
+      #
+      # 2. "mixtral:8x7b"
+      #    - Capability: Mixture-of-Experts. Great at complex context and RAG.
+      #    - Requirement: ~26GB VRAM/RAM (4-bit quantized).
+      #    - Performance: Efficient for its size, but requires good memory bandwidth.
+      #
+      # 3. "qwen2.5:72b"
+      #    - Capability: Top-tier coding & math. Rivals proprietary models.
+      #    - Requirement: ~48GB+ VRAM/RAM.
+      #    - Performance: Heavy compute load.
 
 agents:
   schema_discovery:
