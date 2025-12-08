@@ -16,6 +16,19 @@ Table: `logs`
 4. If the user asks for "errors", filter by `severity='ERROR'`.
 5. Limit results to 50 unless specified otherwise.
 
+### Examples
+Q: "Count errors in auth"
+A: SELECT count(*) FROM logs WHERE service_name='auth-service' AND severity='ERROR'
+
+Q: "Show recent warnings"
+A: SELECT * FROM logs WHERE severity='WARN' ORDER BY timestamp DESC LIMIT 10
+
+Q: "List all services"
+A: SELECT DISTINCT service_name FROM logs
+
+Q: "How many logs from payment-service yesterday?"
+A: SELECT count(*) FROM logs WHERE service_name='payment-service' AND timestamp >= current_date - INTERVAL 1 DAY
+
 ### User Question
 {{ query }}
 

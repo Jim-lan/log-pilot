@@ -34,16 +34,27 @@ def get_db_client():
 
 def classify_intent(state: AgentState) -> AgentState:
     """
-    Determines if the user query requires SQL (data) or RAG (knowledge).
+    Determines if the user query requires SQL (data) or RAG (knowledge) using LLM.
     """
     query = state["query"]
-    # Simple heuristic for now, can be upgraded to LLM call
-    if any(w in query.lower() for w in ["count", "how many", "list", "show", "select", "find"]):
-        state["intent"] = "sql"
-    elif any(w in query.lower() for w in ["why", "how to", "explain", "what is", "fix"]):
-        state["intent"] = "rag"
-    else:
-        state["intent"] = "ambiguous"
+    
+    try:
+        prompt = prompt_factory.create_prompt(
+            "pilot_orchestrator",
+            "intent_classifier",
+            query=query
+        )
+        # Use 'fast' model for classification to keep latency low
+        intent = llm_client.generate(prompt, model_type="fast").strip().lower()
+        
+        # Validate intent
+        if intent not in ["sql", "rag", "ambiguous"]:
+            intent = "ambiguous"
+            
+        state["intent"] = intent
+    except Exception as e:
+        print(f"❌ Intent Classification Failed: {e}")
+        state["intent"] = "ambiguous" # Fail safe
     
     print(f"🤔 Intent Classified: {state['intent']}")
     return state

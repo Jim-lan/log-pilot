@@ -1,17 +1,27 @@
 import os
 import yaml
 from typing import Optional, Dict, Any
+import openai
 
 class LLMClient:
     """
-    A unified client for interacting with LLM providers (OpenAI, Gemini).
+    A unified client for interacting with LLM providers (OpenAI, Gemini, Local).
     Reads configuration from config/llm_config.yaml.
     """
     def __init__(self, config_path: str = "config/llm_config.yaml"):
         self.config = self._load_config(config_path)
         self.provider_name = self.config["llm"]["default_provider"]
         self.provider_config = self.config["llm"]["providers"][self.provider_name]
-        self._validate_api_key()
+        
+        self.api_key = self._get_api_key()
+        self.base_url = self.provider_config.get("api_base")
+        
+        # Initialize OpenAI Client
+        # This works for OpenAI, Gemini (via adapter), and Local (Ollama/vLLM)
+        self.client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
 
     def _load_config(self, path: str) -> Dict[str, Any]:
         # Resolve absolute path relative to project root
@@ -24,28 +34,39 @@ class LLMClient:
         with open(full_path, "r") as f:
             return yaml.safe_load(f)
 
-    def _validate_api_key(self):
-        env_var = self.provider_config["api_key_env"]
-        if not os.getenv(env_var):
-            # In production, raise error. For prototype, just warn.
-            print(f"⚠️  WARNING: {env_var} not set. LLM calls will fail.")
+    def _get_api_key(self) -> str:
+        env_var = self.provider_config.get("api_key_env")
+        if not env_var:
+            return "dummy" # For local providers that don't need key
+            
+        api_key = os.getenv(env_var)
+        if not api_key:
+             if self.provider_name == "local":
+                 return "dummy"
+             print(f"⚠️  WARNING: {env_var} not set. LLM calls will fail.")
+             return "missing"
+        return api_key
 
-    def generate(self, prompt: str, provider: str = "openai", model_type: str = "fast") -> str:
+    def generate(self, prompt: str, model_type: str = "fast") -> str:
         """
         Generates text from the LLM.
         """
-        # Mock Implementation for Prototype
-        print(f"🤖 LLM Call ({provider}): {prompt[:50]}...")
+        # Get model name from config
+        # Handle both 'models' dict (cloud) and 'default_model' (local)
+        models_config = self.provider_config.get("models", {})
+        model_name = models_config.get(model_type)
         
-        if provider == "local":
-            return self._generate_local(prompt)
-            
-        return "Mock LLM Response: [Regex: (?P<timestamp>...)]"
+        if not model_name:
+             model_name = self.provider_config.get("default_model", "gpt-3.5-turbo")
 
-    def _generate_local(self, prompt: str) -> str:
-        """
-        Simulates a local LLM call (e.g., to Ollama).
-        """
-        # In a real implementation, this would use requests.post("http://localhost:11434/api/generate", ...)
-        print("   💻 Running on Local M4 Chip...")
-        return "Local LLM Response: [Regex: (?P<ts>...)]"
+        print(f"🤖 LLM Call ({self.provider_name}/{model_name}): {prompt[:50]}...")
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"❌ Error generating response: {e}"
