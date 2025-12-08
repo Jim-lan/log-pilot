@@ -7,6 +7,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from shared.db.duckdb_client import DuckDBConnector
+from shared.llm.client import LLMClient
+from shared.llm.prompt_factory import PromptFactory
 
 class SQLGenerator:
     """
@@ -16,40 +18,25 @@ class SQLGenerator:
     """
     def __init__(self):
         self.db = DuckDBConnector()
+        self.llm = LLMClient()
+        self.prompts = PromptFactory()
 
     def generate_sql(self, query: str) -> Optional[str]:
-        """Generates SQL from a natural language query."""
-        query = query.lower()
-        
-        # Pattern 1: Count errors
-        # "How many errors?" "Count all failures"
-        if "count" in query or "how many" in query:
-            if "error" in query or "fail" in query:
-                return "SELECT count(*) as error_count FROM logs WHERE severity='ERROR'"
-            return "SELECT count(*) as total_logs FROM logs"
-
-        # Pattern 2: Show recent logs
-        # "Show me the last 5 logs" "Recent logs"
-        if "recent" in query or "last" in query:
-            limit = 5
-            # Extract number if present
-            match = re.search(r'\d+', query)
-            if match:
-                limit = int(match.group())
-            return f"SELECT timestamp, severity, service_name, body FROM logs ORDER BY timestamp DESC LIMIT {limit}"
-
-        # Pattern 3: Filter by Service
-        # "Show errors for payment-service"
-        if "service" in query:
-            # Extract service name (heuristic: word before or after 'service')
-            # Simple regex to find 'payment-service' or 'auth-service'
-            match = re.search(r'([a-z-]+-service)', query)
-            if match:
-                service = match.group(1)
-                severity_clause = "AND severity='ERROR'" if "error" in query or "fail" in query else ""
-                return f"SELECT timestamp, severity, body FROM logs WHERE service_name='{service}' {severity_clause} ORDER BY timestamp DESC LIMIT 10"
-
-        return None
+        """Generates SQL from a natural language query using LLM."""
+        try:
+            prompt = self.prompts.create_prompt(
+                "pilot_orchestrator", 
+                "sql_generator", 
+                query=query
+            )
+            sql = self.llm.generate(prompt, model_type="fast")
+            
+            # Clean up markdown if present
+            sql = sql.replace("```sql", "").replace("```", "").strip()
+            return sql
+        except Exception as e:
+            print(f"❌ SQL Generation Failed: {e}")
+            return None
 
     def execute(self, query: str) -> List[Any]:
         """Generates and executes SQL."""

@@ -10,6 +10,7 @@ from shared.llm.client import LLMClient
 from shared.llm.prompt_factory import PromptFactory
 from services.pilot_orchestrator.src.tools.sql_tool import SQLGenerator
 from services.knowledge_base.src.store import KnowledgeStore
+from shared.db.duckdb_client import DuckDBConnector
 
 # Initialize Shared Components
 llm_client = LLMClient()
@@ -17,12 +18,19 @@ prompt_factory = PromptFactory()
 sql_tool = SQLGenerator()
 # Lazy load KnowledgeStore to avoid init issues during testing if not needed
 _kb_store = None
+_db_client = None
 
 def get_kb_store():
     global _kb_store
     if _kb_store is None:
         _kb_store = KnowledgeStore()
     return _kb_store
+
+def get_db_client():
+    global _db_client
+    if _db_client is None:
+        _db_client = DuckDBConnector()
+    return _db_client
 
 def classify_intent(state: AgentState) -> AgentState:
     """
@@ -64,11 +72,10 @@ def execute_sql(state: AgentState) -> AgentState:
         return state
 
     try:
-        # In a real app, we'd call DuckDBConnector here.
-        # For now, using the mock execution from SQLGenerator or a placeholder.
-        # result = db.execute(sql) 
-        result = f"Mock Result for: {sql}" # Placeholder
-        state["sql_result"] = result
+        db = get_db_client()
+        print(f"⚡ Executing SQL: {sql}")
+        result = db.query(sql)
+        state["sql_result"] = str(result)
     except Exception as e:
         state["sql_error"] = str(e)
         state["retry_count"] = state.get("retry_count", 0) + 1
@@ -105,7 +112,12 @@ def synthesize_answer(state: AgentState) -> AgentState:
     else:
         context = "Ambiguous intent."
 
-    prompt = f"User Query: {query}\nContext: {context}\n\nProvide a helpful answer."
+    prompt = prompt_factory.create_prompt(
+        "pilot_orchestrator",
+        "synthesize_answer",
+        query=query,
+        context=context
+    )
     response = llm_client.generate(prompt, model_type="fast")
     
     state["final_answer"] = response

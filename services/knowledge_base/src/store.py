@@ -2,9 +2,10 @@ import os
 import chromadb
 from typing import List
 from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import Settings
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 # Import from sibling module
 try:
@@ -38,9 +39,10 @@ class KnowledgeStore:
         vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
         self.storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-        # 3. Setup Embedding Model (Mock or Real)
-        # For now, we assume OPENAI_API_KEY is set, or we could use a local model.
-        # Settings.embed_model = OpenAIEmbedding() 
+        # 3. Setup Embedding Model
+        # Use Local HuggingFace Model (BAAI/bge-small-en-v1.5)
+        # This runs locally and does not require an API key.
+        Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5") 
         
         # 4. Load Index (or create empty)
         # In LlamaIndex, we usually create index from documents. 
@@ -61,10 +63,20 @@ class KnowledgeStore:
             self.index.insert(doc)
         print(f"✅ Added {len(logs)} logs to Knowledge Base.")
 
-    def query(self, query_str: str) -> str:
+    def query(self, query_str: str, filters: dict = None) -> str:
         """
         Queries the Knowledge Base using LlamaIndex Query Engine.
+        Args:
+            query_str: The natural language query.
+            filters: Optional dictionary of metadata filters (e.g., {"service_name": "auth-service"}).
         """
-        query_engine = self.index.as_query_engine()
+        query_filters = None
+        if filters:
+            metadata_filters = [
+                MetadataFilter(key=k, value=v) for k, v in filters.items()
+            ]
+            query_filters = MetadataFilters(filters=metadata_filters)
+
+        query_engine = self.index.as_query_engine(filters=query_filters)
         response = query_engine.query(query_str)
         return str(response)

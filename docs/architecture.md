@@ -52,8 +52,8 @@ graph TD
         User[User Query] --> ChatUI[Chat Interface]
         ChatUI --> Router["Pilot Router / Orchestrator"]
         
-        Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator]
-        Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search]
+        Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator (LLM)]
+        Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search + Metadata Filter]
         Router --> |"Deep Analysis"| Anomaly_Tool[Pattern Analyzer]
         
         SQL_Tool <--> TimeSeriesDB
@@ -122,6 +122,7 @@ This workflow demonstrates how the system combines Structured Data and Knowledge
 
 2.  **Retrieve Context (ChromaDB)**
     *   The Agent searches the Knowledge Base for: *"Auth Service common failures and fixes"*.
+    *   **Optimization**: Applies a **Metadata Filter** (`service_name='auth-service'`) to narrow the search space before vector retrieval.
     *   *Result*: Retrieved Runbook: "If Auth Service fails with 503, restart the token-generator pod."
 
 3.  **Synthesize Answer**

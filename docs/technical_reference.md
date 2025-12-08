@@ -45,11 +45,28 @@ graph TD
 | **Ingestion Worker** | Service | Consumes Kafka stream, masks PII, inserts into DB/Vector Store. |
 | **Schema Registry** | Service | Stores regex rules discovered by the Agent. |
 
+### 1.3 Deep Dive: Log Parsing Logic (`LogParser`)
+The `LogParser` acts as a **Normalization Layer**, converting raw strings into a structured dictionary.
+
+**1. Strategy Pattern (The "Waterfall")**
+It attempts to parse a log line using the following order:
+1.  **JSON**: Checks if line starts with `{`. If valid JSON, extracts fields.
+2.  **Regex Patterns**: Tries known formats (Standard, Syslog, Nginx).
+3.  **Fallback**: If no match, treats the entire line as `body` with `severity=UNKNOWN`.
+
+**2. Metadata Extraction**
+Regardless of the input format, the parser normalizes data into these **Golden Fields**:
+*   **`timestamp`**: Converted to **UTC** datetime.
+*   **`severity`**: `INFO`, `ERROR`, `WARN` (Inferred if missing).
+*   **`service_name`**: Extracted from log content (e.g., `auth-service`, `nginx`).
+*   **`body`**: The core message used for **Template Mining**.
+*   **`context`**: A dictionary containing all other dynamic fields (e.g., `ip`, `status`, `latency`).
+
 #### B. Control Plane (Intelligence)
 | Service | Tech | Responsibility |
 |---------|------|----------------|
-| **Pilot Orchestrator** | LangGraph | Central brain. Routes queries, generates SQL, retrieves knowledge. |
-| **Knowledge Base** | LlamaIndex | Manages ChromaDB for semantic search (RAG). |
+| **Pilot Orchestrator** | LangGraph + Jinja2 | Central brain. Routes queries, generates SQL via LLM, retrieves knowledge. |
+| **Knowledge Base** | LlamaIndex | Manages ChromaDB for semantic search (RAG) with Metadata Filtering. |
 | **Schema Discovery** | LLM | Learns new log formats and generates regex rules. |
 | **Evaluator** | Scikit-Learn | Benchmarks agent performance against golden datasets. |
 | **API Gateway** | FastAPI | REST interface (`POST /query`) for external clients. |
@@ -84,6 +101,7 @@ graph TD
 | `data/source/` | **Input**: Raw logs (`landing_zone`), reference data (`system_catalog.csv`). |
 | `data/target/` | **Output**: Structured DB (`logs.duckdb`), Vector Store (`vector_store`). |
 | `data/state/` | **Internal**: Persistence files (`drain3_state.bin`). |
+| `prompts/` | **Templates**: Jinja2 templates for LLM prompts (`sql_generator.j2`, `synthesize_answer.j2`). |
 
 ### 📜 Utility Scripts (`scripts/`)
 | Script | Usage | Description |
@@ -110,7 +128,7 @@ graph TD
 
 ### 🚁 Pilot Orchestrator
 - [x] **Intent Classification**: Routes to SQL (Data) or RAG (Knowledge).
-- [x] **SQL Generation**: Text-to-SQL for DuckDB.
+- [x] **SQL Generation**: LLM-based Text-to-SQL for DuckDB using Jinja2 templates.
 - [x] **RAG Synthesis**: Combines retrieved context into natural answers.
 
 ### 📊 Evaluator

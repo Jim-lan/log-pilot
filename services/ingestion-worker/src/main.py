@@ -10,7 +10,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 
 from shared.log_schema import LogEvent
 from shared.db.duckdb_client import DuckDBConnector
-from shared.utils import PIIMasker
+from shared.utils.pii_masker import PIIMasker
+from services.knowledge_base.src.store import KnowledgeStore
 
 class MockKafkaConsumer:
     """Simulates a Kafka Consumer yielding raw log lines."""
@@ -42,31 +43,50 @@ class LogIngestor:
         self.consumer = MockKafkaConsumer()
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
         self.db = DuckDBConnector()
+        self.kb = KnowledgeStore() # ChromaDB
         self.pii_masker = PIIMasker()
         self.parser = LogParser()
         self.batch_size = 5
         self.batch_buffer = []
+        self.log_event_buffer = [] # Buffer for LogEvent objects (needed for KB)
 
     def parse_log(self, raw_log: str) -> LogEvent:
-        # 1. Robust Regex Parsing + UTC Normalization
+        """
+        Core Ingestion Pipeline:
+        1. Parse: Normalize raw string -> Structured Dict (Timestamp, Severity, Service).
+        2. Mask: Redact PII (Emails, IPs) from the body.
+        3. Mine: Convert variable body -> Constant Template (Drain3).
+        4. Context: Extract dynamic key-value pairs.
+        """
+        
+        # Step 1: Robust Parsing
+        # Uses the Strategy Pattern (JSON -> Regex -> Fallback) to handle any format.
+        # Ensures 'timestamp' is always UTC.
         parsed = self.parser.parse(raw_log)
         
-        # 2. Mask PII in the body immediately
+        # Step 2: PII Masking
+        # We mask BEFORE mining templates to ensure sensitive data never enters the system.
+        # e.g. "User 1.2.3.4 failed" -> "User <IP> failed"
         safe_body = self.pii_masker.mask_text(parsed["body"])
         
-        # 3. Get Template (Drain3)
+        # Step 3: Template Mining (Drain3)
+        # Clusters similar logs to reduce noise.
+        # e.g. "User <IP> failed" -> "User <*> failed"
         template = self.miner.mine_template(safe_body)
         
-        # 4. Extract Context (Simple Key-Value extraction from body)
-        context = {}
-        # Simple heuristic: look for k=v patterns in the message
-        for part in safe_body.split(" "):
-            if "=" in part:
-                try:
-                    k, v = part.split("=", 1)
-                    context[k] = v
-                except ValueError:
-                    pass
+        # Step 4: Context Extraction
+        # We preserve the original dynamic values in a JSON column.
+        # If the log was JSON, we use that. Otherwise, we try to extract k=v pairs.
+        context = parsed.get("context", {})
+        if not context:
+             # Simple heuristic for standard logs: look for k=v patterns
+            for part in safe_body.split(" "):
+                if "=" in part:
+                    try:
+                        k, v = part.split("=", 1)
+                        context[k] = v
+                    except ValueError:
+                        pass
 
         return LogEvent(
             timestamp=parsed["timestamp"],
@@ -80,10 +100,17 @@ class LogIngestor:
         if not self.batch_buffer:
             return
         
-        print(f"💾 Flushing batch of {len(self.batch_buffer)} logs to DuckDB...")
+        print(f"💾 Flushing batch of {len(self.batch_buffer)} logs to DuckDB & ChromaDB...")
         try:
+            # 1. Write to DuckDB (Structured)
             self.db.insert_batch(self.batch_buffer)
+            
+            # 2. Write to ChromaDB (Unstructured)
+            self.kb.add_logs(self.log_event_buffer)
+            
+            # Clear buffers
             self.batch_buffer = []
+            self.log_event_buffer = []
         except Exception as e:
             print(f"❌ Error flushing batch: {e}")
 
@@ -91,6 +118,7 @@ class LogIngestor:
         print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
         print("🔒 PII Masking Enabled")
         print("🗄️  DuckDB Persistence Enabled")
+        print("🧠 ChromaDB Persistence Enabled")
         
         try:
             for raw_log in self.consumer:
@@ -99,6 +127,7 @@ class LogIngestor:
                     
                     # Add to buffer
                     self.batch_buffer.append(event.model_dump())
+                    self.log_event_buffer.append(event)
                     
                     print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
                     
