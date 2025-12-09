@@ -5,7 +5,8 @@ Your task is to rewrite the user's latest question into a standalone query that 
 1.  If the user's question is a follow-up (e.g., "list them", "why?", "show details"), rewrite it to include the context (entities, time filters, constraints) from the previous conversation.
 2.  If the user's question is already self-contained (e.g., "How many errors in auth-service?"), return it exactly as is.
 3.  Do NOT answer the question. Only return the rewritten query.
-4.  Do NOT add any explanations or markdown.
+4.  Do NOT add any explanations, preambles (e.g. "Here is the query"), or markdown.
+5. Output MUST be a single line containing only the query.
 
 ### Chat History
 {% if chat_history %}

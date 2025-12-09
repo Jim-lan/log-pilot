@@ -60,6 +60,13 @@ def rewrite_query(state: AgentState) -> AgentState:
         )
         # Use 'fast' model
         rewritten = llm_client.generate(prompt, model_type="fast").strip()
+        
+        # Clean up common chatty prefixes
+        prefixes = ["Here is the rewritten query:", "Rewritten query:", "Query:"]
+        for p in prefixes:
+            if rewritten.lower().startswith(p.lower()):
+                rewritten = rewritten[len(p):].strip()
+        
         state["rewritten_query"] = rewritten
         print(f"🔄 Rewritten Query: {rewritten}")
     except Exception as e:
