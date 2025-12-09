@@ -29,7 +29,7 @@ def get_kb_store():
 def get_db_client():
     global _db_client
     if _db_client is None:
-        _db_client = DuckDBConnector()
+        _db_client = DuckDBConnector(read_only=True)
     return _db_client
 
 def classify_intent(state: AgentState) -> AgentState:

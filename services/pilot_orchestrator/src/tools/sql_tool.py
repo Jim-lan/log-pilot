@@ -17,7 +17,7 @@ class SQLGenerator:
     In production, this would use an LLM.
     """
     def __init__(self):
-        self.db = DuckDBConnector()
+        self.db = DuckDBConnector(read_only=True)
         self.llm = LLMClient()
         self.prompts = PromptFactory()
 

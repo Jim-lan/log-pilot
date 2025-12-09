@@ -4,12 +4,13 @@ from typing import List, Dict, Any
 import os
 
 class DuckDBConnector:
-    def __init__(self, db_path: str = "data/target/logs.duckdb"):
+    def __init__(self, db_path: str = "data/target/logs.duckdb", read_only: bool = False):
         self.db_path = db_path
         # Ensure data directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.conn = duckdb.connect(self.db_path)
-        self._init_schema()
+        self.conn = duckdb.connect(self.db_path, read_only=read_only)
+        if not read_only:
+            self._init_schema()
         # Auto-load catalog if present
         if os.path.exists("data/system_catalog.csv"):
             self.load_catalog("data/system_catalog.csv")
