@@ -8,8 +8,12 @@ class DuckDBConnector:
         self.db_path = db_path
         # Ensure data directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self.conn = duckdb.connect(self.db_path, read_only=read_only)
-        if not read_only:
+        
+        if read_only:
+             # Disable locking for read-only connections to avoid Docker bind-mount issues
+            self.conn = duckdb.connect(self.db_path, read_only=True, config={'access_mode': 'READ_ONLY'})
+        else:
+            self.conn = duckdb.connect(self.db_path)
             self._init_schema()
         # Auto-load catalog if present
         if os.path.exists("data/system_catalog.csv"):
