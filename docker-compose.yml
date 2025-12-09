@@ -22,7 +22,8 @@ services:
       dockerfile: services/ingestion-worker/Dockerfile
     container_name: log-pilot-ingestion
     volumes:
-      - ./data:/app/data
+      - ./data/source:/app/data/source
+      - duckdb_data:/app/data/target
       - ./config:/app/config
     depends_on:
       - llm-service
@@ -36,7 +37,7 @@ services:
       dockerfile: services/pilot_orchestrator/Dockerfile
     container_name: log-pilot-brain
     volumes:
-      - ./data:/app/data
+      - duckdb_data:/app/data/target
       - ./config:/app/config
       - ./prompts:/app/prompts
     environment:
@@ -61,6 +62,7 @@ services:
 
 volumes:
   ollama_data:
+  duckdb_data:
 
 
 networks:
