@@ -10,8 +10,27 @@ class DuckDBConnector:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         if read_only:
-             # Disable locking for read-only connections to avoid Docker bind-mount issues
-            self.conn = duckdb.connect(self.db_path, read_only=True, config={'access_mode': 'READ_ONLY'})
+             # Wait for DB file to exist
+            import time
+            print(f"⏳ Waiting for DB file at {self.db_path}...")
+            while not os.path.exists(self.db_path):
+                time.sleep(1)
+            print("✅ DB file found.")
+            
+            # Disable locking for read-only connections to avoid Docker bind-mount issues
+            # Retry loop to wait for writer to release lock
+            max_retries = 30
+            for i in range(max_retries):
+                try:
+                    self.conn = duckdb.connect(self.db_path, read_only=True, config={'access_mode': 'READ_ONLY'})
+                    print("✅ Connected to DB.")
+                    break
+                except Exception as e:
+                    if "lock" in str(e).lower() and i < max_retries - 1:
+                        print(f"🔒 DB locked, retrying in 2s... ({i+1}/{max_retries})")
+                        time.sleep(2)
+                    else:
+                        raise e
         else:
             self.conn = duckdb.connect(self.db_path)
             self._init_schema()

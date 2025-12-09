@@ -42,8 +42,8 @@ class LogIngestor:
     def __init__(self):
         self.consumer = MockKafkaConsumer()
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
-        self.db = DuckDBConnector()
-        self.kb = KnowledgeStore() # ChromaDB
+        self.kb = KnowledgeStore() # ChromaDB (might download models)
+        self.db = DuckDBConnector() # Acquire DB lock ONLY after heavy init
         self.pii_masker = PIIMasker()
         self.parser = LogParser()
         self.batch_size = 5
