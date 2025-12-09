@@ -6,9 +6,11 @@ import os
 class DuckDBConnector:
     def __init__(self, db_path: str = "data/target/logs.duckdb", read_only: bool = False):
         self.db_path = db_path
+        self.history_path = "data/target/history.duckdb"
         # Ensure data directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
+        # 1. Connect to Logs DB (Read-Only or Read-Write)
         if read_only:
              # Wait for DB file to exist
             import time
@@ -17,13 +19,12 @@ class DuckDBConnector:
                 time.sleep(1)
             print("✅ DB file found.")
             
-            # Disable locking for read-only connections to avoid Docker bind-mount issues
-            # Retry loop to wait for writer to release lock
+            # Disable locking for read-only connections
             max_retries = 30
             for i in range(max_retries):
                 try:
                     self.conn = duckdb.connect(self.db_path, read_only=True, config={'access_mode': 'READ_ONLY'})
-                    print("✅ Connected to DB.")
+                    print("✅ Connected to Logs DB (Read-Only).")
                     break
                 except Exception as e:
                     if "lock" in str(e).lower() and i < max_retries - 1:
@@ -33,41 +34,73 @@ class DuckDBConnector:
                         raise e
         else:
             self.conn = duckdb.connect(self.db_path)
-            self._init_schema()
+            self._init_schema() # Only inits logs table
+            
+        # 2. Connect to History DB (Always Read-Write)
+        # We use a separate connection for history to avoid locking conflicts with logs
+        try:
+            self.history_conn = duckdb.connect(self.history_path)
+            self._init_history_schema()
+            print("✅ Connected to History DB.")
+        except Exception as e:
+            print(f"⚠️ Failed to connect to History DB: {e}")
+            self.history_conn = None
+
         # Auto-load catalog if present
         if os.path.exists("data/system_catalog.csv"):
             self.load_catalog("data/system_catalog.csv")
 
-    def load_catalog(self, csv_path: str):
-        """Loads the system catalog CSV into a table."""
-        print(f"📖 Loading System Catalog from {csv_path}...")
-        try:
-            # Create or Replace the table directly from CSV
-            self.conn.execute(f"CREATE OR REPLACE TABLE system_catalog AS SELECT * FROM read_csv_auto('{csv_path}')")
-            print("✅ System Catalog loaded.")
-        except Exception as e:
-            print(f"❌ Failed to load catalog: {e}")
-
     def _init_schema(self):
-        """Initializes the logs table with the Golden Standard schema."""
-        # Note: We use a JSON type for the 'context' column
-        # DuckDB supports JSON natively.
-        schema_sql = """
-        CREATE TABLE IF NOT EXISTS logs (
-            timestamp TIMESTAMP,
-            severity VARCHAR,
-            service_name VARCHAR,
-            trace_id VARCHAR,
-            body VARCHAR,
-            environment VARCHAR,
-            app_id VARCHAR,
-            department VARCHAR,
-            host VARCHAR,
-            region VARCHAR,
-            context JSON
-        );
-        """
-        self.conn.execute(schema_sql)
+        """Initializes the logs table."""
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                timestamp TIMESTAMP,
+                level VARCHAR,
+                service VARCHAR,
+                message VARCHAR,
+                template_id VARCHAR
+            );
+        """)
+
+    def _init_history_schema(self):
+        """Initializes the history table in the separate DB."""
+        if self.history_conn:
+            self.history_conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id UUID DEFAULT uuid(),
+                    timestamp TIMESTAMP DEFAULT current_timestamp,
+                    session_id VARCHAR,
+                    role VARCHAR,
+                    content VARCHAR
+                );
+            """)
+            
+    def save_message(self, session_id: str, role: str, content: str):
+        """Saves a chat message to history DB."""
+        if self.history_conn:
+            try:
+                self.history_conn.execute(
+                    "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
+                    [session_id, role, content]
+                )
+                print(f"💾 Saved message to history: {role} - {content[:20]}...")
+            except Exception as e:
+                print(f"❌ Failed to save message: {e}")
+
+    def get_history(self, session_id: str = "default"):
+        """Retrieves chat history from history DB."""
+        if self.history_conn:
+            try:
+                rows = self.history_conn.execute(
+                    "SELECT role, content, timestamp FROM chat_history WHERE session_id = ? ORDER BY timestamp ASC",
+                    [session_id]
+                ).fetchall()
+                print(f"📖 Retrieved {len(rows)} history items for session {session_id}")
+                return rows
+            except Exception as e:
+                print(f"❌ Failed to get history: {e}")
+                return []
+        return []
 
     def insert_batch(self, logs: List[Dict[str, Any]]):
         """

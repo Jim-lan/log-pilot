@@ -21,13 +21,14 @@ class SQLGenerator:
         self.llm = LLMClient()
         self.prompts = PromptFactory()
 
-    def generate_sql(self, query: str) -> Optional[str]:
+    def generate_sql(self, query: str, chat_history: str = "") -> Optional[str]:
         """Generates SQL from a natural language query using LLM."""
         try:
             prompt = self.prompts.create_prompt(
                 "pilot_orchestrator", 
                 "sql_generator", 
-                query=query
+                query=query,
+                chat_history=chat_history
             )
             sql = self.llm.generate(prompt, model_type="fast")
             

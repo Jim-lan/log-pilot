@@ -14,7 +14,7 @@ Table: `logs`
 2. Use DuckDB dialect.
 3. For "recent" or "last" queries, ORDER BY timestamp DESC.
 4. If the user asks for "errors", filter by `severity='ERROR'`.
-5. Limit results to 50 unless specified otherwise.
+6. If the user asks a follow-up question (e.g., "list them", "show details"), **PRESERVE** the filters (time, service, severity) from the previous query in the Chat History.
 
 ### Examples
 Q: "Count errors in auth"
@@ -28,6 +28,16 @@ A: SELECT DISTINCT service_name FROM logs
 
 Q: "How many logs from payment-service yesterday?"
 A: SELECT count(*) FROM logs WHERE service_name='payment-service' AND timestamp >= current_date - INTERVAL 1 DAY
+
+Q: "List them" (Follow-up to above)
+A: SELECT * FROM logs WHERE service_name='payment-service' AND timestamp >= current_date - INTERVAL 1 DAY ORDER BY timestamp DESC LIMIT 50
+
+### Chat History
+{% if chat_history %}
+{{ chat_history }}
+{% else %}
+No previous history.
+{% endif %}
 
 ### User Question
 {{ query }}

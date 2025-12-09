@@ -43,19 +43,51 @@ def run_query(request: QueryRequest):
     Executes the Pilot Agent for a given query.
     """
     try:
-        # Initialize state
-        initial_state = {"query": request.query, "messages": []}
+        # Fetch History for Context
+        from services.pilot_orchestrator.src.nodes import sql_tool
+        history_rows = sql_tool.db.get_history("default")
+        # Format: [{"role": "user", "content": "..."}, ...]
+        # Limit to last 10 messages to avoid context overflow
+        messages = [{"role": row[0], "content": row[1]} for row in history_rows[-10:]]
+
+        # Initialize state with history
+        initial_state = {"query": request.query, "messages": messages}
         
         # Run the graph
         # invoke returns the final state
         final_state = pilot_graph.invoke(initial_state)
         
+        answer = final_state.get("final_answer", "No answer generated.")
+        
+        # Save to History (Session ID = default for demo)
+        try:
+            from services.pilot_orchestrator.src.nodes import sql_tool
+            # Save User Query
+            sql_tool.db.save_message("default", "user", request.query)
+            # Save AI Answer
+            sql_tool.db.save_message("default", "ai", answer)
+        except Exception as e:
+            print(f"⚠️ Failed to save history: {e}")
+        
         return QueryResponse(
-            answer=final_state.get("final_answer", "No answer generated."),
+            answer=answer,
             sql=final_state.get("sql_query"),
             context=final_state.get("rag_context"),
             intent=final_state.get("intent", "unknown")
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/history")
+def get_chat_history():
+    """
+    Retrieves chat history for the default session.
+    """
+    try:
+        from services.pilot_orchestrator.src.nodes import sql_tool
+        history = sql_tool.db.get_history("default")
+        # Format: [(role, content, timestamp), ...]
+        return [{"role": row[0], "content": row[1], "timestamp": str(row[2])} for row in history]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

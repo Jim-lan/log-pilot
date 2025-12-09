@@ -32,11 +32,48 @@ def get_db_client():
         _db_client = DuckDBConnector(read_only=True)
     return _db_client
 
+def rewrite_query(state: AgentState) -> AgentState:
+    """
+    Rewrites the user query to be self-contained using chat history.
+    """
+    query = state["query"]
+    messages = state.get("messages", [])
+    
+    # If no history, no need to rewrite (optimization)
+    if not messages:
+        state["rewritten_query"] = query
+        print(f"⏩ No history, skipping rewrite: {query}")
+        return state
+
+    # Format Chat History
+    chat_history = ""
+    for msg in messages:
+        role = "User" if msg.get("role") == "user" else "AI"
+        chat_history += f"{role}: {msg.get('content')}\n"
+
+    try:
+        prompt = prompt_factory.create_prompt(
+            "pilot_orchestrator",
+            "query_rewriter",
+            query=query,
+            chat_history=chat_history
+        )
+        # Use 'fast' model
+        rewritten = llm_client.generate(prompt, model_type="fast").strip()
+        state["rewritten_query"] = rewritten
+        print(f"🔄 Rewritten Query: {rewritten}")
+    except Exception as e:
+        print(f"❌ Rewrite Failed: {e}")
+        state["rewritten_query"] = query # Fallback
+
+    return state
+
 def classify_intent(state: AgentState) -> AgentState:
     """
     Determines if the user query requires SQL (data) or RAG (knowledge) using LLM.
     """
-    query = state["query"]
+    # Use rewritten query for classification
+    query = state.get("rewritten_query", state["query"])
     
     try:
         prompt = prompt_factory.create_prompt(
@@ -63,7 +100,11 @@ def generate_sql(state: AgentState) -> AgentState:
     """
     Generates SQL from natural language using the SQLGenerator tool.
     """
-    query = state["query"]
+    # Use rewritten query
+    query = state.get("rewritten_query", state["query"])
+    
+    # We no longer need to pass chat_history to generate_sql 
+    # because the query is already rewritten!
     try:
         sql = sql_tool.generate_sql(query)
         state["sql_query"] = sql
@@ -97,7 +138,8 @@ def retrieve_context(state: AgentState) -> AgentState:
     """
     Queries the Knowledge Base for context.
     """
-    query = state["query"]
+    # Use rewritten query
+    query = state.get("rewritten_query", state["query"])
     kb = get_kb_store()
     try:
         context = kb.query(query)
@@ -112,7 +154,11 @@ def synthesize_answer(state: AgentState) -> AgentState:
     Generates the final answer using the LLM.
     """
     intent = state["intent"]
-    query = state["query"]
+    # Use original query for the final answer to keep it natural?
+    # Or rewritten? Usually rewritten is better for context, but original is what user asked.
+    # Let's use original query for the "User Question" part of the prompt, 
+    # but the context (SQL/RAG) was derived from the rewritten one.
+    query = state["query"] 
     
     if intent == "sql":
         context = f"SQL: {state.get('sql_query')}\nResult: {state.get('sql_result')}"
@@ -123,11 +169,20 @@ def synthesize_answer(state: AgentState) -> AgentState:
     else:
         context = "Ambiguous intent."
 
+    # Format Chat History (still useful for tone/continuity)
+    messages = state.get("messages", [])
+    chat_history = ""
+    if messages:
+        for msg in messages:
+            role = "User" if msg.get("role") == "user" else "AI"
+            chat_history += f"{role}: {msg.get('content')}\n"
+
     prompt = prompt_factory.create_prompt(
         "pilot_orchestrator",
         "synthesize_answer",
         query=query,
-        context=context
+        context=context,
+        chat_history=chat_history
     )
     response = llm_client.generate(prompt, model_type="fast")
     

@@ -4,6 +4,13 @@ Your goal is to provide helpful, concise, and technical answers to the user's qu
 ### Context
 {{ context }}
 
+### Chat History
+{% if chat_history %}
+{{ chat_history }}
+{% else %}
+No previous history.
+{% endif %}
+
 ### User Question
 {{ query }}
 

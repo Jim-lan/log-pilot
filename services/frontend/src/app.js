@@ -136,7 +136,49 @@ async function checkHealth() {
     }
 }
 
+// Load History
+async function loadHistory() {
+    try {
+        const response = await fetch('http://localhost:8000/history');
+        const history = await response.json();
+
+        // 1. Populate Chat Window
+        messagesContainer.innerHTML = ''; // Clear default welcome
+        if (history.length === 0) {
+            addMessage('ai', `<p>Hello! I'm LogPilot. I can help you query your logs using natural language. 🚀</p>`);
+        } else {
+            history.forEach(msg => {
+                // Simple markdown parsing for history
+                const html = marked.parse(msg.content);
+                addMessage(msg.role, html);
+            });
+        }
+
+        // 2. Populate Sidebar
+        const historyList = document.getElementById('history-list');
+        historyList.innerHTML = '';
+
+        // Group by User queries for the sidebar list
+        const userQueries = history.filter(h => h.role === 'user');
+        userQueries.forEach(q => {
+            const li = document.createElement('li');
+            li.textContent = q.content.length > 30 ? q.content.substring(0, 30) + '...' : q.content;
+            li.title = q.content;
+            li.style.cssText = "padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #333; font-size: 0.9em;";
+            li.onclick = () => {
+                userInput.value = q.content;
+                userInput.focus();
+            };
+            historyList.appendChild(li);
+        });
+
+    } catch (e) {
+        console.error("Failed to load history", e);
+    }
+}
+
 // Start polling
 checkHealth();
+loadHistory();
 
 chatForm.addEventListener('submit', handleSubmit);

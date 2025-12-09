@@ -5,7 +5,8 @@ from services.pilot_orchestrator.src.nodes import (
     generate_sql,
     execute_sql,
     retrieve_context,
-    synthesize_answer
+    synthesize_answer,
+    rewrite_query
 )
 
 def route_intent(state: AgentState):
@@ -35,6 +36,7 @@ def should_retry_sql(state: AgentState):
 workflow = StateGraph(AgentState)
 
 # Add Nodes
+workflow.add_node("rewrite_query", rewrite_query)
 workflow.add_node("classify_intent", classify_intent)
 workflow.add_node("generate_sql", generate_sql)
 workflow.add_node("execute_sql", execute_sql)
@@ -42,9 +44,12 @@ workflow.add_node("retrieve_context", retrieve_context)
 workflow.add_node("synthesize_answer", synthesize_answer)
 
 # Set Entry Point
-workflow.set_entry_point("classify_intent")
+workflow.set_entry_point("rewrite_query")
 
 # Add Edges
+# 0. Rewriter -> Classifier
+workflow.add_edge("rewrite_query", "classify_intent")
+
 # 1. From Classifier -> Router
 workflow.add_conditional_edges(
     "classify_intent",
