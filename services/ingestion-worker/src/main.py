@@ -150,6 +150,9 @@ class LogIngestor:
             for row in samples:
                 print(f"   - Body: {row[0]}")
                 print(f"   - Context: {row[1]}")
+            
+            # Close connection to release lock
+            self.db.close()
 
         except KeyboardInterrupt:
             print("\n🛑 Stopping worker...")
