@@ -97,3 +97,46 @@ async function handleSubmit(e) {
         console.error(error);
     }
 }
+
+// Health Check & Polling
+async function checkHealth() {
+    try {
+        const response = await fetch('http://localhost:8000/health');
+        const data = await response.json();
+
+        const statusBanner = document.getElementById('status-banner');
+        const submitBtn = document.querySelector('button[type="submit"]');
+
+        if (data.llm && data.llm.status === 'downloading') {
+            // Show Loading State
+            if (!statusBanner) {
+                const banner = document.createElement('div');
+                banner.id = 'status-banner';
+                banner.style.cssText = 'background: #eab308; color: #000; padding: 0.5rem; text-align: center; font-weight: bold; position: sticky; top: 0; z-index: 100;';
+                banner.innerHTML = `⚠️ Model is downloading... (${data.llm.model}). Please wait.`;
+                document.body.prepend(banner);
+            }
+            userInput.disabled = true;
+            userInput.placeholder = "Waiting for model download...";
+            submitBtn.disabled = true;
+
+            // Poll again in 5s
+            setTimeout(checkHealth, 5000);
+        } else {
+            // Ready State
+            if (statusBanner) statusBanner.remove();
+            userInput.disabled = false;
+            userInput.placeholder = "Ask about your logs...";
+            submitBtn.disabled = false;
+        }
+    } catch (e) {
+        console.error("Health check failed", e);
+        // Retry in 5s if API is down
+        setTimeout(checkHealth, 5000);
+    }
+}
+
+// Start polling
+checkHealth();
+
+chatForm.addEventListener('submit', handleSubmit);

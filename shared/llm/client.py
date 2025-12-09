@@ -70,3 +70,33 @@ class LLMClient:
             return response.choices[0].message.content
         except Exception as e:
             return f"❌ Error generating response: {e}"
+            return f"❌ Error generating response: {e}"
+
+    def check_health(self) -> Dict[str, Any]:
+        """
+        Checks if the LLM provider is ready and the model is available.
+        """
+        try:
+            # For local provider, check if model is loaded/available
+            if self.provider_name == "local":
+                model_name = self.provider_config.get("default_model", "llama3")
+                try:
+                    models = self.client.models.list()
+                    # OpenAI client returns objects with .id attribute
+                    available_models = [m.id for m in models.data]
+                    
+                    # Ollama might return 'llama3:latest', so check partial match
+                    is_ready = any(model_name in m for m in available_models)
+                    
+                    if is_ready:
+                        return {"status": "ready", "model": model_name}
+                    else:
+                        return {"status": "downloading", "model": model_name, "details": "Model not found in list"}
+                except Exception as e:
+                    return {"status": "error", "details": f"Failed to list models: {str(e)}"}
+            
+            # For cloud providers, assume ready if client initialized
+            return {"status": "ready", "model": self.provider_name}
+            
+        except Exception as e:
+            return {"status": "error", "details": str(e)}

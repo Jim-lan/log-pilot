@@ -9,7 +9,17 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 
 from services.pilot_orchestrator.src.graph import pilot_graph
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="LogPilot Orchestrator API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all origins for demo
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class QueryRequest(BaseModel):
     query: str
@@ -22,7 +32,10 @@ class QueryResponse(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    # Check LLM status
+    from services.pilot_orchestrator.src.nodes import llm_client
+    llm_status = llm_client.check_health()
+    return {"status": "ok", "llm": llm_status}
 
 @app.post("/query", response_model=QueryResponse)
 def run_query(request: QueryRequest):

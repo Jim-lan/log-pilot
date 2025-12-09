@@ -1,5 +1,5 @@
 llm:
-  default_provider: "openai"
+  default_provider: "local"
   providers:
     openai:
       api_key_env: "OPENAI_API_KEY"
@@ -12,7 +12,7 @@ llm:
         fast: "gemini-1.5-flash"
         reasoning: "gemini-1.5-pro"
     local:
-      api_base: "http://localhost:11434/v1" # Example: Ollama
+      api_base: "http://llm-service:11434/v1" # Internal Docker DNS
       default_model: "llama3" # 8B - Excellent balance for M4 Mac
       # --- Model Selection Guide ---
       #
