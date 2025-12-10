@@ -56,11 +56,11 @@ graph TD
 
     subgraph "Intelligence Layer (LogPilot Agent)"
         User[User Query] --> ChatUI[Chat Interface]
-        ChatUI --> API[API Gateway (FastAPI)]
+        ChatUI --> API["API Gateway (FastAPI)"]
         API --> Router["Pilot Router / Orchestrator"]
         
-        Router --> |"Trends / Dashboard"| SQL_Tool[SQL Generator (LLM)]
-        Router --> |"Reasoning / Why"| RAG_Tool[Semantic Search + Metadata Filter]
+        Router --> |"Trends / Dashboard"| SQL_Tool["SQL Generator (LLM)"]
+        Router --> |"Reasoning / Why"| RAG_Tool["Semantic Search + Metadata Filter"]
         Router --> |"Deep Analysis"| Anomaly_Tool[Pattern Analyzer]
         
         SQL_Tool <--> TimeSeriesDB
