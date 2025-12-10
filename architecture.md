@@ -44,3 +44,44 @@ A lightweight Nginx container serving a static SPA (Single Page App). Connects t
 6.  **LLM** synthesizes answer.
 7.  **Pilot** saves interaction to `history.duckdb`.
 8.  **Response** sent to User.
+
+## Architecture Diagram
+```mermaid
+graph TD
+    subgraph "Smart Ingestion Layer"
+        RawLogs[Raw Log Files] --> |File Watcher| PIIMasker["PII Masker (Regex)"]
+        PIIMasker --> |Clean Log| TemplateMiner[Template Miner]
+        
+        %% Schema Discovery Loop
+        TemplateMiner -- "New Pattern?" --> SchemaAgent["Schema Discovery Agent (LLM)"]
+        SchemaAgent -- "Define Rules" --> RuleStore[Extraction Rules]
+        RuleStore -.-> |"Update Rules"| TemplateMiner
+        
+        %% Extraction
+        TemplateMiner -- "Known Pattern" --> Extractor[Fast Feature Extractor]
+        RuleStore --> Extractor
+        Extractor --> |"Standardized + Dynamic Features"| Branch{Splitter}
+    end
+
+    subgraph "Storage Layer (Hybrid)"
+        Branch --> |"Metadata & Metrics"| TimeSeriesDB[("DuckDB/ClickHouse")]
+        Branch --> |"Unstructured Context"| Vectorizer[Embedding Model]
+        Vectorizer --> VectorDB[("ChromaDB/Qdrant")]
+    end
+
+    subgraph "Intelligence Layer (LogPilot Agent)"
+        User[User Query] --> ChatUI[Chat Interface]
+        ChatUI --> API["API Gateway (FastAPI)"]
+        API --> Router["Pilot Router / Orchestrator"]
+        
+        Router --> |"Trends / Dashboard"| SQL_Tool["SQL Generator (LLM)"]
+        Router --> |"Reasoning / Why"| RAG_Tool["Semantic Search + Metadata Filter"]
+        Router --> |"Deep Analysis"| Anomaly_Tool[Pattern Analyzer]
+        
+        SQL_Tool <--> TimeSeriesDB
+        RAG_Tool <--> VectorDB
+        
+        Router --> Synthesizer[Answer Synthesis]
+        Synthesizer --> ChatUI
+    end
+```
