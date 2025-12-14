@@ -26,6 +26,19 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
     - "How many errors in the last 24 hours?"
     - "Which service has the most failures?"
     - "List the errors in payment-service."
+4.  **Connect External Agents (MCP)**:
+    -   LogPilot exposes an MCP Server at `http://localhost:8001/sse`.
+    -   **Claude Desktop**: Add this to your config:
+        ```json
+        {
+          "mcpServers": {
+            "log-pilot": {
+              "url": "http://localhost:8001/sse",
+              "transport": "sse"
+            }
+          }
+        }
+        ```
 
 ## 💡 Design Thought
 LogPilot is built on the **"Router-Solver"** pattern. A central orchestrator classifies user intent (Data vs. Knowledge) and routes the query to specialized tools:

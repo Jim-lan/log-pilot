@@ -24,12 +24,29 @@ The system follows a **Data Lakehouse + RAG** architecture, composed of three la
 3.  **Intelligence Layer**: The "Pilot" agent that interacts with the user via a **REST API**.
 
 ### 2.1 Unified LLM Strategy
-The system uses a **Unified Interface** (via the `openai` library) to support both Cloud and Local LLMs seamlessly.
-*   **Cloud Mode**: Connects to OpenAI (GPT-4) or Gemini (via adapter) for maximum reasoning capability.
-*   **Local Mode**: Connects to local inference servers (Ollama/vLLM) running on consumer hardware (e.g., M4 Chip) for privacy and cost savings.
-*   **Configuration**: Switching providers is a simple toggle in `config/llm_config.yaml`.
+The system uses a **Unified Interface** (via the `openai` library)### 5. Frontend (`services/frontend`)
+A lightweight Nginx container serving a static SPA (Single Page App). Connects to Pilot via REST API.
 
-### Architecture Diagram
+### 6. MCP Server (`services/mcp-server`)
+An **MCP (Model Context Protocol)** compliant server that exposes LogPilot as a set of tools for other AI agents (e.g., Claude Desktop, IDEs).
+-   **Tools**: `query_logs` (SQL), `ask_log_pilot` (Natural Language).
+-   **Resources**: `logs://recent`, `logs://schema`.
+-   **Transport**: SSE (Server-Sent Events) over HTTP (Port 8001).
+
+## Data Flow
+1.  **User** sends query -> **Frontend** -> **Pilot API**.
+2.  **Pilot** fetches history from `history.duckdb`.
+3.  **Rewriter** updates query using history.
+4.  **Router** decides path (SQL vs RAG).
+5.  **Tool** executes (queries `logs.duckdb` or `chroma_db`).
+6.  **LLM** synthesizes answer.
+7.  **Pilot** saves interaction to `history.duckdb`.
+8.  **Response** sent to User.
+
+### MCP Data Flow
+External Agent -> MCP Server -> (DuckDB OR Pilot API) -> Response.
+
+## Architecture Diagram
 
 ```mermaid
 graph TD
@@ -68,6 +85,12 @@ graph TD
         
         Router --> Synthesizer[Answer Synthesis]
         Synthesizer --> ChatUI
+    end
+
+    subgraph "External Integrations"
+        ExternalAgent[Claude / IDE] --> |MCP Protocol| MCPServer["MCP Server"]
+        MCPServer --> |Read-Only| TimeSeriesDB
+        MCPServer --> |Proxy| API
     end
 ```
 
