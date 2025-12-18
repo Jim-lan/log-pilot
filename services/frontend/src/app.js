@@ -69,24 +69,40 @@ async function handleSubmit(e) {
         // 3. Format Response
         let responseHtml = marked.parse(data.answer);
 
-        // Append SQL if present
-        if (data.sql) {
-            responseHtml += `
-                <div style="margin-top: 1rem;">
-                    <p style="font-size: 0.8em; color: var(--text-secondary); margin-bottom: 0.25rem;">Generated SQL:</p>
-                    <pre><code class="language-sql">${data.sql}</code></pre>
-                </div>
-            `;
-        }
+        // 4. Append References (SQL/RAG)
+        if (data.sql || data.context) {
+            responseHtml += `<div class="references" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.5rem;">`;
 
-        // Append Context if present (and intent was RAG)
-        if (data.intent === 'rag' && data.context) {
-            responseHtml += `
-                <div style="margin-top: 1rem;">
-                    <p style="font-size: 0.8em; color: var(--text-secondary); margin-bottom: 0.25rem;">Source:</p>
-                    <pre><code class="language-text">${data.context.substring(0, 150)}...</code></pre>
-                </div>
-            `;
+            // SQL Reference
+            if (data.sql) {
+                responseHtml += `
+                    <details style="margin-bottom: 0.5rem;">
+                        <summary style="cursor: pointer; font-size: 0.85em; color: #60a5fa; font-weight: 500;">🔍 View SQL Query & Results</summary>
+                        <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                            <div style="font-size: 0.75em; color: #9ca3af; margin-bottom: 0.25rem;">Generated SQL:</div>
+                            <pre style="margin: 0; background: transparent;"><code class="language-sql" style="font-size: 0.8em;">${data.sql}</code></pre>
+                            ${data.sql_result ? `
+                                <div style="font-size: 0.75em; color: #9ca3af; margin: 0.5rem 0 0.25rem;">Execution Result:</div>
+                                <pre style="margin: 0; background: transparent;"><code class="language-json" style="font-size: 0.8em;">${data.sql_result}</code></pre>
+                            ` : ''}
+                        </div>
+                    </details>
+                `;
+            }
+
+            // RAG Reference
+            if (data.context) {
+                responseHtml += `
+                    <details>
+                        <summary style="cursor: pointer; font-size: 0.85em; color: #34d399; font-weight: 500;">📄 View Retrieved Context</summary>
+                        <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
+                            <pre style="margin: 0; background: transparent;"><code class="language-text" style="font-size: 0.8em;">${data.context}</code></pre>
+                        </div>
+                    </details>
+                `;
+            }
+
+            responseHtml += `</div>`;
         }
 
         addMessage('ai', responseHtml);

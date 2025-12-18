@@ -64,7 +64,7 @@ services:
   mcp-server:
     build:
       context: .
-      dockerfile: services/mcp-server/Dockerfile
+      dockerfile: services/mcp_server/Dockerfile
     container_name: log-pilot-mcp
     volumes:
       - duckdb_data:/app/data/target

@@ -27,8 +27,11 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sql: Optional[str] = None
+    sql_result: Optional[str] = None
     context: Optional[str] = None
     intent: str
+
+
 
 @app.get("/health")
 def health_check():
@@ -72,6 +75,7 @@ def run_query(request: QueryRequest):
         return QueryResponse(
             answer=answer,
             sql=final_state.get("sql_query"),
+            sql_result=final_state.get("sql_result"),
             context=final_state.get("rag_context"),
             intent=final_state.get("intent", "unknown")
         )

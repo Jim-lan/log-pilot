@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY shared /app/shared
 
 # Copy service code
-COPY services/mcp-server/src /app/src
+COPY services/mcp_server/src /app/src
 
 # Expose port for SSE
 EXPOSE 8001
