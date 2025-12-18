@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -20,5 +20,5 @@ COPY services/mcp_server/src /app/src
 # Expose port for SSE
 EXPOSE 8001
 
-# Run the MCP server using mcp CLI
-CMD ["mcp", "run", "src.main:mcp", "--transport", "sse", "--port", "8001", "--host", "0.0.0.0"]
+# Run the MCP server using python script
+CMD ["python", "src/run.py"]
