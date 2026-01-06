@@ -121,6 +121,80 @@ def generate_sql(state: AgentState) -> AgentState:
     
     return state
 
+    return state
+
+def validate_sql(state: AgentState) -> AgentState:
+    """
+    Validates the generated SQL using DuckDB EXPLAIN.
+    """
+    sql = state.get("sql_query")
+    if not sql:
+        state["sql_valid"] = False
+        state["sql_error"] = "No SQL generated"
+        return state
+
+    try:
+        db = get_db_client()
+        # 1. Syntax Check (EXPLAIN)
+        db.query(f"EXPLAIN {sql}")
+        
+        # 2. Heuristic Logic Check
+        query_lower = state.get("rewritten_query", state["query"]).lower()
+        sql_lower = sql.lower()
+        
+        # Check for "by X" -> GROUP BY
+        if " by " in query_lower and "group by" not in sql_lower:
+             # Exclude "order by" false positives if user said "order by" explicitly, 
+             # but usually "count by" or "stats by" implies grouping.
+             # Simple heuristic: if "count" or "avg" in SQL and "by" in query, expect GROUP BY
+             if "count" in sql_lower or "avg" in sql_lower:
+                 raise Exception("Query implies aggregation ('by'), but SQL is missing GROUP BY clause.")
+
+        state["sql_valid"] = True
+        state["sql_error"] = None
+        print(f"✅ SQL Validated: {sql}")
+    except Exception as e:
+        state["sql_valid"] = False
+        state["sql_error"] = str(e)
+        print(f"❌ SQL Validation Failed: {e}")
+    
+    return state
+
+def fix_sql(state: AgentState) -> AgentState:
+    """
+    Attempts to fix invalid SQL using the LLM.
+    """
+    query = state.get("rewritten_query", state["query"])
+    bad_sql = state.get("sql_query")
+    error = state.get("sql_error")
+    retry_count = state.get("retry_count", 0)
+    
+    print(f"🔧 Fixing SQL (Attempt {retry_count + 1})...")
+    
+    # Simple prompt for fixing
+    prompt = f"""You are an expert SQL Data Analyst.
+The following SQL query generated for the question "{query}" is invalid.
+
+Invalid SQL: {bad_sql}
+Error: {error}
+
+Fix the SQL query. Output ONLY the fixed SQL query.
+"""
+    try:
+        fixed_sql = llm_client.generate(prompt, model_type="fast").strip()
+        # Clean up markdown if present
+        if "```" in fixed_sql:
+            fixed_sql = fixed_sql.split("```")[1].replace("sql", "").strip()
+            
+        state["sql_query"] = fixed_sql
+        state["retry_count"] = retry_count + 1
+    except Exception as e:
+        print(f"❌ Fix Failed: {e}")
+        # Keep bad sql, will fail validation again or hit limit
+        state["retry_count"] = retry_count + 1
+        
+    return state
+
 def execute_sql(state: AgentState) -> AgentState:
     """
     Executes the generated SQL against DuckDB.
@@ -137,7 +211,7 @@ def execute_sql(state: AgentState) -> AgentState:
         state["sql_result"] = str(result)
     except Exception as e:
         state["sql_error"] = str(e)
-        state["retry_count"] = state.get("retry_count", 0) + 1
+        # No retry logic here, handled by validation loop
     
     return state
 

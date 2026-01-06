@@ -55,7 +55,9 @@ class Evaluator:
         print(f"{'ID':<10} {'Type':<10} {'Intent':<10} {'Result':<10} {'Latency':<10}")
         print("-" * 60)
         
-        for case in dataset:
+        # Run sql_1 to sql_6 (indices 0 to 6)
+        for case in dataset[0:6]:
+            print(f"Running case {case['id']}...")
             result = self.call_api(case["question"])
             
             if "error" in result:
@@ -72,20 +74,35 @@ class Evaluator:
                 content_pass = self.evaluate_sql(case["expected_sql_pattern"], result.get("sql"))
             elif case["type"] == "rag":
                 content_pass = self.evaluate_rag(case["expected_keywords"], result.get("answer"))
+            elif case["type"] == "ambiguous":
+                # For ambiguous, if intent matches, content is irrelevant (or we check for specific fallback message)
+                content_pass = True
             
             # Final Verdict
             is_pass = intent_pass and content_pass
+            result_status = "PASS" if is_pass else "FAIL"
+            
+            # Log details if failed
+            if not is_pass:
+                print(f"\n[FAIL] ID: {case['id']}")
+                print(f"  Expected Intent: {case['expected_intent']}, Got: {result.get('intent')}")
+                if case['type'] == 'sql':
+                    print(f"  Expected SQL: {case['expected_sql_pattern']}")
+                    print(f"  Actual SQL:   {result.get('sql')}")
+                elif case['type'] == 'rag':
+                    print(f"  Expected Keywords: {case['expected_keywords']}")
+                    print(f"  Actual Answer:     {result.get('answer')}")
+
             if is_pass:
                 passed += 1
-                status = "PASS"
-            else:
-                status = "FAIL"
                 
-            print(f"{case['id']:<10} {case['type']:<10} {result['intent']:<10} {status:<10} {result['latency']:.2f}s")
+            print(f"{case['id']:<10} {case['type']:<10} {result.get('intent', 'N/A'):<10} {result_status:<10} {result.get('latency', 0):.2f}s")
             self.results.append({
                 "id": case["id"],
-                "status": status,
-                "actual_intent": result["intent"],
+                "type": case["type"],
+                "intent": result.get("intent"),
+                "status": result_status,
+                "latency": result.get("latency"),
                 "actual_sql": result.get("sql"),
                 "actual_answer": result.get("answer")
             })

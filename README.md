@@ -49,5 +49,8 @@ LogPilot is built on the **"Router-Solver"** pattern. A central orchestrator cla
 This architecture ensures high precision (SQL) and helpful context (RAG) while maintaining a natural user experience.
 
 ## 📚 Documentation
-- [Architecture Design](architecture.md)
-- [Demo Guide](demo_guide.md)
+-   [Detailed Architecture](docs/architecture_detailed.md)
+-   [API Reference](docs/api_reference.md)
+-   [Security & Deployment](docs/security_deployment.md)
+-   [Performance Benchmarks](docs/performance_benchmarks.md)
+-   [Original Architecture](architecture.md)

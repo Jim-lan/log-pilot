@@ -3,14 +3,70 @@
         "id": "sql_1",
         "question": "How many errors in auth-service?",
         "expected_intent": "sql",
-        "expected_sql_pattern": "SELECT count\\(\\*\\) FROM logs WHERE service_name = 'auth-service' AND severity = 'ERROR'",
+        "expected_sql_pattern": "SELECT count\\(\\*\\) FROM logs WHERE service_name\\s*=\\s*'auth-service' AND severity\\s*=\\s*'ERROR'",
         "type": "sql"
     },
     {
         "id": "sql_2",
         "question": "Show me the last 5 logs from payment-service.",
         "expected_intent": "sql",
-        "expected_sql_pattern": "SELECT \\* FROM logs WHERE service_name = 'payment-service' ORDER BY timestamp DESC LIMIT 5",
+        "expected_sql_pattern": "SELECT \\* FROM logs WHERE service_name\\s*=\\s*'payment-service' ORDER\\s+BY timestamp DESC LIMIT\\s+(\\d+,\\s*)?5",
+        "type": "sql"
+    },
+    {
+        "id": "sql_3",
+        "question": "Count all logs by severity",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT severity\\s*,\\s*count\\(\\*\\) FROM logs GROUP\\s+BY severity",
+        "type": "sql"
+    },
+    {
+        "id": "sql_4",
+        "question": "List errors in the last hour",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT \\* FROM logs WHERE severity\\s*=\\s*'ERROR' AND timestamp\\s*>",
+        "type": "sql"
+    },
+    {
+        "id": "sql_5",
+        "question": "Search for logs containing 'timeout'",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT \\* FROM logs WHERE.*message\\s+(LIKE|ILIKE)\\s+'%timeout%'.*",
+        "type": "sql"
+    },
+    {
+        "id": "sql_6",
+        "question": "How many warnings in frontend?",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT count\\(\\*\\) FROM logs WHERE.*(service_name\\s*=\\s*'frontend'|severity\\s*=\\s*'WARNING').*AND.*(service_name\\s*=\\s*'frontend'|severity\\s*=\\s*'WARNING')",
+        "type": "sql"
+    },
+    {
+        "id": "sql_7",
+        "question": "Show stats for ingestion-worker",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT severity\\s*,\\s*count\\(\\*\\) FROM logs WHERE service_name\\s*=\\s*'ingestion-worker' GROUP\\s+BY severity",
+        "type": "sql"
+    },
+    {
+        "id": "sql_8",
+        "question": "Find logs with context user_id=123",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT \\* FROM logs WHERE context\\s*->>\\s*'user_id'\\s*=\\s*'123'",
+        "type": "sql"
+    },
+    {
+        "id": "sql_9",
+        "question": "What are the top 3 services with most errors?",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT service_name\\s*,\\s*count\\(\\*\\) FROM logs WHERE severity\\s*=\\s*'ERROR' GROUP\\s+BY service_name ORDER\\s+BY count\\(\\*\\) DESC LIMIT\\s+3",
+        "type": "sql"
+    },
+    {
+        "id": "sql_10",
+        "question": "Show me everything from today",
+        "expected_intent": "sql",
+        "expected_sql_pattern": "SELECT \\* FROM logs WHERE timestamp\\s*>",
         "type": "sql"
     },
     {
@@ -20,7 +76,8 @@
         "expected_keywords": [
             "index",
             "optimize",
-            "query"
+            "query",
+            "slow"
         ],
         "type": "rag"
     },
@@ -30,8 +87,94 @@
         "expected_intent": "rag",
         "expected_keywords": [
             "finance",
-            "team"
+            "team",
+            "owner"
         ],
         "type": "rag"
+    },
+    {
+        "id": "rag_3",
+        "question": "How do I restart the auth pod?",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "kubectl",
+            "delete pod",
+            "restart"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "rag_4",
+        "question": "Why is the payment gateway timing out?",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "latency",
+            "timeout",
+            "network",
+            "provider"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "rag_5",
+        "question": "What is the runbook for error 500?",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "check",
+            "logs",
+            "server",
+            "error"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "rag_6",
+        "question": "Explain the architecture of LogPilot",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "architecture",
+            "component",
+            "layer",
+            "pilot"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "rag_7",
+        "question": "Who is on call for security?",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "security",
+            "team",
+            "on-call",
+            "schedule"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "rag_8",
+        "question": "How to add a new service?",
+        "expected_intent": "rag",
+        "expected_keywords": [
+            "register",
+            "service",
+            "catalog",
+            "add"
+        ],
+        "type": "rag"
+    },
+    {
+        "id": "amb_1",
+        "question": "Hello there",
+        "expected_intent": "ambiguous",
+        "expected_keywords": [],
+        "type": "ambiguous"
+    },
+    {
+        "id": "amb_2",
+        "question": "What is the weather?",
+        "expected_intent": "ambiguous",
+        "expected_keywords": [],
+        "type": "ambiguous"
     }
 ]
