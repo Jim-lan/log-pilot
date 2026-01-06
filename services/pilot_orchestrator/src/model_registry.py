@@ -11,26 +11,54 @@ class ModelConfig(BaseModel):
     temperature: float = 0.0
     top_p: float = 1.0
 
+import yaml
+
 class ModelRegistry:
     def __init__(self):
         self._models: Dict[str, ModelConfig] = {}
         self._load_defaults()
 
+    def _load_config(self) -> Dict:
+        # Try to load from config/llm_config.yaml
+        # Path relative to this file: ../../../config/llm_config.yaml
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+        config_path = os.path.join(base_path, "config/llm_config.yaml")
+        
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                return yaml.safe_load(f)
+        return {}
+
     def _load_defaults(self):
-        # Default Local Models
+        config = self._load_config()
+        llm_config = config.get("llm", {})
+        
+        # Determine default provider and model
+        provider_name = llm_config.get("default_provider", "local")
+        provider_config = llm_config.get("providers", {}).get(provider_name, {})
+        
+        # Fallback to ENV if not in YAML
+        default_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
+        api_base = provider_config.get("api_base", os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1"))
+        
+        # Map provider names (yaml 'local' -> registry 'ollama')
+        registry_provider = "ollama" if provider_name == "local" else provider_name
+        
+        # Register 'fast' and 'smart' models
+        # In the future, we can read specific 'fast'/'smart' mappings from YAML
         self.register(ModelConfig(
             model_id="fast",
-            provider="ollama",
-            model_name=os.getenv("LLM_MODEL", "llama3"),
-            api_base=os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1"),
+            provider=registry_provider,
+            model_name=default_model,
+            api_base=api_base,
             temperature=0.1
         ))
         
         self.register(ModelConfig(
             model_id="smart",
-            provider="ollama",
-            model_name=os.getenv("LLM_MODEL", "llama3"), # Using same for now, but could be different
-            api_base=os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1"),
+            provider=registry_provider,
+            model_name=default_model, # Using same for now
+            api_base=api_base,
             temperature=0.1
         ))
 
