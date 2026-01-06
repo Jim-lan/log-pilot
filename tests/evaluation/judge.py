@@ -3,15 +3,46 @@ import requests
 import re
 import sys
 import time
+import duckdb
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any
 
 # Configuration
 API_URL = "http://127.0.0.1:8000/query"
 DATASET_PATH = "tests/evaluation/golden_dataset.json"
+METRICS_DB_PATH = "data/target/metrics.duckdb"
 
 class Evaluator:
     def __init__(self):
         self.results = []
+        self.run_id = str(uuid.uuid4())
+        self.db = duckdb.connect(METRICS_DB_PATH)
+        self._init_db()
+
+    def _init_db(self):
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS eval_runs (
+                run_id VARCHAR PRIMARY KEY,
+                timestamp TIMESTAMP,
+                total_cases INTEGER,
+                passed_cases INTEGER,
+                pass_rate DOUBLE
+            )
+        """)
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS eval_results (
+                run_id VARCHAR,
+                case_id VARCHAR,
+                case_type VARCHAR,
+                status VARCHAR,
+                latency DOUBLE,
+                actual_sql VARCHAR,
+                actual_answer VARCHAR,
+                error_details VARCHAR,
+                FOREIGN KEY (run_id) REFERENCES eval_runs(run_id)
+            )
+        """)
 
     def load_dataset(self) -> List[Dict]:
         with open(DATASET_PATH, "r") as f:
@@ -50,19 +81,30 @@ class Evaluator:
         dataset = self.load_dataset()
         
         passed = 0
-        total = len(dataset)
+        total = len(dataset) # Run all for metrics, or subset if debugging
+        
+        # For this specific run, we might be filtering in the loop, but let's assume full run for metrics
+        # If filtering, 'total' should reflect that.
+        # Let's stick to the loop logic for now.
         
         print(f"{'ID':<10} {'Type':<10} {'Intent':<10} {'Result':<10} {'Latency':<10}")
         print("-" * 60)
         
-        # Run sql_1 to sql_6 (indices 0 to 6)
-        for case in dataset[0:6]:
+        # Insert Run Record (Placeholder stats, updated later)
+        self.db.execute("INSERT INTO eval_runs VALUES (?, ?, ?, ?, ?)", 
+                        (self.run_id, datetime.now(), total, 0, 0.0))
+
+        # Run sql_1 to sql_6 (indices 0 to 6) as per previous config
+        target_cases = dataset[0:6]
+        total = len(target_cases)
+
+        for case in target_cases:
             print(f"Running case {case['id']}...")
             result = self.call_api(case["question"])
             
             if "error" in result:
                 print(f"{case['id']:<10} {case['type']:<10} ERROR      FAIL       -")
-                self.results.append({"id": case["id"], "status": "error", "details": result["error"]})
+                self._log_result(case, "FAIL", 0, error=result["error"])
                 continue
             
             # 1. Check Intent
@@ -75,7 +117,6 @@ class Evaluator:
             elif case["type"] == "rag":
                 content_pass = self.evaluate_rag(case["expected_keywords"], result.get("answer"))
             elif case["type"] == "ambiguous":
-                # For ambiguous, if intent matches, content is irrelevant (or we check for specific fallback message)
                 content_pass = True
             
             # Final Verdict
@@ -89,29 +130,34 @@ class Evaluator:
                 if case['type'] == 'sql':
                     print(f"  Expected SQL: {case['expected_sql_pattern']}")
                     print(f"  Actual SQL:   {result.get('sql')}")
-                elif case['type'] == 'rag':
-                    print(f"  Expected Keywords: {case['expected_keywords']}")
-                    print(f"  Actual Answer:     {result.get('answer')}")
 
             if is_pass:
                 passed += 1
                 
             print(f"{case['id']:<10} {case['type']:<10} {result.get('intent', 'N/A'):<10} {result_status:<10} {result.get('latency', 0):.2f}s")
-            self.results.append({
-                "id": case["id"],
-                "type": case["type"],
-                "intent": result.get("intent"),
-                "status": result_status,
-                "latency": result.get("latency"),
-                "actual_sql": result.get("sql"),
-                "actual_answer": result.get("answer")
-            })
+            
+            self._log_result(case, result_status, result.get("latency", 0), 
+                             sql=result.get("sql"), answer=result.get("answer"))
 
         print("-" * 60)
-        print(f"📊 Summary: {passed}/{total} Passed ({passed/total*100:.1f}%)")
+        pass_rate = (passed / total) * 100 if total > 0 else 0
+        print(f"📊 Summary: {passed}/{total} Passed ({pass_rate:.1f}%)")
+        
+        # Update Run Summary
+        self.db.execute("""
+            UPDATE eval_runs 
+            SET passed_cases = ?, pass_rate = ?
+            WHERE run_id = ?
+        """, (passed, pass_rate, self.run_id))
         
         if passed < total:
             sys.exit(1)
+
+    def _log_result(self, case, status, latency, sql=None, answer=None, error=None):
+        self.db.execute("""
+            INSERT INTO eval_results (run_id, case_id, case_type, status, latency, actual_sql, actual_answer, error_details)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (self.run_id, case["id"], case["type"], status, latency, sql, answer, error))
 
 if __name__ == "__main__":
     evaluator = Evaluator()
