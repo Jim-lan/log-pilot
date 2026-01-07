@@ -194,3 +194,71 @@ To transition LogPilot to this architecture:
     ```
 
 This allows LogPilot to become a **Zero-ETL** agent, providing intelligence on top of your existing Data Lake.
+
+## 7. Cloud-Native Adaptation: AWS CloudWatch ☁️
+
+For environments where logs are stored in **AWS CloudWatch Logs** (e.g., AWS Glue jobs), we can adapt LogPilot to query them directly without ingestion, acting as a smart UI over the CloudWatch API.
+
+### Architecture Changes
+To support the "Live CloudWatch Log Access" pattern, we swap specific components while keeping the core cognitive architecture:
+
+| Component | Current (DuckDB) | Cloud-Native (CloudWatch) |
+| :--- | :--- | :--- |
+| **Intent Router** | `classify_intent` (Same) | `classify_intent` (Same) |
+| **Generator** | `SQLGenerator` (DuckDB SQL) | **`InsightsGenerator`** (CloudWatch Syntax) |
+| **Executor** | `DuckDBConnector` | **`CloudWatchConnector`** (Boto3) |
+| **Vector DB** | Ingests all patterns | **Pattern Sampler** (Ingests patterns from samples) |
+
+### Implementation Strategy
+
+#### 1. Insights Generator (The "Translator")
+We create a new prompt in `PromptFactory` to translate natural language into CloudWatch Insights syntax.
+
+**Prompt Template**:
+```text
+You are an AWS CloudWatch Expert.
+Translate the user question: "{query}"
+Into CloudWatch Logs Insights syntax.
+
+Example:
+Q: "Show me the last 20 errors"
+A: fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20
+```
+
+#### 2. CloudWatch Connector (The "Executor")
+We implement a connector using `boto3` to execute the generated query.
+
+```python
+import boto3
+import time
+
+class CloudWatchConnector:
+    def __init__(self, log_group: str):
+        self.client = boto3.client('logs')
+        self.log_group = log_group
+
+    def query(self, query_string: str):
+        # 1. Start Query
+        response = self.client.start_query(
+            logGroupName=self.log_group,
+            startTime=int((time.time() - 3600) * 1000), # Default 1h lookback
+            endTime=int(time.time() * 1000),
+            queryString=query_string
+        )
+        query_id = response['queryId']
+        
+        # 2. Poll for Results
+        while True:
+            res = self.client.get_query_results(queryId=query_id)
+            if res['status'] in ['Complete', 'Failed', 'Cancelled']:
+                return res['results']
+            time.sleep(1)
+```
+
+#### 3. Smart RAG Fallback
+If the user asks a qualitative question ("Why did the job fail?"), we use a **Hybrid Flow**:
+1.  **Retrieve**: Fetch recent error logs via CloudWatch Insights (`filter @message like /ERROR/`).
+2.  **Pattern**: Run `LogTemplateMiner` on the *retrieved results* in-memory.
+3.  **Augment**: Feed the unique patterns + sample errors into the LLM to synthesize an answer.
+
+This approach achieves **Zero Data Duplication** while leveraging LogPilot's agentic capabilities.
