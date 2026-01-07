@@ -226,34 +226,11 @@ A: fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp 
 ```
 
 #### 2. CloudWatch Connector (The "Executor")
-We implement a connector using `boto3` to execute the generated query.
-
-```python
-import boto3
-import time
-
-class CloudWatchConnector:
-    def __init__(self, log_group: str):
-        self.client = boto3.client('logs')
-        self.log_group = log_group
-
-    def query(self, query_string: str):
-        # 1. Start Query
-        response = self.client.start_query(
-            logGroupName=self.log_group,
-            startTime=int((time.time() - 3600) * 1000), # Default 1h lookback
-            endTime=int(time.time() * 1000),
-            queryString=query_string
-        )
-        query_id = response['queryId']
-        
-        # 2. Poll for Results
-        while True:
-            res = self.client.get_query_results(queryId=query_id)
-            if res['status'] in ['Complete', 'Failed', 'Cancelled']:
-                return res['results']
-            time.sleep(1)
-```
+#### 2. CloudWatch Connector (The "Executor")
+We implement a connector using the **AWS SDK (Boto3)** to execute the generated query. This connector is responsible for:
+1.  **Initiating Queries**: Sending the `start_query` request to the CloudWatch Logs API.
+2.  **Polling**: Waiting for the asynchronous query execution to complete.
+3.  **Result Parsing**: Converting the JSON response from CloudWatch into a structured format for the LLM.
 
 #### 3. Smart RAG Fallback
 If the user asks a qualitative question ("Why did the job fail?"), we use a **Hybrid Flow**:
@@ -262,3 +239,31 @@ If the user asks a qualitative question ("Why did the job fail?"), we use a **Hy
 3.  **Augment**: Feed the unique patterns + sample errors into the LLM to synthesize an answer.
 
 This approach achieves **Zero Data Duplication** while leveraging LogPilot's agentic capabilities.
+
+## 8. Design Considerations & Trade-offs ⚖️
+
+This section summarizes the key architectural decisions to help stakeholders understand "Why" we built it this way.
+
+### A. Why DuckDB + ChromaDB? (The Hybrid Engine)
+*   **The Problem**: Vector DBs are great for "vague" questions but terrible for "precise math" (e.g., "Count errors"). SQL DBs are the opposite.
+*   **The Solution**: We use **Both**.
+    *   **DuckDB**: Handles the "Hard Math" (Counting, Aggregation, Filtering).
+    *   **ChromaDB**: Handles the "Soft Logic" (Pattern matching, Similarity).
+*   **Business Value**: You get the accuracy of a SQL report with the flexibility of ChatGPT.
+
+### B. Why "1 Vector Per Pattern"?
+*   **The Problem**: Storing every single log line as a vector is expensive and slow (100M logs = 100M vectors).
+*   **The Solution**: We only store **Unique Patterns** (e.g., 1 vector for "User <*> failed").
+*   **Business Value**:
+    *   **99% Cost Reduction**: A system with 100M logs might only have 500 unique patterns.
+    *   **Faster Answers**: Searching 500 vectors is instant.
+
+### C. Why "Zero-ETL" for Production? (S3/CloudWatch)
+*   **The Problem**: Moving data from S3/CloudWatch to another DB costs money (egress) and time (latency).
+*   **The Solution**: Bring the compute to the data.
+    *   **Stateless DuckDB**: Queries S3 Parquet files directly.
+    *   **CloudWatch Connector**: Queries AWS Logs directly.
+*   **Business Value**:
+    *   **Real-Time**: No waiting for ingestion pipelines.
+    *   **Cost Savings**: No duplicate storage costs.
+    *   **Simplicity**: Fewer moving parts to maintain.
