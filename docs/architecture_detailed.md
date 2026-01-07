@@ -149,3 +149,48 @@ The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when th
     1.  **Intent Classifier**: Detects "SQL" intent.
     2.  **Generate SQL**: `SELECT count(*) FROM logs WHERE severity='ERROR' AND timestamp > now() - INTERVAL 1 HOUR`.
     3.  **Execute**: Runs directly on DuckDB. Vector DB is bypassed completely.
+
+## 6. Production Data Architecture: Stateless on S3
+
+In our current **Demo/MVP** environment, we ingest logs into a local DuckDB file (`logs.duckdb`). In a **Real-World Production** environment, we recommend a **Stateless Architecture** that queries data directly where it lives (e.g., S3), avoiding data duplication.
+
+### A. Current Approach (Local Storage)
+*   **Mechanism**: Ingestion Worker reads logs -> Inserts into local `logs.duckdb` file.
+*   **Pros**: Extremely fast for small/medium datasets, simple setup, no network latency.
+*   **Cons**: Data duplication (logs exist in file & DB), limited by local disk, stateful (harder to scale horizontally).
+
+### B. Production Approach (Stateless on S3)
+*   **Concept**: Treat S3 as the database. DuckDB acts as a **stateless compute engine** that queries Parquet files directly on S3.
+*   **Mechanism**:
+    1.  **Log Storage**: Logs are shipped to S3 in Parquet format (e.g., via Kinesis Firehose or FluentBit).
+    2.  **Compute**: LogPilot spins up a DuckDB instance (in Lambda or Container) only when a query is needed.
+    3.  **Query**: `SELECT * FROM 's3://my-log-bucket/date=2024-01-01/*.parquet'`.
+*   **Pros**:
+    *   **Zero Data Movement**: No need to "ingest" or move data into a separate DB.
+    *   **Infinite Scale**: S3 handles the storage; DuckDB handles the compute.
+    *   **Cost Effective**: Pay only for S3 storage and query compute time.
+
+### How to Achieve This
+To transition LogPilot to this architecture:
+
+1.  **Install Extensions**:
+    ```sql
+    INSTALL httpfs;
+    LOAD httpfs;
+    INSTALL aws;
+    LOAD aws;
+    ```
+
+2.  **Configure Credentials**:
+    ```python
+    con.execute("CALL load_aws_credentials()")
+    ```
+
+3.  **Query Directly**:
+    ```python
+    # Instead of querying a local table 'logs'
+    sql = "SELECT count(*) FROM read_parquet('s3://company-logs/service-a/*.parquet')"
+    con.execute(sql)
+    ```
+
+This allows LogPilot to become a **Zero-ETL** agent, providing intelligence on top of your existing Data Lake.
