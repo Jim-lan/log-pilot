@@ -38,96 +38,111 @@ from shared.utils.template_miner import LogTemplateMiner
 
 from shared.utils.log_parser import LogParser
 
+from janitor import Janitor
+
 class LogIngestor:
     def __init__(self):
+        print("DEBUG: Initializing LogIngestor...")
         self.consumer = MockKafkaConsumer()
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
+        print("DEBUG: Initializing KnowledgeStore...")
         self.kb = KnowledgeStore() # ChromaDB (might download models)
+        print("DEBUG: KnowledgeStore initialized.")
         self.db = DuckDBConnector() # Acquire DB lock ONLY after heavy init
         self.pii_masker = PIIMasker()
         self.parser = LogParser()
+        self.janitor = Janitor(self.kb) # Initialize Janitor
         self.batch_size = 5
         self.batch_buffer = []
         self.log_event_buffer = [] # Buffer for LogEvent objects (needed for KB)
 
     def parse_log(self, raw_log: str) -> LogEvent:
-        """
-        Core Ingestion Pipeline:
-        1. Parse: Normalize raw string -> Structured Dict (Timestamp, Severity, Service).
-        2. Mask: Redact PII (Emails, IPs) from the body.
-        3. Mine: Convert variable body -> Constant Template (Drain3).
-        4. Context: Extract dynamic key-value pairs.
-        """
-        
-        # Step 1: Robust Parsing
-        # Uses the Strategy Pattern (JSON -> Regex -> Fallback) to handle any format.
-        # Ensures 'timestamp' is always UTC.
+        """Parses, masks, and enriches a raw log line."""
+        # 1. Parse
         parsed = self.parser.parse(raw_log)
         
-        # Step 2: PII Masking
-        # We mask BEFORE mining templates to ensure sensitive data never enters the system.
-        # e.g. "User 1.2.3.4 failed" -> "User <IP> failed"
-        safe_body = self.pii_masker.mask_text(parsed["body"])
+        # 2. Mask PII
+        masked = self.pii_masker.mask_context(parsed)
         
-        # Step 3: Template Mining (Drain3)
-        # Clusters similar logs to reduce noise.
-        # e.g. "User <IP> failed" -> "User <*> failed"
-        template = self.miner.mine_template(safe_body)
+        # 3. Mine Template
+        mining_result = self.miner.mine_template(masked["body"])
+        template_str = mining_result["template_mined"]
+        cluster_id = mining_result["cluster_id"]
+        change_type = mining_result["change_type"]
         
-        # Step 4: Context Extraction
-        # We preserve the original dynamic values in a JSON column.
-        # If the log was JSON, we use that. Otherwise, we try to extract k=v pairs.
-        context = parsed.get("context", {})
-        if not context:
-             # Simple heuristic for standard logs: look for k=v patterns
-            for part in safe_body.split(" "):
-                if "=" in part:
-                    try:
-                        k, v = part.split("=", 1)
-                        context[k] = v
-                    except ValueError:
-                        pass
-
+        # 4. Create LogEvent
         return LogEvent(
-            timestamp=parsed["timestamp"],
-            severity=parsed["severity"],
-            service_name=parsed["service_name"],
-            body=template, 
-            context=context
+            timestamp=masked["timestamp"],
+            severity=masked["severity"],
+            service_name=masked["service_name"],
+            body=masked["body"],
+            context={
+                "template_id": str(cluster_id), # Store ID as string
+                "template_str": template_str,
+                "change_type": change_type,
+                **masked.get("context", {})
+            }
         )
 
     def flush_batch(self):
+        """Persists buffered logs to DuckDB and ChromaDB."""
         if not self.batch_buffer:
             return
+
+        print(f"💾 Persisting batch of {len(self.batch_buffer)} logs...")
         
-        print(f"💾 Flushing batch of {len(self.batch_buffer)} logs to DuckDB & ChromaDB...")
+        # 1. DuckDB (Structured Data) - ALL LOGS
         try:
-            # 1. Write to DuckDB (Structured)
             self.db.insert_batch(self.batch_buffer)
-            
-            # 2. Write to ChromaDB (Unstructured)
-            self.kb.add_logs(self.log_event_buffer)
-            
-            # Clear buffers
-            self.batch_buffer = []
-            self.log_event_buffer = []
         except Exception as e:
-            print(f"❌ Error flushing batch: {e}")
+            print(f"❌ DuckDB Insert Failed: {e}")
+
+        # 2. ChromaDB (Vector Data) - ONLY PATTERNS
+        if self.log_event_buffer:
+            try:
+                print(f"🧠 Indexing {len(self.log_event_buffer)} new/updated patterns to ChromaDB...")
+                self.kb.add_logs(self.log_event_buffer)
+            except Exception as e:
+                print(f"❌ ChromaDB Insert Failed: {e}")
+
+        # Clear buffers
+        self.batch_buffer = []
+        self.log_event_buffer = []
 
     def run(self):
         print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
         print("🔒 PII Masking Enabled")
         print("🗄️  DuckDB Persistence Enabled")
-        print("🧠 ChromaDB Persistence Enabled")
+        print("🧠 ChromaDB Persistence Enabled (Pattern-Only Mode)")
+        
+        # Run Janitor at startup
+        # Default retention: 30 days
+        self.janitor.run_cleanup(retention_days=30)
         
         try:
             for raw_log in self.consumer:
                 try:
                     event = self.parse_log(raw_log)
                     
-                    # Add to buffer
+                    # 1. Add to DuckDB Buffer (Always)
                     self.batch_buffer.append(event.model_dump())
-                    self.log_event_buffer.append(event)
+                    
+                    # 2. Add to ChromaDB Buffer (Only if Pattern Changed/Created)
+                    change_type = event.context.get("change_type")
+                    if change_type in ["cluster_created", "cluster_template_changed"]:
+                        print(f"✨ New Pattern Discovered: {event.context['template_str']}")
+                        # Create a Pattern LogEvent
+                        pattern_event = LogEvent(
+                            timestamp=event.timestamp,
+                            severity=event.severity,
+                            service_name=event.service_name,
+                            body=event.context["template_str"], # Embed the PATTERN
+                            context={
+                                "cluster_id": event.context["template_id"],
+                                "is_pattern": True
+                            }
+                        )
+                        self.log_event_buffer.append(pattern_event)
                     
                     print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
                     

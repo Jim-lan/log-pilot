@@ -18,4 +18,4 @@ COPY . .
 ENV PYTHONPATH=/app
 
 # Run the ingestion worker
-CMD ["python", "services/ingestion-worker/src/main.py"]
+CMD ["python", "-u", "services/ingestion-worker/src/main.py"]

@@ -46,12 +46,23 @@ def run_query(request: QueryRequest):
     Executes the Pilot Agent for a given query.
     """
     try:
+        print("DEBUG: Fetching History...")
         # Fetch History for Context
-        from services.pilot_orchestrator.src.nodes import sql_tool
-        history_rows = sql_tool.db.get_history("default")
+        from shared.db.duckdb_client import DuckDBConnector
+        # Use a fresh connector for history operations
+        print("DEBUG: Initializing DuckDBConnector...")
+        db = DuckDBConnector(read_only=False) 
+        print("DEBUG: DuckDBConnector initialized.")
+        
+        history_rows = db.get_history("default")
+        print(f"DEBUG: History fetched: {len(history_rows)} rows.")
         # Format: [{"role": "user", "content": "..."}, ...]
         # Limit to last 10 messages to avoid context overflow
         messages = [{"role": row[0], "content": row[1]} for row in history_rows[-10:]]
+        
+        # Close DB to release lock before graph execution
+        db.close()
+        print("DEBUG: DB closed to release lock.")
 
         # Initialize state with history
         initial_state = {"query": request.query, "messages": messages}
@@ -64,11 +75,13 @@ def run_query(request: QueryRequest):
         
         # Save to History (Session ID = default for demo)
         try:
-            from services.pilot_orchestrator.src.nodes import sql_tool
+            # Re-open DB for saving
+            db = DuckDBConnector(read_only=False)
             # Save User Query
-            sql_tool.db.save_message("default", "user", request.query)
+            db.save_message("default", "user", request.query)
             # Save AI Answer
-            sql_tool.db.save_message("default", "ai", answer)
+            db.save_message("default", "ai", answer)
+            db.close() # Close connection
         except Exception as e:
             print(f"⚠️ Failed to save history: {e}")
         
@@ -88,12 +101,69 @@ def get_chat_history():
     Retrieves chat history for the default session.
     """
     try:
-        from services.pilot_orchestrator.src.nodes import sql_tool
-        history = sql_tool.db.get_history("default")
+        from shared.db.duckdb_client import DuckDBConnector
+        db = DuckDBConnector(read_only=True)
+        history = db.get_history("default")
+        db.close()
         # Format: [(role, content, timestamp), ...]
         return [{"role": row[0], "content": row[1], "timestamp": str(row[2])} for row in history]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/metrics")
+def get_metrics():
+    """
+    Retrieves evaluation metrics from the metrics database.
+    """
+    try:
+        import duckdb
+        db_path = "data/target/metrics.duckdb"
+        
+        if not os.path.exists(db_path):
+            return {
+                "pass_rate_24h": 0,
+                "avg_latency_24h": 0,
+                "total_runs": 0,
+                "history": []
+            }
+
+        conn = duckdb.connect(db_path, read_only=True)
+        
+        # 1. Pass Rate (Last 24h) - aggregating from eval_runs
+        # Note: In a real app, we'd filter by timestamp > now() - interval '24 hours'
+        # For demo, we just take the average of all runs
+        pass_rate = conn.execute("SELECT AVG(pass_rate) FROM eval_runs").fetchone()[0] or 0
+        
+        # 2. Average Latency (Last 24h) - aggregating from eval_results
+        avg_latency = conn.execute("SELECT AVG(latency) FROM eval_results").fetchone()[0] or 0
+        
+        # 3. Total Runs
+        total_runs = conn.execute("SELECT COUNT(*) FROM eval_runs").fetchone()[0] or 0
+        
+        # 4. History for Chart (Last 10 runs)
+        history = conn.execute("""
+            SELECT run_id, timestamp, pass_rate 
+            FROM eval_runs 
+            ORDER BY timestamp DESC 
+            LIMIT 10
+        """).fetchall()
+        
+        conn.close()
+        
+        return {
+            "pass_rate_24h": round(pass_rate, 1),
+            "avg_latency_24h": round(avg_latency, 2),
+            "total_runs": total_runs,
+            "history": [{"run_id": h[0], "timestamp": str(h[1]), "pass_rate": h[2]} for h in history]
+        }
+    except Exception as e:
+        print(f"❌ Metrics Error: {e}")
+        return {
+            "pass_rate_24h": 0,
+            "avg_latency_24h": 0,
+            "total_runs": 0,
+            "history": []
+        }
 
 if __name__ == "__main__":
     import uvicorn

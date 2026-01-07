@@ -17,7 +17,7 @@ class SQLGenerator:
     In production, this would use an LLM.
     """
     def __init__(self):
-        self.db = DuckDBConnector(read_only=True)
+        # self.db removed to avoid persistent connection
         self.llm = LLMClient()
         self.prompts = PromptFactory()
 
@@ -47,7 +47,12 @@ class SQLGenerator:
         
         print(f"🤖 Generated SQL: {sql}")
         try:
-            results = self.db.query(sql)
-            return results
+            # Use short-lived connection
+            db = DuckDBConnector(read_only=True)
+            try:
+                results = db.query(sql)
+                return results
+            finally:
+                db.close()
         except Exception as e:
             return [{"error": f"SQL Execution failed: {e}"}]

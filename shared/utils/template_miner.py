@@ -20,13 +20,17 @@ class LogTemplateMiner:
         self.persistence = FilePersistence(persistence_file)
         self.miner = TemplateMiner(self.persistence, self.config)
 
-    def mine_template(self, log_message: str) -> str:
+    def mine_template(self, log_message: str) -> Dict[str, Any]:
         """
-        Processes a log message and returns its template.
-        This updates the internal Drain tree structure.
+        Processes a log message and returns mining results.
+        Returns: {
+            "template_mined": str,
+            "cluster_id": int,
+            "change_type": str ("cluster_created", "cluster_template_changed", "none")
+        }
         """
         result = self.miner.add_log_message(log_message)
-        return result["template_mined"]
+        return result
 
     def get_total_clusters(self) -> int:
         return len(self.miner.drain.clusters)

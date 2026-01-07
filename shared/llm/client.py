@@ -3,11 +3,17 @@ import yaml
 from typing import Optional, Dict, Any
 import openai
 
-# Try to import ModelRegistry, but fail gracefully if not available (for backward compat)
+# Try to import ModelRegistry
 try:
     from services.pilot_orchestrator.src.model_registry import registry
 except ImportError:
     registry = None
+
+# Try to import TokenCounter
+try:
+    from services.pilot_orchestrator.src.token_counter import token_counter
+except ImportError:
+    token_counter = None
 
 class LLMClient:
     """
@@ -18,6 +24,7 @@ class LLMClient:
         # Legacy config load (kept for fallback)
         self.config = self._load_config(config_path)
         self._clients = {} # Cache clients by base_url
+        self.max_input_tokens = 4096 # Safety limit
 
     def _load_config(self, path: str) -> Dict[str, Any]:
         # Resolve absolute path relative to project root
@@ -56,6 +63,13 @@ class LLMClient:
                 return self._generate_legacy(prompt, model_type)
         else:
             return self._generate_legacy(prompt, model_type)
+
+        # Cost Control: Check Token Budget
+        if token_counter:
+            input_tokens = token_counter.count_tokens(prompt, model_name)
+            if input_tokens > self.max_input_tokens:
+                return f"❌ Error: Input too long ({input_tokens} tokens). Max allowed: {self.max_input_tokens}."
+            print(f"💰 Token Usage: {input_tokens} input tokens")
 
         print(f"🤖 LLM Call ({model_type}/{model_name}): {prompt[:50]}...")
         

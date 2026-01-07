@@ -17,6 +17,7 @@ COPY . .
 
 # Set python path
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Run the API
 CMD ["uvicorn", "services.pilot_orchestrator.src.api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -193,6 +193,65 @@ async function loadHistory() {
     }
 }
 
+// View Switching
+function switchView(viewName) {
+    const chatView = document.getElementById('chat-view');
+    const perfView = document.getElementById('performance-view');
+    const navItems = document.querySelectorAll('.nav-item');
+
+    // Update Nav
+    navItems.forEach(item => item.classList.remove('active'));
+    if (viewName === 'chat') navItems[0].classList.add('active');
+    if (viewName === 'performance') navItems[1].classList.add('active');
+
+    // Update View
+    if (viewName === 'chat') {
+        chatView.classList.remove('hidden');
+        perfView.classList.add('hidden');
+    } else {
+        chatView.classList.add('hidden');
+        perfView.classList.remove('hidden');
+        loadMetrics(); // Auto-load
+    }
+}
+
+// Metrics Loading
+async function loadMetrics() {
+    try {
+        const response = await fetch('http://localhost:8000/metrics');
+        const data = await response.json();
+
+        // Update Cards
+        document.getElementById('metric-pass-rate').textContent = `${data.pass_rate_24h}%`;
+        document.getElementById('metric-latency').textContent = `${data.avg_latency_24h}s`;
+        document.getElementById('metric-runs').textContent = data.total_runs;
+
+        // Update Table
+        const tbody = document.getElementById('metrics-history-body');
+        tbody.innerHTML = '';
+
+        data.history.forEach(run => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+
+            // Color code pass rate
+            let color = '#ef4444'; // red
+            if (run.pass_rate >= 90) color = '#34d399'; // green
+            else if (run.pass_rate >= 70) color = '#eab308'; // yellow
+
+            tr.innerHTML = `
+                <td style="padding: 1rem; font-family: monospace; color: #d1d5db;">${run.run_id.substring(0, 8)}...</td>
+                <td style="padding: 1rem; color: #9ca3af;">${new Date(run.timestamp).toLocaleString()}</td>
+                <td style="padding: 1rem; font-weight: bold; color: ${color};">${run.pass_rate.toFixed(1)}%</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+    } catch (e) {
+        console.error("Failed to load metrics", e);
+    }
+}
+
 // Start polling
 checkHealth();
 loadHistory();

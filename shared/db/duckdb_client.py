@@ -2,6 +2,7 @@ import duckdb
 import json
 from typing import List, Dict, Any
 import os
+import time
 
 class DuckDBConnector:
     def __init__(self, db_path: str = "data/target/logs.duckdb", read_only: bool = False):
@@ -13,7 +14,7 @@ class DuckDBConnector:
         # 1. Connect to Logs DB (Read-Only or Read-Write)
         if read_only:
              # Wait for DB file to exist
-            import time
+
             print(f"⏳ Waiting for DB file at {self.db_path}...")
             while not os.path.exists(self.db_path):
                 time.sleep(1)
@@ -33,7 +34,19 @@ class DuckDBConnector:
                     else:
                         raise e
         else:
-            self.conn = duckdb.connect(self.db_path)
+            # Retry loop for Read-Write connection
+            max_retries = 30
+            for i in range(max_retries):
+                try:
+                    self.conn = duckdb.connect(self.db_path)
+                    print("✅ Connected to Logs DB (Read-Write).")
+                    break
+                except Exception as e:
+                    if "lock" in str(e).lower() and i < max_retries - 1:
+                        print(f"🔒 DB locked, retrying in 2s... ({i+1}/{max_retries})")
+                        time.sleep(2)
+                    else:
+                        raise e
             self._init_schema() # Only inits logs table
             
         # 2. Connect to History DB (Always Read-Write)
@@ -55,10 +68,16 @@ class DuckDBConnector:
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS logs (
                 timestamp TIMESTAMP,
-                level VARCHAR,
-                service VARCHAR,
-                message VARCHAR,
-                template_id VARCHAR
+                severity VARCHAR,
+                service_name VARCHAR,
+                trace_id VARCHAR,
+                body VARCHAR,
+                environment VARCHAR,
+                app_id VARCHAR,
+                department VARCHAR,
+                host VARCHAR,
+                region VARCHAR,
+                context VARCHAR
             );
         """)
 
@@ -140,8 +159,10 @@ class DuckDBConnector:
         """
         self.conn.executemany(insert_sql, values)
 
-    def query(self, sql: str) -> List[Any]:
+    def query(self, sql: str, params: List[Any] = None) -> List[Any]:
         """Executes a raw SQL query and returns the result."""
+        if params:
+            return self.conn.execute(sql, params).fetchall()
         return self.conn.execute(sql).fetchall()
 
     def close(self):

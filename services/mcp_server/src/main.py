@@ -12,14 +12,7 @@ from shared.db.duckdb_client import DuckDBConnector
 # Initialize FastMCP
 mcp = FastMCP("LogPilot")
 
-# Initialize DB Client (Read-Only)
-db_client = None
 
-def get_db():
-    global db_client
-    if not db_client:
-        db_client = DuckDBConnector(read_only=True)
-    return db_client
 
 @mcp.tool()
 def query_logs(sql_query: str) -> str:
@@ -27,9 +20,12 @@ def query_logs(sql_query: str) -> str:
     Executes a read-only SQL query against the logs database.
     """
     try:
-        db = get_db()
-        result = db.conn.execute(sql_query).fetchall()
-        return str(result)
+        db = DuckDBConnector(read_only=True)
+        try:
+            result = db.conn.execute(sql_query).fetchall()
+            return str(result)
+        finally:
+            db.close()
     except Exception as e:
         return f"Error executing SQL: {e}"
 
@@ -55,9 +51,12 @@ def get_recent_logs() -> str:
     Returns the last 50 log entries.
     """
     try:
-        db = get_db()
-        result = db.conn.execute("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50").fetchall()
-        return str(result)
+        db = DuckDBConnector(read_only=True)
+        try:
+            result = db.conn.execute("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50").fetchall()
+            return str(result)
+        finally:
+            db.close()
     except Exception as e:
         return f"Error fetching recent logs: {e}"
 
@@ -67,9 +66,12 @@ def get_schema() -> str:
     Returns the schema of the logs table.
     """
     try:
-        db = get_db()
-        result = db.conn.execute("DESCRIBE logs").fetchall()
-        return str(result)
+        db = DuckDBConnector(read_only=True)
+        try:
+            result = db.conn.execute("DESCRIBE logs").fetchall()
+            return str(result)
+        finally:
+            db.close()
     except Exception as e:
         return f"Error fetching schema: {e}"
 

@@ -37,28 +37,44 @@ class ModelRegistry:
         provider_name = llm_config.get("default_provider", "local")
         provider_config = llm_config.get("providers", {}).get(provider_name, {})
         
-        # Fallback to ENV if not in YAML
-        default_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
-        api_base = provider_config.get("api_base", os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1"))
+        # Common settings
+        api_base = provider_config.get("api_base")
+        if not api_base and provider_name == "local":
+             api_base = os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1")
         
-        # Map provider names (yaml 'local' -> registry 'ollama')
+        api_key_env = provider_config.get("api_key_env")
+        
+        # Map provider names
         registry_provider = "ollama" if provider_name == "local" else provider_name
         
-        # Register 'fast' and 'smart' models
-        # In the future, we can read specific 'fast'/'smart' mappings from YAML
+        # Get specific models map
+        models_map = provider_config.get("models", {})
+        
+        # Determine 'fast' model
+        fast_model = models_map.get("fast")
+        if not fast_model:
+            fast_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
+            
+        # Determine 'smart' model (map 'reasoning' -> 'smart')
+        smart_model = models_map.get("reasoning")
+        if not smart_model:
+            smart_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
+
         self.register(ModelConfig(
             model_id="fast",
             provider=registry_provider,
-            model_name=default_model,
+            model_name=fast_model,
             api_base=api_base,
+            api_key_env=api_key_env,
             temperature=0.1
         ))
         
         self.register(ModelConfig(
             model_id="smart",
             provider=registry_provider,
-            model_name=default_model, # Using same for now
+            model_name=smart_model,
             api_base=api_base,
+            api_key_env=api_key_env,
             temperature=0.1
         ))
 

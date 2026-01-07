@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LogPilot | AI Observability Agent</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar -->
@@ -18,12 +22,17 @@
                 <div class="logo-icon">✈️</div>
                 <h1>LogPilot</h1>
             </div>
-            
+
+            <div class="nav-section">
+                <h3>Views</h3>
+                <div class="nav-item active" onclick="switchView('chat')">💬 Chat</div>
+                <div class="nav-item" onclick="switchView('performance')">📊 Performance</div>
+            </div>
+
             <div class="nav-section">
                 <h3>History</h3>
-                <div class="history-list">
-                    <div class="history-item active">Current Session</div>
-                    <!-- Future: Add history items here -->
+                <div class="history-list" id="history-list">
+                    <!-- Populated by JS -->
                 </div>
             </div>
 
@@ -36,7 +45,7 @@
         </aside>
 
         <!-- Main Chat Area -->
-        <main class="chat-area">
+        <main class="chat-area" id="chat-view">
             <header class="chat-header">
                 <div class="header-info">
                     <h2>Pilot Orchestrator</h2>
@@ -52,7 +61,8 @@
                 <div class="message ai">
                     <div class="avatar">🤖</div>
                     <div class="content">
-                        <p>Hello! I'm <strong>LogPilot</strong>. I can analyze your logs, run SQL queries, and search runbooks.</p>
+                        <p>Hello! I'm <strong>LogPilot</strong>. I can analyze your logs, run SQL queries, and search
+                            runbooks.</p>
                         <p>Try asking:</p>
                         <ul>
                             <li>"How many errors in auth-service?"</li>
@@ -66,9 +76,14 @@
             <div class="input-area">
                 <form id="chat-form" onsubmit="handleSubmit(event)">
                     <div class="input-wrapper">
-                        <input type="text" id="user-input" placeholder="Ask anything about your logs..." autocomplete="off">
+                        <input type="text" id="user-input" placeholder="Ask anything about your logs..."
+                            autocomplete="off">
                         <button type="submit" id="send-btn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
                         </button>
                     </div>
                 </form>
@@ -77,7 +92,63 @@
                 </div>
             </div>
         </main>
+
+        <!-- Performance View (Hidden by default) -->
+        <main class="chat-area hidden" id="performance-view">
+            <header class="chat-header">
+                <div class="header-info">
+                    <h2>System Performance</h2>
+                    <p>Real-time Evaluation Metrics</p>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn" title="Refresh" onclick="loadMetrics()">🔄</button>
+                </div>
+            </header>
+
+            <div class="metrics-container" style="padding: 2rem; overflow-y: auto;">
+                <div class="metrics-grid"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                    <!-- Metric Cards -->
+                    <div class="metric-card"
+                        style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #9ca3af; font-size: 0.9em; margin-bottom: 0.5rem;">Pass Rate (24h)</h3>
+                        <div class="metric-value" id="metric-pass-rate"
+                            style="font-size: 2.5em; font-weight: bold; color: #34d399;">--%</div>
+                    </div>
+                    <div class="metric-card"
+                        style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #9ca3af; font-size: 0.9em; margin-bottom: 0.5rem;">Avg Latency</h3>
+                        <div class="metric-value" id="metric-latency"
+                            style="font-size: 2.5em; font-weight: bold; color: #60a5fa;">--s</div>
+                    </div>
+                    <div class="metric-card"
+                        style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #9ca3af; font-size: 0.9em; margin-bottom: 0.5rem;">Total Runs</h3>
+                        <div class="metric-value" id="metric-runs"
+                            style="font-size: 2.5em; font-weight: bold; color: #f472b6;">--</div>
+                    </div>
+                </div>
+
+                <h3 style="margin-bottom: 1rem;">Recent Evaluation Runs</h3>
+                <div class="table-container"
+                    style="background: rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead style="background: rgba(0,0,0,0.2);">
+                            <tr>
+                                <th style="padding: 1rem; color: #9ca3af; font-weight: 500;">Run ID</th>
+                                <th style="padding: 1rem; color: #9ca3af; font-weight: 500;">Timestamp</th>
+                                <th style="padding: 1rem; color: #9ca3af; font-weight: 500;">Pass Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-history-body">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
     </div>
     <script src="app.js"></script>
 </body>
+
 </html>
