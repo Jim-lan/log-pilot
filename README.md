@@ -73,4 +73,3 @@ This architecture ensures high precision (SQL) and helpful context (RAG) while m
 -   [API Reference](docs/api_reference.md)
 -   [Security & Deployment](docs/security_deployment.md)
 -   [Performance Benchmarks](docs/performance_benchmarks.md)
--   [Original Architecture](architecture.md)

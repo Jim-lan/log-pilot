@@ -38,5 +38,19 @@ Based on the "Golden Dataset" (20 test cases):
 | `ollama` (LLM) | ~6-8GB | High (requires dedicated VRAM/RAM). |
 
 ## 4. Recommendations for Production
--   **GPU**: A dedicated GPU (NVIDIA or Apple Silicon) is required for acceptable latency.
--   **Model**: Llama 3 8B is the minimum recommended. For higher accuracy, consider Llama 3 70B (requires ~40GB VRAM).
+
+### A. High-Performance Local Models
+For enterprise-grade reasoning without data leaving your network:
+*   **Mixtral 8x22B**: Excellent reasoning, large context (64k). Requires ~90GB VRAM (Multi-GPU).
+*   **Qwen 2.5 72B**: Top-tier coding and logic capabilities. Requires ~48GB VRAM (quantized) or ~144GB (full).
+*   **Llama 3 70B**: Strong general purpose. Requires ~40GB VRAM.
+
+### B. Cloud LLMs (Best Performance)
+If data privacy policies allow, offloading to frontier models provides the highest accuracy:
+*   **GPT-4o (OpenAI)**: The current state-of-the-art for reasoning and instruction following.
+*   **Claude 3.5 Sonnet (Anthropic)**: Exceptional at coding and complex analysis.
+*   **Groq (Llama 3 70B)**: For extreme low latency (<1s inference).
+
+### C. Hardware Requirements
+*   **Local**: Minimum Apple M2 Ultra (64GB+) or NVIDIA A100/H100 for the models above.
+*   **Hybrid**: Run `pilot-orchestrator` on small CPU instances and offload LLM calls to a centralized Inference Server (e.g., vLLM) or Cloud API.
