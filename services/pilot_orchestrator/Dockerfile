@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY services/pilot_orchestrator/requirements.txt .
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 RUN pip install fastapi uvicorn
 
 # Copy source code

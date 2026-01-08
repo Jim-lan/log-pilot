@@ -3,7 +3,7 @@ import os
 import duckdb
 import requests
 from fastapi import FastAPI
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 # Ensure we can import shared modules
 sys.path.append("/app")

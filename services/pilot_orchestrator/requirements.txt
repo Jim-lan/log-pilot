@@ -1,3 +1,12 @@
 langgraph
 langchain
 pydantic
+duckdb==1.1.3
+openai
+jinja2
+PyYAML
+drain3
+chromadb
+llama-index
+llama-index-vector-stores-chroma
+llama-index-embeddings-huggingface

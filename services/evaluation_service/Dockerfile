@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
     uvicorn==0.27.0 \
     requests==2.31.0 \
-    duckdb==0.9.2 \
+    duckdb==1.1.3 \
     pandas==2.2.0 \
     ragas==0.0.22 \
     langchain==0.1.0 \
