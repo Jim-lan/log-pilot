@@ -98,7 +98,60 @@ sequenceDiagram
     end
 ```
 
-## 3. Service Details
+## 3. Detailed Request Workflow (The Brain) 🧠
+
+LogPilot uses **LangGraph** to orchestrate a team of specialized agents. The flow is not linear; it loops and self-corrects based on validation feedback.
+
+### A. The Cognitive Flow
+```mermaid
+stateDiagram-v2
+    [*] --> Rewrite
+    Rewrite --> Classify
+    
+    state Classify_Decision <<choice>>
+    Classify --> Classify_Decision
+    
+    Classify_Decision --> SQL_Gen: Intent = SQL
+    Classify_Decision --> RAG_Retrieve: Intent = RAG
+    Classify_Decision --> Synthesize: Intent = Ambiguous
+
+    state "SQL Loop" as SQL_Loop {
+        SQL_Gen --> Validate_SQL
+        Validate_SQL --> Execute_SQL: Valid
+        Validate_SQL --> Fix_SQL: Invalid
+        Fix_SQL --> Validate_SQL
+    }
+    
+    state "RAG Loop" as RAG_Loop {
+        RAG_Retrieve --> Verify_Context
+        Verify_Context --> Synthesize: Valid
+        Verify_Context --> Rewrite: Invalid (Feedback)
+    }
+
+    Execute_SQL --> Synthesize
+    
+    Synthesize --> Validate_Answer
+    Validate_Answer --> [*]: Valid
+    Validate_Answer --> Synthesize: Invalid (Retry)
+```
+
+### B. Agent Inventory
+The system is composed of **10 distinct Nodes (Agents)**, each with a specific responsibility. "LLM" indicates a creative AI step, while "Code" indicates deterministic logic.
+
+| Agent Name | Role | Type | Responsibility |
+| :--- | :--- | :--- | :--- |
+| **1. Query Rewriter** | `rewrite_query` | 🤖 LLM | Transforms raw user input (e.g., "what about errors?") into a standalone, context-aware query using chat history. |
+| **2. Intent Router** | `classify_intent` | 🤖 LLM | Decides the specialized path: **SQL** (Data), **RAG** (Knowledge), or **Chat** (Ambiguous). |
+| **3. SQL Expert** | `generate_sql` | 🤖 LLM | Translates natural language into dialect-specific SQL (DuckDB). Enforces syntax rules. |
+| **4. SQL Critic** | `validate_sql` | ⚙️ Code | deterministic validation. Checks for `department` groupings, banned keywords (`SYSDATE`), and runs `EXPLAIN`. |
+| **5. Repair Agent** | `fix_sql` | 🤖 LLM | Receives error logs from the Critic and attempts to fix the SQL syntax. |
+| **6. Tool Executor** | `execute_sql` | ⚙️ Code | Runs the valid SQL against `logs.duckdb` and captures the result (or runtime error). |
+| **7. RAG Retriever** | `retrieve_context` | ⚙️ Code | Queries `ChromaDB` for patterns, then fetches matching full logs from DuckDB. |
+| **8. Context Critic** | `verify_context` | 🤖 LLM | Reads retreived logs to ensure they are relevant to the user's question before answering. |
+| **9. Answer Synthesize** | `synthesize_answer` | 🤖 LLM | Combines the User Query + Data/Context into a helpful, human-readable response. |
+| **10. QA Critic** | `validate_answer` | 🤖 LLM | Final check. Ensures the answer is not "lazy" (e.g., "I don't know") if data was actually found. |
+
+## 4. Service Details
 
 ### Pilot Orchestrator
 -   **Framework**: FastAPI + LangGraph.
