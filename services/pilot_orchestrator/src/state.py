@@ -23,3 +23,9 @@ class AgentState(TypedDict):
     history: List[Dict[str, Any]]
     messages: List[Dict[str, str]] # Chat history for context
     rewritten_query: Optional[str] # Standalone query after rewriting
+    
+    # Verification
+    context_valid: Optional[bool]
+    context_feedback: Optional[str]
+    answer_valid: Optional[bool]
+    answer_feedback: Optional[str]

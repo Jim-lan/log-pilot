@@ -8,7 +8,9 @@ from services.pilot_orchestrator.src.nodes import (
     synthesize_answer,
     rewrite_query,
     validate_sql,
-    fix_sql
+    fix_sql,
+    verify_context,
+    validate_answer
 )
 
 def route_intent(state: AgentState):
@@ -36,6 +38,35 @@ def check_sql_validity(state: AgentState):
     
     return "synthesize_answer" # Give up and explain error
 
+def check_context_validity(state: AgentState):
+    """
+    Conditional edge logic for Context verification.
+    """
+    if state.get("context_valid", True): # Default to true if not set
+        return "synthesize_answer"
+        
+    retry_count = state.get("retry_count", 0)
+    if retry_count < 2: # Limit retries
+        # If context is invalid, we might want to rewrite query again or just try retrieval again
+        # For now, let's loop back to rewrite with feedback (if we supported feedback in rewrite)
+        # Or just fail over to synthesize_answer to say "I couldn't find anything"
+        return "rewrite_query" 
+    
+    return "synthesize_answer"
+
+def check_answer_validity(state: AgentState):
+    """
+    Conditional edge logic for Final Answer validation.
+    """
+    if state.get("answer_valid", True):
+        return END
+        
+    retry_count = state.get("retry_count", 0)
+    if retry_count < 2:
+        return "synthesize_answer" # Retry synthesis
+        
+    return END
+
 # Define the Graph
 workflow = StateGraph(AgentState)
 
@@ -47,7 +78,9 @@ workflow.add_node("validate_sql", validate_sql)
 workflow.add_node("fix_sql", fix_sql)
 workflow.add_node("execute_sql", execute_sql)
 workflow.add_node("retrieve_context", retrieve_context)
+workflow.add_node("verify_context", verify_context)
 workflow.add_node("synthesize_answer", synthesize_answer)
+workflow.add_node("validate_answer", validate_answer)
 
 # Set Entry Point
 workflow.set_entry_point("rewrite_query")
@@ -81,11 +114,27 @@ workflow.add_conditional_edges(
 workflow.add_edge("fix_sql", "validate_sql") # Loop back to validation
 workflow.add_edge("execute_sql", "synthesize_answer")
 
-# 3. RAG Path
-workflow.add_edge("retrieve_context", "synthesize_answer")
+# 3. RAG Path (with Verification Loop)
+workflow.add_edge("retrieve_context", "verify_context")
+workflow.add_conditional_edges(
+    "verify_context",
+    check_context_validity,
+    {
+        "synthesize_answer": "synthesize_answer",
+        "rewrite_query": "rewrite_query"
+    }
+)
 
-# 4. End
-workflow.add_edge("synthesize_answer", END)
+# 4. Final Validation Loop
+workflow.add_edge("synthesize_answer", "validate_answer")
+workflow.add_conditional_edges(
+    "validate_answer",
+    check_answer_validity,
+    {
+        END: END,
+        "synthesize_answer": "synthesize_answer"
+    }
+)
 
 # Compile
 pilot_graph = workflow.compile()

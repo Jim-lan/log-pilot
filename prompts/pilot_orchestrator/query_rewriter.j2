@@ -2,12 +2,17 @@ You are an expert AI assistant.
 Your task is to rewrite the user's latest question into a standalone query that contains all necessary context from the chat history.
 
 ### Instructions
-1.  If the user's question is a follow-up (e.g., "list them", "why?", "show details"), rewrite it to include the context (entities, time filters, constraints) from the previous conversation.
-2.  If the user's question is already self-contained (e.g., "How many errors in auth-service?"), return it exactly as is.
-3.  Do NOT answer the question. Only return the rewritten query.
-4.  Do NOT add any explanations, preambles (e.g. "Here is the query"), or markdown.
-5. Output MUST be a single line containing only the query.
-6. **Output MUST be Natural Language, NOT SQL**.
+1.  **Context Retention**: You MUST carry over all active constraints from the chat history, especially:
+    *   **Time Ranges** (e.g., "last 24 hours", "today", "since 5pm").
+    *   **Filters** (e.g., "severity=ERROR", "service=auth").
+    *   **Entities** (e.g., "user_id=123").
+2.  **Follow-up Resolution**: If the user asks a follow-up (e.g., "which department has the most?", "list them"), combine the new intent with the *previous* constraints.
+    *   *Example*: History="Errors in last 24h", Current="Which service has most?" -> Rewritten="Which service has the most errors in the last 24 hours?"
+3.  **Self-Contained**: If the user's question is already fully self-contained (defines its own time/scope), use it as is.
+4.  Do NOT answer the question. Only return the rewritten query.
+5.  Do NOT add any explanations, preambles, or markdown.
+6.  Output MUST be a single line containing only the query.
+7.  **Output MUST be Natural Language, NOT SQL**.
 
 ### Chat History
 {% if chat_history %}

@@ -378,3 +378,79 @@ def synthesize_answer(state: AgentState) -> AgentState:
 
     state["final_answer"] = response
     return state
+
+def verify_context(state: AgentState) -> AgentState:
+    """
+    Verifies if the retrieved context is relevant to the query.
+    """
+    query = state.get("rewritten_query", state["query"])
+    context = state.get("rag_context", "")
+    
+    # Skip verification if context is empty or error
+    if not context or "Error retrieving context" in context or "No relevant logs found" in context:
+        state["context_valid"] = False
+        state["context_feedback"] = "No context retrieved."
+        return state
+
+    try:
+        prompt = prompt_factory.create_prompt(
+            "pilot_orchestrator",
+            "verify_context",
+            query=query,
+            context=context
+        )
+        # Use 'fast' model for verification
+        response = llm_client.generate(prompt, model_type="fast")
+        
+        import json
+        # Extract JSON
+        if "```json" in response:
+            response = response.split("```json")[1].split("```")[0].strip()
+        elif "```" in response:
+            response = response.split("```")[1].strip()
+            
+        result = json.loads(response)
+        state["context_valid"] = result.get("valid", False)
+        state["context_feedback"] = result.get("feedback", "")
+        
+        print(f"🧐 Context Verification: {'✅ Valid' if state['context_valid'] else '❌ Invalid'} - {state['context_feedback']}")
+        
+    except Exception as e:
+        print(f"❌ Context Verification Failed: {e}")
+        state["context_valid"] = True # Fail open to avoid blocking
+        
+    return state
+
+def validate_answer(state: AgentState) -> AgentState:
+    """
+    Validates if the final answer addresses the user's query.
+    """
+    query = state["query"]
+    answer = state.get("final_answer", "")
+    
+    try:
+        prompt = prompt_factory.create_prompt(
+            "pilot_orchestrator",
+            "validate_answer",
+            query=query,
+            answer=answer
+        )
+        response = llm_client.generate(prompt, model_type="fast")
+        
+        import json
+        if "```json" in response:
+            response = response.split("```json")[1].split("```")[0].strip()
+        elif "```" in response:
+            response = response.split("```")[1].strip()
+            
+        result = json.loads(response)
+        state["answer_valid"] = result.get("valid", False)
+        state["answer_feedback"] = result.get("feedback", "")
+        
+        print(f"🛡️ Answer Validation: {'✅ Valid' if state['answer_valid'] else '❌ Invalid'} - {state['answer_feedback']}")
+        
+    except Exception as e:
+        print(f"❌ Answer Validation Failed: {e}")
+        state["answer_valid"] = True # Fail open
+        
+    return state

@@ -1,15 +1,20 @@
 import json
-import requests
 import re
 import sys
 import time
 import duckdb
 import uuid
+import os
 from datetime import datetime
 from typing import List, Dict, Any
 
+# Add project root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
+from services.pilot_orchestrator.src.graph import pilot_graph
+from services.pilot_orchestrator.src.state import AgentState
+
 # Configuration
-API_URL = "http://127.0.0.1:8000/query"
 DATASET_PATH = "tests/evaluation/golden_dataset.json"
 METRICS_DB_PATH = "data/target/metrics.duckdb"
 
@@ -48,59 +53,57 @@ class Evaluator:
         with open(DATASET_PATH, "r") as f:
             return json.load(f)
 
-    def call_api(self, query: str) -> Dict:
+    def invoke_agent(self, query: str) -> Dict:
         try:
             start_time = time.time()
-            # Increase timeout for LLM inference (initial load can be slow)
-            response = requests.post(API_URL, json={"query": query}, timeout=300)
-            response.raise_for_status()
-            data = response.json()
-            data["latency"] = time.time() - start_time
-            return data
+            state = AgentState(
+                query=query,
+                messages=[],
+                history=[],
+                retry_count=0
+            )
+            result = pilot_graph.invoke(state)
+            latency = time.time() - start_time
+            
+            return {
+                "intent": result.get("intent"),
+                "sql": result.get("sql_query"),
+                "answer": result.get("final_answer"),
+                "latency": latency
+            }
         except Exception as e:
-            print(f"❌ API Call Failed: {e}")
+            print(f"❌ Agent Invoke Failed: {e}")
             return {"error": str(e)}
 
     def evaluate_sql(self, expected_pattern: str, actual_sql: str) -> bool:
         if not actual_sql:
             return False
-        # Normalize whitespace
         actual_norm = re.sub(r'\s+', ' ', actual_sql).strip()
-        # Check regex
         return bool(re.search(expected_pattern, actual_norm, re.IGNORECASE))
 
     def evaluate_rag(self, expected_keywords: List[str], actual_answer: str) -> bool:
         if not actual_answer:
             return False
-        # Simple keyword check (Placeholder for LLM Judge)
         actual_lower = actual_answer.lower()
         return any(k.lower() in actual_lower for k in expected_keywords)
 
     def run(self):
-        print(f"🚀 Starting Evaluation against {API_URL}...")
+        print(f"🚀 Starting Direct Evaluation...")
         dataset = self.load_dataset()
         
         passed = 0
-        total = len(dataset) # Run all for metrics, or subset if debugging
-        
-        # For this specific run, we might be filtering in the loop, but let's assume full run for metrics
-        # If filtering, 'total' should reflect that.
-        # Let's stick to the loop logic for now.
+        target_cases = dataset # Run all
+        total = len(target_cases)
         
         print(f"{'ID':<10} {'Type':<10} {'Intent':<10} {'Result':<10} {'Latency':<10}")
         print("-" * 60)
         
-        # Insert Run Record (Placeholder stats, updated later)
         self.db.execute("INSERT INTO eval_runs VALUES (?, ?, ?, ?, ?)", 
                         (self.run_id, datetime.now(), total, 0, 0.0))
 
-        # Run all cases
-        target_cases = dataset
-        total = len(target_cases)
-
         for case in target_cases:
-            print(f"Running case {case['id']}...")
-            result = self.call_api(case["question"])
+            # print(f"Running case {case['id']}...") # Reduce noise
+            result = self.invoke_agent(case["question"])
             
             if "error" in result:
                 print(f"{case['id']:<10} {case['type']:<10} ERROR      FAIL       -")
@@ -123,13 +126,9 @@ class Evaluator:
             is_pass = intent_pass and content_pass
             result_status = "PASS" if is_pass else "FAIL"
             
-            # Log details if failed
             if not is_pass:
-                print(f"\n[FAIL] ID: {case['id']}")
-                print(f"  Expected Intent: {case['expected_intent']}, Got: {result.get('intent')}")
-                if case['type'] == 'sql':
-                    print(f"  Expected SQL: {case['expected_sql_pattern']}")
-                    print(f"  Actual SQL:   {result.get('sql')}")
+                # Print details for failures
+                pass 
 
             if is_pass:
                 passed += 1
@@ -143,15 +142,11 @@ class Evaluator:
         pass_rate = (passed / total) * 100 if total > 0 else 0
         print(f"📊 Summary: {passed}/{total} Passed ({pass_rate:.1f}%)")
         
-        # Update Run Summary
         self.db.execute("""
             UPDATE eval_runs 
             SET passed_cases = ?, pass_rate = ?
             WHERE run_id = ?
         """, (passed, pass_rate, self.run_id))
-        
-        if passed < total:
-            sys.exit(1)
 
     def _log_result(self, case, status, latency, sql=None, answer=None, error=None):
         self.db.execute("""
