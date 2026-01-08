@@ -94,11 +94,35 @@ class LogParser:
         
         if fmt == "standard":
             ts = self._parse_timestamp(data["timestamp"], "%Y-%m-%d %H:%M:%S")
+            
+            # Extract Key-Value pairs from message (e.g. "Payment processed dept=finance env=prod")
+            body = data["message"]
+            context = {}
+            
+            # Simple K=V parser
+            # Regex for key=value (no quotes)
+            kv_pattern = re.compile(r'\b(\w+)=([^=\s]+)\b')
+            matches = kv_pattern.findall(body)
+            
+            for k, v in matches:
+                context[k] = v
+                
+            # Map known fields to top-level
+            department = context.get("dept") or context.get("department")
+            environment = context.get("env") or context.get("environment")
+            region = context.get("region")
+            host = context.get("host")
+            
             return {
                 "timestamp": ts,
                 "severity": data["severity"],
-                "service_name": data["service"], # Fixed key name from regex group
-                "body": data["message"]
+                "service_name": data["service"], 
+                "body": body, # Keep original body or strip?? Keeping it is safer for reading.
+                "department": department,
+                "environment": environment,
+                "region": region,
+                "host": host,
+                "context": context
             }
             
         elif fmt == "syslog":

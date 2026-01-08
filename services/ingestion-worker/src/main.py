@@ -174,6 +174,11 @@ class LogIngestor:
             severity=masked["severity"],
             service_name=masked["service_name"],
             body=masked["body"],
+            # Map top-level optional fields
+            department=masked.get("department"),
+            environment=masked.get("environment"),
+            host=masked.get("host"),
+            region=masked.get("region"),
             context={
                 "template_id": str(cluster_id), # Store ID as string
                 "template_str": template_str,
