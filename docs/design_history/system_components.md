@@ -215,7 +215,8 @@ To help new developers understand the current implementation state and extend fu
     - **Batch Processing**: Logs are buffered in memory (`self.batch_buffer`) and bulk-inserted into DuckDB every N records (default: 5) or on shutdown. This reduces I/O overhead.
 - **Persistence**:
     - Data is stored in `data/logs.duckdb`.
-    - Schema: Defined in `shared/db_connectors.py`.
+    - Schema: Defined in `shared/db/duckdb_client.py`.
+    - **Concurrency Model**: Uses transient connections (Open-Query-Close) to allow concurrent access between the `Ingestion Worker` (Writer) and `Pilot Orchestrator` (Reader) on the single DuckDB file.
 
 5.3 System Catalog (Data Source)
 - **File**: `data/system_catalog.csv`

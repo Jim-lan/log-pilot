@@ -15,9 +15,15 @@ from shared.db.duckdb_client import DuckDBConnector
 # Initialize Shared Components
 llm_client = LLMClient()
 prompt_factory = PromptFactory()
-sql_tool = SQLGenerator()
-# Lazy load KnowledgeStore to avoid init issues during testing if not needed
+# Lazy load tools to avoid init issues during testing or startup if DB is locked
+_sql_tool = None
 _kb_store = None
+
+def get_sql_tool():
+    global _sql_tool
+    if _sql_tool is None:
+        _sql_tool = SQLGenerator()
+    return _sql_tool
 
 def get_kb_store():
     global _kb_store
@@ -108,7 +114,7 @@ def generate_sql(state: AgentState) -> AgentState:
     # We no longer need to pass chat_history to generate_sql 
     # because the query is already rewritten!
     try:
-        sql = sql_tool.generate_sql(query)
+        sql = get_sql_tool().generate_sql(query)
         state["sql_query"] = sql
         state["sql_error"] = None # Clear previous errors
     except Exception as e:
