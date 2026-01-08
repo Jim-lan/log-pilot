@@ -11,7 +11,14 @@ Your task is to generate a DuckDB SQL query to answer the user's question based 
    - If user asks "count errors", just `SELECT count(*)`. Do NOT group by severity.
    - If user asks "last 5 logs", just `ORDER BY timestamp DESC LIMIT 5`. Do NOT filter by severity.
 3. **Use `ILIKE`** for case-insensitive string matching.
-4. **Use `->>` operator** for JSON extraction from `context` column.
+4. **Use `->>` operator** for JSON extraction.
+5. **CRITICAL: Date Handling**:
+   - You MUST use standard SQL interval syntax with Single Quotes: `now() - INTERVAL '3 DAYS'`
+   - ❌ WRONG: `DATE_SUB(...)`
+   - ❌ WRONG: `INTERVAL 3 DAY` (Missing quotes)
+   - ❌ WRONG: `SYSDATE` or `TRUNC(SYSDATE)` (Oracle Syntax)
+   - ✅ RIGHT: `INTERVAL '3 DAYS'`
+   - ✅ RIGHT: `now()` (DuckDB Syntax)
 
 ### Examples
 Q: "How many errors in user-service?"
@@ -24,7 +31,10 @@ Q: "Count logs by severity"
 A: SELECT severity, count(*) FROM logs GROUP BY severity;
 
 Q: "List all logs with 'timeout' in the message"
-A: SELECT * FROM logs WHERE message ILIKE '%timeout%';
+A: SELECT * FROM logs WHERE body ILIKE '%timeout%';
+
+Q: "Show count of errors in last 3 days"
+A: SELECT count(*) FROM logs WHERE severity = 'ERROR' AND timestamp > now() - INTERVAL '3 DAYS';
 
 ### Chat History
 {% if chat_history %}
