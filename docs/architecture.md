@@ -6,8 +6,8 @@ The LogPilot system consists of 6 main containerized services:
 
 ```mermaid
 graph TD
-    User[User] <--> Frontend[Frontend (Nginx)]
-    Frontend <--> |REST API| Pilot[Pilot Orchestrator (FastAPI)]
+    User[User] <--> Frontend["Frontend (Nginx)"]
+    Frontend <--> |REST API| Pilot["Pilot Orchestrator (FastAPI)"]
     
     subgraph "Data Layer"
         Pilot <--> |Read-Only| LogsDB[(logs.duckdb)]
@@ -22,7 +22,7 @@ graph TD
     end
     
     subgraph "Intelligence Layer"
-        Pilot <--> |HTTP| LLM[LLM Service (Ollama)]
+        Pilot <--> |HTTP| LLM["LLM Service (Ollama)"]
     end
 
     subgraph "Evaluation Layer"
