@@ -13,6 +13,7 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
 ## 🛠️ Tech Stack
 - **AI/LLM**: Llama 3 (via Ollama), LangGraph (Orchestration), LlamaIndex (RAG).
 - **Backend**: Python, FastAPI, DuckDB (High-performance OLAP).
+- **Evaluation**: Ragas, FastAPI (Microservice).
 - **Frontend**: Vanilla JS, HTML5, CSS3 (Glassmorphism).
 - **Infrastructure**: Docker Compose.
 
@@ -26,30 +27,20 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
     - "How many errors in the last 24 hours?"
     - "Which service has the most failures?"
     - "List the errors in payment-service."
-4.  **Connect External Agents (MCP)**:
-    -   LogPilot exposes an MCP Server at `http://localhost:8001/sse`.
-    -   **Claude Desktop**: Add this to your config:
-        ```json
-        {
-          "mcpServers": {
-            "log-pilot": {
-              "url": "http://localhost:8001/sse",
-              "transport": "sse"
-            }
-          }
-        }
-        ```
+4.  **Evaluate Performance**:
+    -   Trigger batch evaluation: `curl -X POST http://localhost:8002/evaluate/batch -d '{}'`
 
 ## 💡 Design Thought
-LogPilot is built on the **"Router-Solver"** pattern. A central orchestrator classifies user intent (Data vs. Knowledge) and routes the query to specialized tools:
+LogPilot is built on the **"Router-Solver"** pattern with **Agentic RAG**. A central orchestrator classifies user intent and routes the query to specialized tools:
 - **SQL Tool**: Converts questions into DuckDB SQL for hard data analysis.
 - **RAG Tool**: Retrieves context from runbooks for troubleshooting advice.
+- **Self-Correction**: The agent verifies its own answers (Context Relevance & Hallucination Check) before responding.
 - **Query Rewriter**: Ensures multi-turn conversations are robust by rewriting follow-ups into standalone queries.
 
 This architecture ensures high precision (SQL) and helpful context (RAG) while maintaining a natural user experience.
 
 ## 📚 Documentation
--   [Detailed Architecture](docs/architecture_detailed.md)
+-   [Detailed Architecture](docs/architecture.md)
 -   [API Reference](docs/api_reference.md)
 -   [Security & Deployment](docs/security_deployment.md)
 -   [Performance Benchmarks](docs/performance_benchmarks.md)
