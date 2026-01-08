@@ -1,4 +1,3 @@
-
 services:
   # 1. Local LLM Service (The Brain)
   llm-service:
@@ -14,6 +13,19 @@ services:
     networks:
       - pilot-net
 
+  # 1.5 Log Generator (Run-once initialization)
+  log-generator:
+    image: python:3.9-slim
+    container_name: log-pilot-generator
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data/source:/app/data/source
+    working_dir: /app
+    # Generate 12 months (365 days) of logs
+    command: python scripts/generate_logs.py --days 365 --count 10000 --output_dir data/source/landing_zone
+    networks:
+      - pilot-net
+
   # 2. Ingestion Worker (Data Plane)
   ingestion-worker:
     build:
@@ -22,10 +34,18 @@ services:
     container_name: log-pilot-ingestion
     volumes:
       - ./data/source:/app/data/source
+      # Mount processed dir handling
+      - ./data/source/processed:/app/data/source/processed
       - duckdb_data:/app/data/target
       - ./config:/app/config
+    environment:
+      - INGESTION_SOURCE=FILE
+      - PYTHONUNBUFFERED=1
     depends_on:
-      - llm-service
+      llm-service:
+        condition: service_started
+      log-generator:
+        condition: service_completed_successfully
     networks:
       - pilot-net
 

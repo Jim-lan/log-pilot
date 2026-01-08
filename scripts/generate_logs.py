@@ -2,10 +2,14 @@ import os
 import random
 import json
 import argparse
+import shutil
 from datetime import datetime, timedelta
 
-def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 1000, log_format: str = "standard"):
-    """Generates sample log files simulating different services."""
+def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 10000, days: int = 365, log_format: str = "standard"):
+    """Generates sample log files simulating different services over a time range."""
+    # Clean up existing logs for a fresh start
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
     
     services = {
@@ -16,20 +20,39 @@ def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 100
     }
     
     severities = ["INFO", "WARN", "ERROR"]
-    start_time = datetime.now() - timedelta(days=30)
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=days)
+    total_seconds = int((end_time - start_time).total_seconds())
 
-    print(f"Generating {count} logs into {output_dir} (Format: {log_format})...")
+    print(f"Generating {count} logs into {output_dir} (Format: {log_format}) covering last {days} days...")
 
     # Prepare file handles
     files = {name: open(os.path.join(output_dir, filename), "w") for name, filename in services.items()}
 
     try:
+        # Generate logs with random timestamps within the range, then sort them?
+        # Creating a massive list might be memory intensive. 
+        # Instead, we can just generate them in order or semi-random order.
+        # For simplicity and streaming simulation, we'll generate them in chronological order.
+        
         for i in range(count):
-            timestamp = start_time + timedelta(minutes=i*5)
+            # Proportional progress through time
+            # Add some randomness to the exact time
+            progress = i / count
+            offset_seconds = int(total_seconds * progress)
+            timestamp = start_time + timedelta(seconds=offset_seconds)
             
             service_name = random.choice(list(services.keys()))
             severity = random.choice(severities)
             
+            # Weighted severity (mostly INFO)
+            if random.random() > 0.9:
+                severity = "ERROR"
+            elif random.random() > 0.7:
+                severity = "WARN"
+            else:
+                severity = "INFO"
+
             # Generate message
             # Add standard metadata
             env = "prod"
@@ -53,6 +76,7 @@ def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 100
                 dept = "security"
                 app_id = "com.example.auth"
                 success = random.random() > 0.2
+                if severity == "ERROR": success = False # Force failure if error
                 msg_body = f"Login success for user={user} ip={ip}" if success else f"Login failed for user={user} ip={ip} reason=bad_password"
                 context = {"user": user, "ip": ip, "reason": "bad_password" if not success else None, "dept": dept, "app_id": app_id}
             elif service_name == "db-service":
@@ -73,7 +97,7 @@ def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 100
             
             if log_format == "json":
                 log_entry = {
-                    "timestamp": timestamp.isoformat() + "Z",
+                    "timestamp": timestamp.isoformat(),
                     "level": severity,
                     "service": service_name,
                     "message": msg_body,
@@ -90,7 +114,6 @@ def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 100
                 
             elif log_format == "nginx":
                 # IP - - [Date] "Request" Status Bytes
-                # Only really makes sense for frontend, but we'll force fit others
                 ip = context.get("ip", "127.0.0.1")
                 ts_str = timestamp.strftime("%d/%b/%Y:%H:%M:%S +0000")
                 req = f"GET {context.get('path', '/api')} HTTP/1.1"
@@ -115,8 +138,9 @@ def generate_logs(output_dir: str = "data/source/landing_zone", count: int = 100
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate mock logs.")
     parser.add_argument("--count", type=int, default=1000, help="Number of logs to generate.")
+    parser.add_argument("--days", type=int, default=365, help="Time range in days.")
     parser.add_argument("--output_dir", type=str, default="data/source/landing_zone", help="Output directory.")
     parser.add_argument("--format", type=str, default="standard", choices=["standard", "json", "syslog", "nginx"], help="Log format.")
     
     args = parser.parse_args()
-    generate_logs(output_dir=args.output_dir, count=args.count, log_format=args.format)
+    generate_logs(output_dir=args.output_dir, count=args.count, days=args.days, log_format=args.format)

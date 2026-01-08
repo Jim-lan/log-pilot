@@ -1,0 +1,20 @@
+# AI Behavior Rules & Protocols
+
+You must adhere to these rules for every request:
+
+## 1. Documentation Synchrony (CRITICAL)
+*   **Rule**: NEVER update code without updating the corresponding design documentation.
+*   **Action**: Before marking a task as "Done", check `README.md`, architecture diagrams, and any design docs in `docs/` or `design/`.
+*   **Requirement**: If a feature is added or modified, the design doc MUST reflect this immediately.
+
+## 2. Mandatory Testing
+*   **Rule**: No code change is complete without verification.
+*   **Action**:
+    *   For new features: Write new unit tests.
+    *   For bug fixes: Write a regression test case.
+    *   For refactors: Run existing tests to ensure no breakage.
+*   **Requirement**: You must run the tests and show the output before finishing the task.
+
+## 3. Design-First Approach
+*   **Rule**: Consult the design/architecture *before* writing code.
+*   **Action**: Read the relevant design files to understand the impact of your changes.

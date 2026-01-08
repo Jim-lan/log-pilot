@@ -16,7 +16,8 @@ graph TD
     end
     
     subgraph "Ingestion Layer"
-        LogFiles[Log Files] --> |Watch| Worker[Ingestion Worker]
+        Generator[Log Generator] --> |Generates| LandingZone[Landing Zone Folder]
+        LandingZone --> |Watch| Worker[Ingestion Worker]
         Worker --> |Write| LogsDB
         Worker --> |Embed| VectorDB
     end
@@ -105,9 +106,16 @@ sequenceDiagram
 -   **State Management**: Uses `langgraph` StateGraph to pass context between nodes.
 -   **Agentic Features**: Self-correction loops for Context and Answer verification.
 
+### Log Generator (Demo Data Source)
+-   **Role**: Creates a realistic 12-month historical dataset on startup.
+-   **Function**: Simulates 4 services (Payment, Auth, DB, Frontend) with random anomalies.
+-   **Output**: Writes logs to `data/source/landing_zone`, then exits.
+
 ### Ingestion Worker
 -   **Role**: Real-time log processing.
--   **Mechanism**: Uses `watchdog` to monitor file system events.
+-   **Mechanism**:
+    -   **File Watcher**: Uses `watchdog` to listen for new files in `landing_zone`.
+    -   **Processing**: Automatically ingests files and moves them to `processed/`.
 -   **PII Masking**: Regex-based masking for emails, IP addresses, and SSNs before storage.
 
 ### Evaluation Service (New)
