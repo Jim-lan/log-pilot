@@ -1,4 +1,5 @@
 import os
+from typing import Dict, Any
 from drain3 import TemplateMiner
 from drain3.template_miner_config import TemplateMinerConfig
 from drain3.file_persistence import FilePersistence
