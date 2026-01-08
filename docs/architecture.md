@@ -105,7 +105,10 @@ LogPilot uses **LangGraph** to orchestrate a team of specialized agents. The flo
 ### A. The Cognitive Flow
 ```mermaid
 stateDiagram-v2
-    [*] --> Rewrite
+    state "User Sends Query" as Start
+    state "Send Final Answer" as End
+
+    Start --> Rewrite
     Rewrite --> Classify
     
     state Classify_Decision <<choice>>
@@ -131,7 +134,7 @@ stateDiagram-v2
     Execute_SQL --> Synthesize
     
     Synthesize --> Validate_Answer
-    Validate_Answer --> [*]: Valid
+    Validate_Answer --> End: Valid
     Validate_Answer --> Synthesize: Invalid (Retry)
 ```
 
