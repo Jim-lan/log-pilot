@@ -131,10 +131,9 @@ def run_batch_evaluation(run_id: str, limit: Optional[int]):
                 # Call Pilot Orchestrator API
                 # We assume there's an endpoint or we use the graph directly?
                 # Ideally we call the API.
-                # POST /chat
-                resp = requests.post(f"{PILOT_API_URL}/chat", json={
-                    "message": case["question"],
-                    "stream": False
+                # POST /query
+                resp = requests.post(f"{PILOT_API_URL}/query", json={
+                    "query": case["question"]
                 })
                 resp.raise_for_status()
                 data = resp.json()
@@ -152,7 +151,7 @@ def run_batch_evaluation(run_id: str, limit: Optional[int]):
                     "case_id": case["id"],
                     "case_type": case["type"],
                     "question": case["question"],
-                    "answer": data.get("response", ""),
+                    "answer": data.get("answer", ""),
                     "contexts": [metadata.get("rag_context", "")],
                     "rewritten_query": metadata.get("rewritten_query", ""),
                     "latency": data.get("latency", 0)
