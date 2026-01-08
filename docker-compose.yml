@@ -77,6 +77,26 @@ services:
     networks:
       - pilot-net
 
+  # 6. Evaluation Service (Ragas/Metrics)
+  evaluation-service:
+    build:
+      context: .
+      dockerfile: services/evaluation_service/Dockerfile
+    container_name: log-pilot-eval
+    volumes:
+      - duckdb_data:/app/data/target
+      - ./tests/evaluation:/app/tests/evaluation
+    ports:
+      - "8002:8001"
+    environment:
+      - LLM_BASE_URL=http://log-pilot-llm:11434/v1
+      - PILOT_API_URL=http://pilot-orchestrator:8000
+    depends_on:
+      - llm-service
+      - pilot-orchestrator
+    networks:
+      - pilot-net
+
 volumes:
   ollama_data:
   duckdb_data:
