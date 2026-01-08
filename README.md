@@ -17,6 +17,35 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
 - **Frontend**: Vanilla JS, HTML5, CSS3 (Glassmorphism).
 - **Infrastructure**: Docker Compose.
 
+## 💻 System Requirements & LLM Options
+LogPilot runs the LLM locally by default, which requires system RAM.
+
+### 1. Default (Recommended)
+*   **Model**: `Llama 3` (8B Parameters).
+*   **RAM Required**: ~8GB total system RAM (allocates ~4.5GB for model).
+*   **Performance**: Best balance of speed and reasoning capability.
+
+### 2. High Performance (Workstation / Server)
+*   **Model**: `Llama 3` (70B) or `Mixtral` (8x7B).
+*   **RAM Required**: ~48GB+ system RAM (or dual GPU setup).
+*   **Performance**: GPT-4 class reasoning locally.
+*   **How to Switch**:
+    ```bash
+    # In docker-compose.yml
+    command: -c "ollama serve & sleep 5 && ollama pull llama3:70b && wait"
+    ```
+
+### 3. Cloud / High Performance (No Local RAM)
+If you have low RAM or want GPT-4 class performance, point LogPilot to a cloud provider.
+*   **Supported**: OpenAI, Anthropic, Groq.
+*   **Configuration**:
+    ```bash
+    # Set env vars in docker-compose.yml
+    LLM_BASE_URL=https://api.openai.com/v1
+    LLM_API_KEY=sk-...
+    LLM_MODEL=gpt-4o
+    ```
+
 ## 🚀 How to Use
 1.  **Start the System**:
     ```bash
