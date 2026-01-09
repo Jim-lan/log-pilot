@@ -68,8 +68,18 @@ LogPilot is built on the **"Router-Solver"** pattern with **Agentic RAG**. A cen
 
 This architecture ensures high precision (SQL) and helpful context (RAG) while maintaining a natural user experience.
 
-## 📚 Documentation
--   [Detailed Architecture](docs/architecture.md)
--   [API Reference](docs/api_reference.md)
--   [Security & Deployment](docs/security_deployment.md)
--   [Performance Benchmarks](docs/performance_benchmarks.md)
+## 📚 Documentation Center
+
+### 🟢 For Everyone
+-   [**Detailed Architecture**](docs/architecture.md): The blueprint of the system (Flowcharts, Components).
+-   [**Project Roadmap & Backlog**](docs/backlog.md): Future plans, risks, and enhancement ideas.
+-   [**Design History**](docs/design_history/agent_design.md): Evolution of the agentic design.
+
+### 🔵 For Developers
+-   [**Technical Reference**](docs/technical_reference.md): Code structure, modules, and setup.
+-   [**API Reference**](docs/api_reference.md): Endpoints and payloads.
+-   [**Security Guide**](docs/security_deployment.md): Deployment hardening and PII masking.
+
+### 🟣 For Performance
+-   [**Performance Benchmarks**](docs/performance_benchmarks.md): Latency and accuracy metrics.
+-   [**Review Findings**](docs/design_review_findings.md): Past architectural reviews.

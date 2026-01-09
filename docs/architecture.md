@@ -429,3 +429,6 @@ This section summarizes the key architectural decisions to help stakeholders und
     *   **Real-Time**: No waiting for ingestion pipelines.
     *   **Cost Savings**: No duplicate storage costs.
     *   **Simplicity**: Fewer moving parts to maintain.
+
+## 12. Future Roadmap & Risks 🔮
+For a detailed breakdown of architectural risks (e.g., Latency, Context Limits) and planned enhancements (S3, CloudWatch Support), please refer to the **[Project Backlog](backlog.md)**.
