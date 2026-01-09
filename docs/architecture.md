@@ -183,42 +183,55 @@ The system is composed of **10 distinct Nodes (Agents)**, each with a specific r
 -   **DuckDB**: Chosen for high-performance OLAP queries on local files.
 -   **ChromaDB**: Vector store for RAG (Retrieval Augmented Generation).
 
-## 4. Agentic RAG Deep Dive 🧠
+## 5. Agentic RAG Logic & Fallback Strategy 🧠
 
-LogPilot employs an **Agentic RAG** architecture, moving beyond simple linear chains to a cyclic, self-correcting graph.
+The **RAG (Retrieval Augmented Generation)** pipeline is designed for **qualitative** questions—when you need to know "Why", "How", or "Who", rather than "How many".
 
-### The "Router-Solver" Pattern
-The system first classifies the user's intent to select the best tool:
-1.  **SQL Solver**: For quantitative questions ("How many...", "Trend of...").
-2.  **RAG Solver**: For qualitative questions ("How to fix...", "What is...").
+### A. The Trigger Logic
+The **Intent Router** selects the `rag` path when the query implies causality, identity, or procedure.
+*   **Keywords**: "Why", "How to", "Who owns", "Runbook".
+*   **Examples**:
+    *   *"Why is the payment service failing?"* (RAG 🟢)
+    *   *"Count errors in the last hour."* (SQL 🔴)
 
-### Self-Correction Loops
-Unlike standard RAG, LogPilot verifies its own work before responding:
+### B. The Logic Pipeline (Hybrid Search)
+If RAG is selected, we execute a specialized 3-step process:
 
-#### Loop 1: Context Verification (`verify_context`)
-*   **Problem**: RAG often retrieves irrelevant chunks (e.g., old logs, wrong service).
-*   **Solution**: An LLM node checks if the retrieved chunks actually answer the query.
-*   **Action**: If irrelevant, the agent **Rewrites the Query** and retries retrieval.
+1.  **Semantic Pattern Match (ChromaDB)**:
+    *   We embed the query to find abstract **Log Patterns** (e.g., `Payment gateway timed out after <*> ms`).
+    *   We do *not* search raw logs directly, which ensures we find the *type* of error even if the specific timestamp/user ID is different.
 
-#### Loop 2: Answer Validation (`validate_answer`)
-*   **Problem**: LLMs can hallucinate or be lazy ("I don't know" when context is present).
-*   **Solution**: An LLM node compares the generated answer against the original intent and context.
-*   **Action**: If the answer is lazy or hallucinated, the agent **Regenerates** with specific feedback (e.g., "You have the logs in context, please list them.").
+2.  **Structured Data Fetch (DuckDB)**:
+    *   We extract the `template_id` from the matched pattern.
+    *   We query **DuckDB** for the *actual* recent logs that match that ID to get real timestamps and values.
 
-### State Management
-We use `LangGraph` to manage the state:
-```python
-class AgentState(TypedDict):
-    query: str
-    rewritten_query: str
-    rag_context: str
-    context_valid: bool  # Feedback flag
-    final_answer: str
-    answer_valid: bool   # Feedback flag
+3.  **Context Verification (The Critic)**:
+    *   An LLM Critic reads the fetched logs.
+    *   **Logic**: "Does this log actually answer the user's question?"
+
+### C. The Fallback (Web Search) 🌍
+If the RAG pipeline fails (e.g., no patterns found, or Critic rejects them), the system triggers a **Web Search**:
+1.  **Condition**: User asks a general question ("What is error 503?") OR internal logs are irrelevant.
+2.  **Action**: The `perform_web_search` node queries DuckDuckGo.
+3.  **Result**: The system answers using external documentation instead of internal logs.
+
+### D. Decision Flowchart
+```mermaid
+graph TD
+    Q[User Query] --> Router{Intent?}
+    Router -- "Count/Start/List" --> SQL[SQL Agent]
+    Router -- "Why/How/Who" --> RAG[RAG Agent]
+    
+    subgraph RAG Logic
+        RAG --> Chroma[1. Pattern Match]
+        Chroma --> DuckDB[2. Fetch Logs]
+        DuckDB --> Critic{Relevant?}
+        Critic -- Yes --> Answer[Final Answer]
+        Critic -- No --> Web[3. Web Fallback]
+    end
 ```
-This state is passed between nodes, allowing the agent to "remember" previous failures in the same turn.
 
-## 4. Storage Optimization Strategy
+## 6. Storage Optimization Strategy
 
 The current architecture prioritizes **simplicity and context** for the LLM by storing full log bodies. However, for high-volume production environments, a **Log Normalization** strategy is designed and feasible.
 
@@ -238,7 +251,7 @@ The current architecture prioritizes **simplicity and context** for the LLM by s
 -   **Cons**: Reconstruction overhead, complexity in search (cannot grep raw text).
 -   **Feasibility**: Verified via `tests/check_drain3.py` that `drain3` supports parameter extraction.
 
-## 5. Vector DB Usage Scenarios
+## 7. Vector DB Usage Scenarios
 
 The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when the user's question is **vague, qualitative, or pattern-based**.
 
@@ -267,7 +280,7 @@ The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when th
     2.  **Generate SQL**: `SELECT count(*) FROM logs WHERE severity='ERROR' AND timestamp > now() - INTERVAL 1 HOUR`.
     3.  **Execute**: Runs directly on DuckDB. Vector DB is bypassed completely.
 
-## 6. Production Data Architecture: Stateless on S3
+## 8. Production Data Architecture: Stateless on S3
 
 In our current **Demo/MVP** environment, we ingest logs into a local DuckDB file (`logs.duckdb`). In a **Real-World Production** environment, we recommend a **Stateless Architecture** that queries data directly where it lives (e.g., S3), avoiding data duplication.
 
@@ -312,7 +325,7 @@ To transition LogPilot to this architecture:
 
 This allows LogPilot to become a **Zero-ETL** agent, providing intelligence on top of your existing Data Lake.
 
-## 7. Cloud-Native Adaptation: AWS CloudWatch ☁️
+## 9. Cloud-Native Adaptation: AWS CloudWatch ☁️
 
 For environments where logs are stored in **AWS CloudWatch Logs** (e.g., AWS Glue jobs), we can adapt LogPilot to query them directly without ingestion, acting as a smart UI over the CloudWatch API.
 
@@ -357,7 +370,7 @@ If the user asks a qualitative question ("Why did the job fail?"), we use a **Hy
 
 This approach achieves **Zero Data Duplication** while leveraging LogPilot's agentic capabilities.
 
-## 8. Design Considerations & Trade-offs ⚖️
+## 10. Design Considerations & Trade-offs ⚖️
 
 This section summarizes the key architectural decisions to help stakeholders understand "Why" we built it this way.
 
