@@ -67,6 +67,14 @@ class KnowledgeStore:
             self.index.insert(doc)
         print(f"✅ Added {len(logs)} logs to Knowledge Base.")
 
+    def add_documents(self, documents: List[Any]):
+        """
+        Adds generic LlamaIndex Documents to the index.
+        """
+        for doc in documents:
+            self.index.insert(doc)
+        print(f"✅ Added {len(documents)} documents to Knowledge Base.")
+
     def delete_older_than(self, timestamp: float):
         """
         Deletes logs older than the given timestamp.

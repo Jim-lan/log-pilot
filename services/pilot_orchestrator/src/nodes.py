@@ -249,53 +249,72 @@ def retrieve_context(state: AgentState) -> AgentState:
             state["rag_context"] = "No relevant log patterns found."
             return state
 
-        # 2. Extract Template IDs
+        # 2. Extract Template IDs and Knowledge Cards
         template_ids = []
         patterns = []
+        knowledge_cards = []
+        
         for node in nodes:
-            # In Ingestion Worker, we stored: context={"cluster_id": ..., "is_pattern": True}
-            # LlamaIndex stores this in node.metadata
+            # Check for Runbook Cards
+            node_type = node.metadata.get("type")
+            if node_type == "runbook_card":
+                topic = node.metadata.get("topic", "General")
+                content = node.get_content()
+                knowledge_cards.append(f"📘 Runbook Card ({topic}):\n{content}")
+                continue
+
+            # Check for Log Patterns
             t_id = node.metadata.get("cluster_id")
             if t_id:
                 template_ids.append(str(t_id))
                 patterns.append(node.get_content())
 
-        if not template_ids:
-             state["rag_context"] = f"Found patterns but no IDs. Patterns: {patterns}"
+        if not template_ids and not knowledge_cards:
+             state["rag_context"] = f"Found patterns/docs but no usable content. Raw: {nodes}"
              return state
 
-        # 3. Query DuckDB for recent logs matching these templates
-        db = DuckDBConnector(read_only=True)
-        try:
-            # Create a parameterized query for IN clause
-            placeholders = ','.join(['?'] * len(template_ids))
-            
-            # We query the 'context' JSON column for the template_id
-            sql = f"""
-                SELECT timestamp, service_name, severity, body 
-                FROM logs 
-                WHERE json_extract_string(context, '$.template_id') IN ({placeholders})
-                ORDER BY timestamp DESC 
-                LIMIT 20
-            """
-            
-            logs = db.query(sql, template_ids)
-            
-            # 4. Synthesize Context
-            context_str = f"Found {len(patterns)} relevant log patterns:\n"
-            for p in patterns:
-                context_str += f"- {p}\n"
-            
-            context_str += f"\nHere are the {len(logs)} most recent log entries matching these patterns:\n"
-            for log in logs:
-                # log is a tuple: (timestamp, service, severity, body)
-                context_str += f"[{log[0]}] {log[1]} ({log[2]}): {log[3]}\n"
+        context_parts = []
+        
+        # Add Knowledge Cards to Context
+        if knowledge_cards:
+            context_parts.append("### 📘 Relevant Documentation:")
+            context_parts.extend(knowledge_cards)
+            context_parts.append("\n")
+
+        # 3. Query DuckDB for recent logs (if patterns found)
+        if template_ids:
+            try:
+                db = DuckDBConnector(read_only=True)
+                # Create a parameterized query for IN clause
+                placeholders = ','.join(['?'] * len(template_ids))
                 
-            state["rag_context"] = context_str
-            print(f"✅ RAG Retrieved {len(logs)} logs for {len(template_ids)} patterns.")
-            
-        finally:
-            db.close()
+                # We query the 'context' JSON column for the template_id
+                sql = f"""
+                    SELECT timestamp, service_name, severity, body 
+                    FROM logs 
+                    WHERE json_extract_string(context, '$.template_id') IN ({placeholders})
+                    ORDER BY timestamp DESC 
+                    LIMIT 20
+                """
+                
+                logs = db.query(sql, template_ids)
+                db.close()
+                
+                context_parts.append(f"### 🔍 Found {len(patterns)} relevant log patterns:")
+                for p in patterns:
+                    context_parts.append(f"- {p}")
+                
+                context_parts.append(f"\n### 📋 Recent Log Matches ({len(logs)} entries):")
+                for log in logs:
+                    context_parts.append(f"[{log[0]}] {log[1]} ({log[2]}): {log[3]}")
+                    
+            except Exception as e:
+                print(f"⚠️ Failed to fetch logs for patterns: {e}")
+                context_parts.append(f"Note: Found patterns {template_ids} but failed to fetch recent logs: {e}")
+
+        # Final Context Assembly
+        state["rag_context"] = "\n".join(context_parts)
+        print(f"✅ RAG Context Built: {len(knowledge_cards)} cards, {len(template_ids)} patterns.")
 
     except Exception as e:
         print(f"❌ RAG Retrieval Failed: {e}")
@@ -425,11 +444,12 @@ def verify_context(state: AgentState) -> AgentState:
         response = llm_client.generate(prompt, model_type="fast")
         
         import json
-        # Extract JSON
-        if "```json" in response:
-            response = response.split("```json")[1].split("```")[0].strip()
-        elif "```" in response:
-            response = response.split("```")[1].strip()
+        import re
+        
+        # Robust JSON extraction
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+             response = json_match.group(0)
             
         result = json.loads(response)
         state["context_valid"] = result.get("valid", False)
@@ -439,7 +459,11 @@ def verify_context(state: AgentState) -> AgentState:
         
     except Exception as e:
         print(f"❌ Context Verification Failed: {e}")
-        state["context_valid"] = True # Fail open to avoid blocking
+        # FAIL SAFE: Determine if we should fail open or closed.
+        # If verification fails (e.g. LLM garbage), we risk hallucination if we proceed.
+        # Safer to assume invalid and trigger Web Search fallback.
+        state["context_valid"] = False 
+        state["context_feedback"] = f"Verification system error: {e}"
         
     return state
 

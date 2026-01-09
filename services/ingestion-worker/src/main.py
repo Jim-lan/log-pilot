@@ -2,6 +2,7 @@ import sys
 import os
 import time
 import random
+import json
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -12,6 +13,11 @@ from shared.log_schema import LogEvent
 from shared.db.duckdb_client import DuckDBConnector
 from shared.utils.pii_masker import PIIMasker
 from services.knowledge_base.src.store import KnowledgeStore
+from shared.llm.client import LLMClient
+from llama_index.core import Document
+from shared.utils.template_miner import LogTemplateMiner
+from shared.utils.log_parser import LogParser
+from janitor import Janitor
 
 # --- File Watcher Imports ---
 import glob
@@ -21,7 +27,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 class LogFileHandler(FileSystemEventHandler):
-    def __init__(self, queue, allowed_extensions=(".log",)):
+    def __init__(self, queue, allowed_extensions=(".log", ".md")):
         self.queue = queue
         self.allowed_extensions = allowed_extensions
 
@@ -32,8 +38,8 @@ class LogFileHandler(FileSystemEventHandler):
 
     def on_moved(self, event):
         if not event.is_directory and event.dest_path.endswith(self.allowed_extensions):
-             print(f"👀 Detected moved file: {event.dest_path}")
-             self.queue.put(event.dest_path)
+            print(f"👀 Detected moved file: {event.dest_path}")
+            self.queue.put(event.dest_path)
 
 class FileWatcherConsumer:
     """Consumes logs from files in a directory using Watchdog."""
@@ -47,9 +53,12 @@ class FileWatcherConsumer:
         os.makedirs(processed_dir, exist_ok=True)
         
         # 1. Scan existing files
-        print(f"📂 Scanning {source_dir} for existing logs...")
-        existing_files = sorted(glob.glob(os.path.join(source_dir, "*.log")))
-        for f in existing_files:
+        print(f"📂 Scanning {source_dir} for existing files...")
+        existing_files = []
+        for ext in ["*.log", "*.md"]:
+            existing_files.extend(glob.glob(os.path.join(source_dir, ext)))
+            
+        for f in sorted(existing_files):
             print(f"   -> Found existing: {f}")
             self.file_queue.put(f)
             
@@ -58,13 +67,10 @@ class FileWatcherConsumer:
         handler = LogFileHandler(self.file_queue)
         self.observer.schedule(handler, source_dir, recursive=False)
         self.observer.start()
-        print(f"👀 Watching for new logs in {source_dir}...")
+        print(f"👀 Watching for new logs/docs in {source_dir}...")
 
     def __iter__(self):
         while True:
-            # Block until a file is available? No, we need to respect the generator contract.
-            # But the main loop expects an iterator that yields lines forever.
-            
             if self.file_queue.empty():
                 time.sleep(1) # Wait for files
                 continue
@@ -80,27 +86,7 @@ class FileWatcherConsumer:
                 processed_path = os.path.join(self.processed_dir, f"{base}_{ts}{ext}")
 
             print(f"📖 Processing file: {filepath}")
-            
-            try:
-                # wait slightly to ensure writing is done if it's being written to?
-                # For this demo, we assume atomic moves or complete writes.
-                time.sleep(0.5) 
-                
-                with open(filepath, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            yield line
-                            
-                # Move to processed
-                print(f"✅ Finished {filename}, moving to processed.")
-                try:
-                    shutil.move(filepath, processed_path)
-                except Exception as e:
-                    print(f"⚠️ Failed to move file {filepath}: {e}")
-                    
-            except Exception as e:
-                print(f"❌ Error reading file {filepath}: {e}")
+            yield filepath, processed_path
 
 class MockKafkaConsumer:
     """Simulates a Kafka Consumer yielding raw log lines."""
@@ -122,14 +108,6 @@ class MockKafkaConsumer:
             time.sleep(0.2) # Simulate network latency
             yield log
 
-from shared.utils.template_miner import LogTemplateMiner
-
-
-
-from shared.utils.log_parser import LogParser
-
-from janitor import Janitor
-
 class LogIngestor:
     def __init__(self):
         print("DEBUG: Initializing LogIngestor...")
@@ -150,9 +128,15 @@ class LogIngestor:
         self.pii_masker = PIIMasker()
         self.parser = LogParser()
         self.janitor = Janitor(self.kb) # Initialize Janitor
+        self.llm_client = LLMClient() 
         self.batch_size = 5
         self.batch_buffer = []
         self.log_event_buffer = [] # Buffer for LogEvent objects (needed for KB)
+
+    # ... (Keep parse_log and flush_batch methods as is) ...
+    # Wait, I cannot use '...' in replacement. I must provide the full content or clever chunks. 
+    # Since I'm replacing the whole file logic or large parts, I should be careful.
+    # The tool allows replacing a chunk. Let's target the LogFileHandler and FileWatcherConsumer and run loop first.
 
     def parse_log(self, raw_log: str) -> LogEvent:
         """Parses, masks, and enriches a raw log line."""
@@ -212,70 +196,172 @@ class LogIngestor:
         self.batch_buffer = []
         self.log_event_buffer = []
 
+    def process_markdown_smart(self, filepath: str):
+        """
+        Intelligently ingests a markdown file by discovering topics and synthesizing knowledge cards.
+        """
+        print(f"🧠 Smart Ingestion: Reading {filepath}...")
+        try:
+            with open(filepath, 'r') as f:
+                content = f.read()
+
+            filename = os.path.basename(filepath)
+            
+            # Pass 1: Discovery
+            prompt_discovery = f"""
+            Read the following technical documentation.
+            Identify all unique ERROR CODES or KEY TOPICS defined or explained in the text.
+            
+            IMPORTANT:
+            - Look for headers (e.g., "# Error 503").
+            - Look for TABLES containing error codes (e.g., "| 502 | Bad Gateway |").
+            
+            Return a JSON list of strings only.
+            Example: ["Error 503", "502 Bad Gateway", "Authentication Failure"]
+            
+            Document:
+            {content[:4000]} 
+            (Truncated for discovery if too long)
+            """
+            
+            print("   -> 🕵️  Discovering topics...")
+            topics_json = self.llm_client.generate(prompt_discovery, model_type="smart")
+            
+            # Clean JSON using regex to find the first list
+            import re
+            json_match = re.search(r'\[.*\]', topics_json, re.DOTALL)
+            if json_match:
+                topics_json = json_match.group(0)
+            
+            try:
+                topics = json.loads(topics_json)
+                print(f"   -> Found {len(topics)} topics: {topics}")
+            except:
+                print(f"   ❌ Failed to parse topics JSON: {topics_json}")
+                topics = ["General Content"] # Fallback
+
+            # Pass 2: Synthesis
+            documents = []
+            for topic in topics:
+                print(f"   -> 🧪 Synthesizing knowledge for: {topic}")
+                prompt_synthesis = f"""
+                You are a Technical Writer.
+                Read the document below and extract EVERYTHING related to the topic: "{topic}".
+                Combine scattered information (definitions, causes, fixes) into a single, comprehensive KNOWLEDGE CARD.
+                
+                Format:
+                # {topic}
+                **Definition**: ...
+                **Review**: ...
+                **Fix**: ...
+                
+                Keep it concise and actionable.
+                
+                Document:
+                {content}
+                """
+                
+                card_content = self.llm_client.generate(prompt_synthesis, model_type="smart") # Use smart model for quality
+                
+                # Create Document
+                doc = Document(
+                    text=card_content,
+                    metadata={
+                        "source": filename,
+                        "topic": topic,
+                        "type": "runbook_card"
+                    }
+                )
+                documents.append(doc)
+            
+            # Index
+            if documents:
+                print(f"   -> 💾 Indexing {len(documents)} synthesized cards...")
+                self.kb.add_documents(documents)
+                
+        except Exception as e:
+            print(f"❌ Smart Ingestion Failed: {e}")
+
+
     def run(self):
         print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
         print("🔒 PII Masking Enabled")
         print("🗄️  DuckDB Persistence Enabled")
-        print("🧠 ChromaDB Persistence Enabled (Pattern-Only Mode)")
+        print("🧠 ChromaDB Persistence Enabled")
         
-        # Run Janitor at startup
-        # Default retention: 30 days
         self.janitor.run_cleanup(retention_days=30)
-        
+ 
         try:
-            for raw_log in self.consumer:
-                try:
-                    event = self.parse_log(raw_log)
+            if isinstance(self.consumer, MockKafkaConsumer):
+                # Mock path (logs only)
+                for raw_log in self.consumer:
+                    self.process_raw_log(raw_log)
+                self.flush_batch()
+                
+            else:
+                # File Watcher Path (Logs + Markdown)
+                for filepath, processed_path in self.consumer:
+                    filename = os.path.basename(filepath)
                     
-                    # 1. Add to DuckDB Buffer (Always)
-                    self.batch_buffer.append(event.model_dump())
-                    
-                    # 2. Add to ChromaDB Buffer (Only if Pattern Changed/Created)
-                    change_type = event.context.get("change_type")
-                    if change_type in ["cluster_created", "cluster_template_changed"]:
-                        print(f"✨ New Pattern Discovered: {event.context['template_str']}")
-                        # Create a Pattern LogEvent
-                        pattern_event = LogEvent(
-                            timestamp=event.timestamp,
-                            severity=event.severity,
-                            service_name=event.service_name,
-                            body=event.context["template_str"], # Embed the PATTERN
-                            context={
-                                "cluster_id": event.context["template_id"],
-                                "is_pattern": True
-                            }
-                        )
-                        self.log_event_buffer.append(pattern_event)
-                    
-                    print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
-                    
-                    if len(self.batch_buffer) >= self.batch_size:
-                        self.flush_batch()
-                        
-                except Exception as e:
-                    print(f"⚠️ Failed to process log: {raw_log} -> {e}")
-            
-            # Flush remaining
-            self.flush_batch()
-            
-            # Verification Query
-            print("\n🔎 Verifying Data in DuckDB:")
-            count = self.db.query("SELECT count(*) FROM logs")[0][0]
-            print(f"   Total Rows: {count}")
-            
-            print("   Sample Rows (Check PII Masking):")
-            samples = self.db.query("SELECT body, context FROM logs ORDER BY timestamp DESC LIMIT 3")
-            for row in samples:
-                print(f"   - Body: {row[0]}")
-                print(f"   - Context: {row[1]}")
-            
-            # Close connection to release lock
+                    if filename.endswith(".md"):
+                        # Smart Ingestion for Runbooks
+                        self.process_markdown_smart(filepath)
+                    else:
+                        # Log Processing
+                        try:
+                            # wait slightly to ensure writing is done
+                            time.sleep(0.5) 
+                            with open(filepath, 'r') as f:
+                                for line in f:
+                                    if line.strip():
+                                        self.process_raw_log(line.strip())
+                            self.flush_batch()
+                        except Exception as e:
+                            print(f"❌ Error reading log file {filepath}: {e}")
+                            
+                    # Move to processed
+                    print(f"✅ Finished {filename}, moving to processed.")
+                    try:
+                        shutil.move(filepath, processed_path)
+                    except Exception as e:
+                         print(f"⚠️ Failed to move file {filepath}: {e}")
+
+            # Safe cleanup
             self.db.close()
 
         except KeyboardInterrupt:
             print("\n🛑 Stopping worker...")
             self.flush_batch()
             self.db.close()
+            
+    def process_raw_log(self, raw_log):
+        try:
+            event = self.parse_log(raw_log)
+            # 1. Add to DuckDB Buffer (Always)
+            self.batch_buffer.append(event.model_dump())
+            
+            # 2. Add to ChromaDB Buffer (Only if Pattern Changed/Created)
+            change_type = event.context.get("change_type")
+            if change_type in ["cluster_created", "cluster_template_changed"]:
+                print(f"✨ New Pattern Discovered: {event.context['template_str']}")
+                pattern_event = LogEvent(
+                    timestamp=event.timestamp,
+                    severity=event.severity,
+                    service_name=event.service_name,
+                    body=event.context["template_str"], 
+                    context={
+                        "cluster_id": event.context["template_id"],
+                        "is_pattern": True
+                    }
+                )
+                self.log_event_buffer.append(pattern_event)
+            
+            print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
+            
+            if len(self.batch_buffer) >= self.batch_size:
+                self.flush_batch()
+        except Exception as e:
+            print(f"⚠️ Failed to process log: {raw_log} -> {e}")
 
 if __name__ == "__main__":
     ingestor = LogIngestor()

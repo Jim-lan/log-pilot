@@ -9,3 +9,6 @@ watchdog>=3.0.0
 llama-index
 llama-index-vector-stores-chroma
 llama-index-embeddings-huggingface
+openai>=1.0.0
+PyYAML>=6.0
+jinja2

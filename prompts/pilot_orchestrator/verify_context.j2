@@ -8,8 +8,9 @@ Retrieved Context:
 
 Task:
 1. Analyze if the context contains information relevant to the query.
-2. If the context is empty or irrelevant, provide feedback on what is missing.
-3. If the context is relevant, confirm it.
+2. STRICT RULE: If the user queries a specific Error Code (e.g., "503", "404"), the context MUST contain that specific code. If it contains only other codes (e.g., "400"), it is INVALID.
+3. If the context is empty or irrelevant, provide feedback on what is missing.
+4. If the context is relevant, confirm it.
 
 Output Format (JSON):
 {

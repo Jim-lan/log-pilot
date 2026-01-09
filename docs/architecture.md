@@ -231,7 +231,37 @@ graph TD
     end
 ```
 
-## 6. Storage Optimization Strategy
+## 6. Smart Runbook Ingestion (The Reader Agent) 🧠📘
+
+While `drain3` handles structured logs, **Technical Runbooks** (Markdown/PDF) require a different approach. We employ an **AI Reader Agent** to de-fragment and ingest this static knowledge.
+
+### A. The Problem: "Fragmented Knowledge"
+A runbook often mentions "Error 503" in multiple places:
+1.  **Table of Contents**: Lists it.
+2.  **Symptoms Section**: Describes what it looks like.
+3.  **Fix Section**: Describes how to solve it.
+
+Standard **Chunking** (splitting text by 500 characters) fails here. It creates 3 separate, incomplete vectors. If you search "How to fix 503", you might get the symptoms card but not the fix card.
+
+### B. The Solution: "Smart Synthesis"
+The **Ingestion Worker** uses a 2-Pass LLM Strategy:
+
+1.  **Pass 1: Discovery (The Scanner)**
+    *   The Agent scans the document to identify **Key Topics** (e.g., `["Error 503", "Auth Token Expired"]`).
+    *   It ignores generic text.
+
+2.  **Pass 2: Synthesis (The Researcher)**
+    *   For *each* topic, the Agent re-reads the *entire* document.
+    *   It extracts all relevant clauses (Symptoms + Cause + Fix) from scattered sections.
+    *   It synthesizes a **Single Knowledge Card**.
+
+### C. The Result: "High-Quality Vectors"
+The Vector DB stores the **Synthesized Card**, not the raw text.
+*   **Query**: "How to fix 503?"
+*   **Retrieved Vector**: A complete mini-guide containing the definition AND the fix.
+*   **Outcome**: The RAG Agent answers correctly with full context.
+
+## 7. Storage Optimization Strategy
 
 The current architecture prioritizes **simplicity and context** for the LLM by storing full log bodies. However, for high-volume production environments, a **Log Normalization** strategy is designed and feasible.
 
@@ -251,7 +281,7 @@ The current architecture prioritizes **simplicity and context** for the LLM by s
 -   **Cons**: Reconstruction overhead, complexity in search (cannot grep raw text).
 -   **Feasibility**: Verified via `tests/check_drain3.py` that `drain3` supports parameter extraction.
 
-## 7. Vector DB Usage Scenarios
+## 8. Vector DB Usage Scenarios
 
 The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when the user's question is **vague, qualitative, or pattern-based**.
 
@@ -280,7 +310,7 @@ The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when th
     2.  **Generate SQL**: `SELECT count(*) FROM logs WHERE severity='ERROR' AND timestamp > now() - INTERVAL 1 HOUR`.
     3.  **Execute**: Runs directly on DuckDB. Vector DB is bypassed completely.
 
-## 8. Production Data Architecture: Stateless on S3
+## 9. Production Data Architecture: Stateless on S3
 
 In our current **Demo/MVP** environment, we ingest logs into a local DuckDB file (`logs.duckdb`). In a **Real-World Production** environment, we recommend a **Stateless Architecture** that queries data directly where it lives (e.g., S3), avoiding data duplication.
 
@@ -325,7 +355,7 @@ To transition LogPilot to this architecture:
 
 This allows LogPilot to become a **Zero-ETL** agent, providing intelligence on top of your existing Data Lake.
 
-## 9. Cloud-Native Adaptation: AWS CloudWatch ☁️
+## 10. Cloud-Native Adaptation: AWS CloudWatch ☁️
 
 For environments where logs are stored in **AWS CloudWatch Logs** (e.g., AWS Glue jobs), we can adapt LogPilot to query them directly without ingestion, acting as a smart UI over the CloudWatch API.
 
@@ -370,7 +400,7 @@ If the user asks a qualitative question ("Why did the job fail?"), we use a **Hy
 
 This approach achieves **Zero Data Duplication** while leveraging LogPilot's agentic capabilities.
 
-## 10. Design Considerations & Trade-offs ⚖️
+## 11. Design Considerations & Trade-offs ⚖️
 
 This section summarizes the key architectural decisions to help stakeholders understand "Why" we built it this way.
 
