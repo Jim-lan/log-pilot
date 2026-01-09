@@ -52,3 +52,12 @@ This document tracks identified architectural risks, performance trade-offs, and
     *   Add "Thumbs Up/Down" to UI.
     *   If user corrects the agent (e.g., "No, I wanted a search, not SQL"), store this as a negative example.
     *   Inject these examples into the Router prompt dynamically.
+
+### E. The Summarizer Agent
+*   **Goal**: Prevent token overflow when using **Window Retrieval** (Gap 2 solution).
+*   **The Issue**: Fetching windows (+/- 30s) per log multiplies context size by ~10x.
+*   **Design**:
+    *   **Trigger**: If `len(retrieved_context) > 4000 tokens`.
+    *   **Action**: Invoke a lightweight LLM agent to "Compress" the logs into a summary.
+    *   **Prompt**: "Read these 50 log lines. Summarize the timeline of failure. Remove noise."
+    *   **Benefit**: Allows fetching 50+ matches without hitting the 8k limit of Llama 3.

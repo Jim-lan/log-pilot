@@ -12,6 +12,8 @@ from services.pilot_orchestrator.src.tools.sql_tool import SQLGenerator
 from services.pilot_orchestrator.src.tools.web_search import WebSearchTool
 from services.knowledge_base.src.store import KnowledgeStore
 from shared.db.duckdb_client import DuckDBConnector
+from datetime import datetime, timedelta
+import re
 
 # Initialize Shared Components
 llm_client = LLMClient()
@@ -181,6 +183,22 @@ def validate_sql(state: AgentState) -> AgentState:
             state["sql_valid"] = True
             state["sql_error"] = None
             print(f"✅ SQL Validated: {sql}")
+
+        except Exception as e_sql:
+            # 3. Schema Injection for Repair Logic
+            # If validatio fails (e.g. Column not found), we fetch the schema 
+            # and append it to the error so the Repair Agent knows the truth.
+            try:
+                # PRAGMA table_info returns: (cid, name, type, notnull, dflt_value, pk)
+                schema_rows = db.query("PRAGMA table_info(logs)")
+                valid_cols = [row[1] for row in schema_rows]
+                schema_hint = f"\nAvailable Columns in 'logs': {valid_cols}"
+            except Exception as e_schema:
+                schema_hint = f" (Failed to fetch schema: {e_schema})"
+            
+            error_msg = f"{str(e_sql)}{schema_hint}"
+            raise Exception(error_msg)
+
         finally:
             db.close()
     except Exception as e:
@@ -297,32 +315,55 @@ def retrieve_context(state: AgentState) -> AgentState:
             context_parts.extend(knowledge_cards)
             context_parts.append("\n")
 
-        # 3. Query DuckDB for recent logs (if patterns found)
+        # 3. Query DuckDB for ANCHOR matches and fetch WINDOWS
         if template_ids:
             try:
                 db = DuckDBConnector(read_only=True)
                 # Create a parameterized query for IN clause
                 placeholders = ','.join(['?'] * len(template_ids))
                 
-                # We query the 'context' JSON column for the template_id
-                sql = f"""
+                # Fetch ANCHORS (Limit reduced to 5 to allow for window expansion)
+                sql_anchors = f"""
                     SELECT timestamp, service_name, severity, body 
                     FROM logs 
                     WHERE json_extract_string(context, '$.template_id') IN ({placeholders})
                     ORDER BY timestamp DESC 
-                    LIMIT 20
+                    LIMIT 5
                 """
                 
-                logs = db.query(sql, template_ids)
-                db.close()
+                anchor_logs = db.query(sql_anchors, template_ids)
                 
                 context_parts.append(f"### 🔍 Found {len(patterns)} relevant log patterns:")
                 for p in patterns:
                     context_parts.append(f"- {p}")
                 
-                context_parts.append(f"\n### 📋 Recent Log Matches ({len(logs)} entries):")
-                for log in logs:
-                    context_parts.append(f"[{log[0]}] {log[1]} ({log[2]}): {log[3]}")
+                if anchor_logs:
+                    context_parts.append(f"\n### 📋 Log Windows (Causal Context +/- 30s):")
+                    
+                    for i, anchor in enumerate(anchor_logs):
+                        ts = anchor[0]
+                        # DuckDB returns datetime objects
+                        start_time = ts - timedelta(seconds=30)
+                        end_time = ts + timedelta(seconds=30)
+                        
+                        # Fetch Window
+                        sql_window = """
+                            SELECT timestamp, service_name, severity, body 
+                            FROM logs 
+                            WHERE timestamp BETWEEN ? AND ?
+                            ORDER BY timestamp ASC
+                        """
+                        window_logs = db.query(sql_window, [start_time, end_time])
+                        
+                        context_parts.append(f"\n**Window #{i+1} around {ts}**")
+                        for log in window_logs:
+                            # Highlight the anchor log
+                            marker = "📌" if log[0] == ts else "  "
+                            context_parts.append(f"{marker} [{log[0]}] {log[1]} ({log[2]}): {log[3]}")
+                else:
+                    context_parts.append("\nNo recent logs found matching these patterns.")
+
+                db.close()
                     
             except Exception as e:
                 print(f"⚠️ Failed to fetch logs for patterns: {e}")

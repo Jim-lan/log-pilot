@@ -12,9 +12,9 @@
 
 ## 3. Code Organization
 **Observation**: Legacy `agent.py` existed alongside `graph.py`.
-*   **Status**: [RESOLVED]. Renamed to `agent_legacy.py` to prevent confusion.
+*   **Status**: [RESOLVED]. Renamed to `agent_legacy.py` and subsequently DELETED as unused code.
 **Observation**: Test files inside `src/`.
-*   **Status**: [OPEN]. Cleanup task pending.
+*   **Status**: [RESOLVED]. Verification confirmed tests are correctly located in `tests/`. No action needed.
 
 ## 4. Documentation
 **Observation**: Documentation was fragmented.

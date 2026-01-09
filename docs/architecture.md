@@ -146,7 +146,7 @@ The system is composed of **10 distinct Nodes (Agents)**, each with a specific r
 | **1. Query Rewriter** | `rewrite_query` | 🤖 LLM | Transforms raw user input (e.g., "what about errors?") into a standalone, context-aware query using chat history. |
 | **2. Intent Router** | `classify_intent` | 🤖 LLM (CoT) | **Chain of Thought**: Analyzes if query needs *Data* (SQL) or *Knowledge* (RAG) before deciding. Prevents "404=Duration" hallucinations. |
 | **3. SQL Expert** | `generate_sql` | 🤖 LLM | Translates natural language into dialect-specific SQL (DuckDB). Enforces syntax rules. |
-| **4. SQL Critic** | `validate_sql` | ⚙️ Code | Deterministic validation. Checks for `department` groupings, banned keywords (`SYSDATE`), and runs `EXPLAIN`. |
+| **4. SQL Critic** | `validate_sql` | ⚙️ Code | Deterministic validation. Checks for syntax (`EXPLAIN`) and **Schema Columns** (injects valid columns on error). |
 | **5. Repair Agent** | `fix_sql` | 🤖 LLM | Receives error logs from the Critic and attempts to fix the SQL syntax. |
 | **6. Tool Executor** | `execute_sql` | ⚙️ Code | Runs the valid SQL against `logs.duckdb` and captures the result (or runtime error). |
 | **7. RAG Retriever** | `retrieve_context` | ⚙️ Code | Queries `ChromaDB` for patterns, then fetches matching full logs from DuckDB. |
@@ -208,7 +208,8 @@ If RAG is selected, we execute a specialized 3-step process:
 3.  **Context Verification (The Critic)**:
     *   An LLM Critic reads the fetched logs.
     *   **Logic**: "Does this log actually answer the user's question?"
-    *   **Strict Rule**: If the user asks for "Error 502", the system *must* have found 502. If it found "400", the verification fails to prevent hallucination.
+    *   **Strict Rule**: If the user asks for "Error 502", the system *must* have found 502.
+    *   **Window Retrieval**: If a match is found, we fetch the surrounding **+/- 30s** of logs to provide causal context (e.g., Timeout -> Error) to the LLM.
 
 ### C. The Fallback (Web Search) 🌍
 If the RAG pipeline fails (e.g., no patterns found, or Critic rejects them), the system triggers a **Web Search**:
