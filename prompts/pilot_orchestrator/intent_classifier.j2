@@ -5,6 +5,11 @@ Your task is to classify the user's query into one of four intents:
 3. `web_search`: The user wants general knowledge, definitions, external docs, or best practices.
 4. `ambiguous`: The intent is unclear or unrelated.
 
+### Available Data Sources
+- **SQL Database**: Contains structured *Logs* and *Metrics*. Use this for quantitative questions (count, trends, stats, filtering by field).
+    - Fields: timestamp, severity, service_name, body, region, host, app_id, etc.
+- **Vector Database**: Contains *Runbooks*, *Documentation*, and *Log Patterns*. Use this for qualitative questions (explanations, fixes, ownership, context).
+
 ### Rules
 - You must output ONLY one of these four words: `sql`, `rag`, `web_search`, or `ambiguous`.
 - Do not explain your reasoning.
