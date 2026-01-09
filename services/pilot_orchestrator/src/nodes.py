@@ -99,11 +99,27 @@ def classify_intent(state: AgentState) -> AgentState:
             "intent_classifier",
             query=query
         )
-        # Use 'fast' model for classification to keep latency low
-        intent = llm_client.generate(prompt, model_type="fast").strip().lower()
+        # Use 'fast' model for classification
+        response = llm_client.generate(prompt, model_type="fast")
         
+        import json
+        import re
+        
+        # Robust JSON extraction
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            response_json = json.loads(json_match.group(0))
+            intent = response_json.get("intent", "ambiguous").lower()
+            reasoning = response_json.get("reasoning", "No reasoning provided.")
+            print(f"🤔 Intent Reasoning: {reasoning}")
+        else:
+            # Fallback to plain text if JSON fails (backward compatibility/safety)
+            intent = response.strip().lower()
+            print(f"⚠️ Intent Parsing: JSON not found, using raw text: {intent}")
+
         # Validate intent
-        if intent not in ["sql", "rag", "ambiguous"]:
+        valid_intents = ["sql", "rag", "web_search", "ambiguous"]
+        if intent not in valid_intents:
             intent = "ambiguous"
             
         state["intent"] = intent
@@ -111,7 +127,7 @@ def classify_intent(state: AgentState) -> AgentState:
         print(f"❌ Intent Classification Failed: {e}")
         state["intent"] = "ambiguous" # Fail safe
     
-    print(f"🤔 Intent Classified: {state['intent']}")
+    print(f"📍 Final Intent: {state['intent']}")
     return state
 
 def generate_sql(state: AgentState) -> AgentState:

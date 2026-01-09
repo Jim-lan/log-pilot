@@ -10,31 +10,69 @@ Your task is to classify the user's query into one of four intents:
     - Fields: timestamp, severity, service_name, body, region, host, app_id, etc.
 - **Vector Database**: Contains *Runbooks*, *Documentation*, and *Log Patterns*. Use this for qualitative questions (explanations, fixes, ownership, context).
 
-### Rules
-- You must output ONLY one of these four words: `sql`, `rag`, `web_search`, or `ambiguous`.
-- Do not explain your reasoning.
-- `sql`: "count", "stats", "logs", "error rate", "last 10", "show me errors".
-- `rag`: "internal runbook", "who owns service X", "why is X failing", "how to fix error 503", "what does error 502 mean".
-- `web_search`: "what is HTTP 500", "best practices for redis", "documentation for boto3".
+### Instructions
+1.  **Analyze** the user's query.
+2.  **Determine Data Source**:
+    *   Does it need *Quantitative Data* (Logs, Metrics, Counts)? -> `sql`
+    *   Does it need *Qualitative Data* (Definitions, Fixes, Explanations)? -> `rag`
+    *   Is it general knowledge? -> `web_search`
+3.  **Output JSON**:
+    ```json
+    {
+      "reasoning": "Brief explanation of why this source was chosen.",
+      "intent": "sql" | "rag" | "web_search" | "ambiguous"
+    }
+    ```
 
 ### Examples
 Q: "How many errors in auth-service?"
-A: sql
+A:
+{
+  "reasoning": "User asks for a count ('How many') of errors. This requires aggregating structured log data.",
+  "intent": "sql"
+}
 
 Q: "Why is the payment service failing?"
-A: rag
+A:
+{
+  "reasoning": "User asks for an explanation ('Why') of a failure. This requires retrieving context or runbooks.",
+  "intent": "rag"
+}
+
+Q: "What is error code 404?"
+A:
+{
+  "reasoning": "User asks for a definition of an error code. This is qualitative knowledge, not a search for specific log entries.",
+  "intent": "rag"
+}
 
 Q: "What is an HTTP 503 error?"
-A: web_search
+A:
+{
+  "reasoning": "User asks for a general definition of a standard HTTP error. This is external knowledge.",
+  "intent": "web_search"
+}
 
 Q: "Show me the last 10 logs"
-A: sql
+A:
+{
+  "reasoning": "User asks to list specific log entries ('last 10'). This is a direct database query.",
+  "intent": "sql"
+}
 
 Q: "How do I restart the pod?"
-A: rag
+A:
+{
+  "reasoning": "User asks for instructions ('How do I'). This is internal knowledge or a runbook.",
+  "intent": "rag"
+}
 
 Q: "Best practices for DuckDB indexes"
-A: web_search
+A:
+{
+  "reasoning": "User asks for general best practices for a technology. This is external knowledge.",
+  "intent": "web_search"
+}
 
 Q: "Hello"
 A: ambiguous
