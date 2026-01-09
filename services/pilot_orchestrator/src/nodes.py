@@ -9,6 +9,7 @@ from services.pilot_orchestrator.src.state import AgentState
 from shared.llm.client import LLMClient
 from shared.llm.prompt_factory import PromptFactory
 from services.pilot_orchestrator.src.tools.sql_tool import SQLGenerator
+from services.pilot_orchestrator.src.tools.web_search import WebSearchTool
 from services.knowledge_base.src.store import KnowledgeStore
 from shared.db.duckdb_client import DuckDBConnector
 
@@ -18,6 +19,7 @@ prompt_factory = PromptFactory()
 # Lazy load tools to avoid init issues during testing or startup if DB is locked
 _sql_tool = None
 _kb_store = None
+_web_tool = None
 
 def get_sql_tool():
     global _sql_tool
@@ -30,6 +32,14 @@ def get_kb_store():
     if _kb_store is None:
         _kb_store = KnowledgeStore()
     return _kb_store
+
+def get_web_tool():
+    global _web_tool
+    if _web_tool is None:
+        _web_tool = WebSearchTool()
+    return _web_tool
+
+
 
 
 
@@ -310,8 +320,14 @@ def synthesize_answer(state: AgentState) -> AgentState:
              context = f"SQL Error: {state['sql_error']}"
     elif intent == "rag":
         context = f"Retrieved Context: {state.get('rag_context')}"
+    elif intent == "web_search":
+        context = f"Web Search Results: {state.get('web_results')}"
     else:
-        context = "Ambiguous intent."
+        # Check if we have web results from fallback
+        if state.get("web_results"):
+             context = f"Web Search Results (Fallback): {state.get('web_results')}"
+        else:
+             context = "Ambiguous intent."
 
     # Format Chat History (still useful for tone/continuity)
     messages = state.get("messages", [])
@@ -458,5 +474,23 @@ def validate_answer(state: AgentState) -> AgentState:
     except Exception as e:
         print(f"❌ Answer Validation Failed: {e}")
         state["answer_valid"] = True # Fail open
+        
+    return state
+
+def perform_web_search(state: AgentState) -> AgentState:
+    """
+    Performs a web search using the rewritten query.
+    This acts as a fallback for RAG or for general questions.
+    """
+    query = state.get("rewritten_query", state["query"])
+    print(f"🌍 Performing Web Search for: {query}")
+    
+    try:
+        results = get_web_tool().search(query)
+        state["web_results"] = results
+        print("✅ Web Search Completed.")
+    except Exception as e:
+        print(f"❌ Web Search Failed: {e}")
+        state["web_results"] = "Web search failed."
         
     return state

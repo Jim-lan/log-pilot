@@ -14,7 +14,9 @@ class AgentState(TypedDict):
     sql_error: Optional[str]
     
     # RAG Path
+    # RAG Path
     rag_context: Optional[str]
+    web_results: Optional[str]
     
     # Final Output
     final_answer: Optional[str]

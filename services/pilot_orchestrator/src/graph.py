@@ -10,7 +10,8 @@ from services.pilot_orchestrator.src.nodes import (
     validate_sql,
     fix_sql,
     verify_context,
-    validate_answer
+    validate_answer,
+    perform_web_search
 )
 
 def route_intent(state: AgentState):
@@ -22,6 +23,8 @@ def route_intent(state: AgentState):
         return "generate_sql"
     elif intent == "rag":
         return "retrieve_context"
+    elif intent == "web_search":
+        return "perform_web_search"
     else:
         return "synthesize_answer" # Handle ambiguous or direct chat
 
@@ -52,7 +55,8 @@ def check_context_validity(state: AgentState):
         # Or just fail over to synthesize_answer to say "I couldn't find anything"
         return "rewrite_query" 
     
-    return "synthesize_answer"
+    # Fallback to Web Search if RAG completely fails
+    return "perform_web_search"
 
 def check_answer_validity(state: AgentState):
     """
@@ -81,6 +85,7 @@ workflow.add_node("retrieve_context", retrieve_context)
 workflow.add_node("verify_context", verify_context)
 workflow.add_node("synthesize_answer", synthesize_answer)
 workflow.add_node("validate_answer", validate_answer)
+workflow.add_node("perform_web_search", perform_web_search)
 
 # Set Entry Point
 workflow.set_entry_point("rewrite_query")
@@ -96,9 +101,12 @@ workflow.add_conditional_edges(
     {
         "generate_sql": "generate_sql",
         "retrieve_context": "retrieve_context",
+        "perform_web_search": "perform_web_search",
         "synthesize_answer": "synthesize_answer"
     }
 )
+
+workflow.add_edge("perform_web_search", "synthesize_answer")
 
 # 2. SQL Path (with Validation Loop)
 workflow.add_edge("generate_sql", "validate_sql")
