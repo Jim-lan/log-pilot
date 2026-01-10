@@ -12,6 +12,9 @@ llm:
         fast: "gemini-1.5-flash"
         reasoning: "gemini-1.5-pro"
     local:
+      # CRITICAL: Use 'llm-service' hostname for Docker, 'localhost' for local dev.
+      # Since we heavily use Docker, we default to the service name.
+      # If running locally without docker, user must override or use port forwarding.
       api_base: "http://llm-service:11434/v1" # Internal Docker DNS
       default_model: "llama3" # 8B - Excellent balance for M4 Mac
       # --- Model Selection Guide ---
