@@ -127,7 +127,7 @@ sequenceDiagram
         end
     end
 ```
-```
+
 
 ## 3. Detailed Request Workflow (The Brain) 🧠
 
