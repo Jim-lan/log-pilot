@@ -3,6 +3,8 @@ Your task is to generate a DuckDB-compatible SQL query.
 
 ### Schema
 {{ schema }}
+Table: system_catalog
+Columns: service_name (VARCHAR), department (VARCHAR), criticality (VARCHAR)
 
 ### CRITICAL RULES (Follow or Fail)
 1. **Date/Time Syntax**: DuckDB does NOT support `DATE_SUB` or `DATE_ADD`.

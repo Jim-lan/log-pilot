@@ -65,6 +65,18 @@ def clean_environment():
     os.makedirs(TARGET_DIR, exist_ok=True)
     os.makedirs(STATE_DIR, exist_ok=True)
     
+    # 4. Ensure System Catalog Exists 
+    # DuckDBConnector looks for data/system_catalog.csv. 
+    # We copy it from data/source if it's there.
+    catalog_source = os.path.join(SOURCE_DIR, "system_catalog.csv")
+    catalog_target = os.path.join(DATA_DIR, "system_catalog.csv")
+    
+    if os.path.exists(catalog_source):
+        print(f"   Copying {catalog_source} -> {catalog_target}")
+        shutil.copy(catalog_source, catalog_target)
+    else:
+        print(f"   ⚠️ Warning: System catalog not found at {catalog_source}")
+
     print("✅ Environment Cleaned.")
 
 def generate_mock_logs():
