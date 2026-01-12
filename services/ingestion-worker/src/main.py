@@ -112,37 +112,12 @@ class FileWatcherConsumer:
             
         return False
 
-class MockKafkaConsumer:
-    """Simulates a Kafka Consumer yielding raw log lines."""
-    def __init__(self):
-        now = datetime.now().strftime("%Y-%m-%d")
-        self.logs = [
-            f"{now} 10:00:01 INFO payment-service: Payment processed for user_id=101 amount=50.00",
-            f"{now} 10:00:02 ERROR auth-service: Login failed for user=admin ip=192.168.1.5 reason=bad_password",
-            f"{now} 10:00:03 WARN db-service: Slow query detected on table=users duration=500ms",
-            f"{now} 10:00:04 INFO payment-service: Payment processed for user_id=102 amount=25.00",
-            f"{now} 10:00:05 ERROR auth-service: Login failed for user=guest ip=10.0.0.1 reason=locked_out",
-            # PII Examples
-            f"{now} 10:00:06 INFO email-service: Sending email to john.doe@example.com",
-            f"{now} 10:00:07 INFO billing-service: Charging card 4111-1111-1111-1111 for $99.99"
-        ]
-
-    def __iter__(self):
-        for log in self.logs:
-            time.sleep(0.2) # Simulate network latency
-            yield log
-
 class LogIngestor:
     def __init__(self):
         print("DEBUG: Initializing LogIngestor...")
         
-        source_type = os.getenv("INGESTION_SOURCE", "MOCK").upper()
-        if source_type == "FILE":
-            print("DATA SOURCE: 📁 File Processor (Real-Time Watcher)")
-            self.consumer = FileWatcherConsumer()
-        else:
-            print("DATA SOURCE: 🤖 Mock Generator (In-Memory)")
-            self.consumer = MockKafkaConsumer()
+        print("DATA SOURCE: 📁 File Processor (Real-Time Watcher)")
+        self.consumer = FileWatcherConsumer()
             
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
         print("DEBUG: Initializing KnowledgeStore...")
@@ -335,39 +310,32 @@ class LogIngestor:
         self.janitor.run_cleanup(retention_days=30)
  
         try:
-            if isinstance(self.consumer, MockKafkaConsumer):
-                # Mock path (logs only)
-                for raw_log in self.consumer:
-                    self.process_raw_log(raw_log)
-                self.flush_batch()
+            # File Watcher Path (Logs + Markdown)
+            for filepath, processed_path in self.consumer:
+                filename = os.path.basename(filepath)
                 
-            else:
-                # File Watcher Path (Logs + Markdown)
-                for filepath, processed_path in self.consumer:
-                    filename = os.path.basename(filepath)
-                    
-                    if filename.endswith(".md"):
-                        # Smart Ingestion for Runbooks
-                        self.process_markdown_smart(filepath)
-                    else:
-                        # Log Processing
-                        try:
-                            # wait slightly to ensure writing is done
-                            time.sleep(0.5) 
-                            with open(filepath, 'r') as f:
-                                for line in f:
-                                    if line.strip():
-                                        self.process_raw_log(line.strip())
-                            self.flush_batch()
-                        except Exception as e:
-                            print(f"❌ Error reading log file {filepath}: {e}")
-                            
-                    # Move to processed
-                    print(f"✅ Finished {filename}, moving to processed.")
+                if filename.endswith(".md"):
+                    # Smart Ingestion for Runbooks
+                    self.process_markdown_smart(filepath)
+                else:
+                    # Log Processing
                     try:
-                        shutil.move(filepath, processed_path)
+                        # wait slightly to ensure writing is done
+                        time.sleep(0.5) 
+                        with open(filepath, 'r') as f:
+                            for line in f:
+                                if line.strip():
+                                    self.process_raw_log(line.strip())
+                        self.flush_batch()
                     except Exception as e:
-                         print(f"⚠️ Failed to move file {filepath}: {e}")
+                        print(f"❌ Error reading log file {filepath}: {e}")
+                        
+                # Move to processed
+                print(f"✅ Finished {filename}, moving to processed.")
+                try:
+                    shutil.move(filepath, processed_path)
+                except Exception as e:
+                        print(f"⚠️ Failed to move file {filepath}: {e}")
 
             # Safe cleanup
             self.db.close()

@@ -101,6 +101,7 @@ sequenceDiagram
     opt If Runbook/Doc
         PII->>Chroma: Embed & Store
     end
+```
 
 ### C. Proactive Alert Flow (Sentry)
 
@@ -425,7 +426,6 @@ Q: "Show me the last 20 errors"
 A: fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20
 ```
 
-#### 2. CloudWatch Connector (The "Executor")
 #### 2. CloudWatch Connector (The "Executor")
 We implement a connector using the **AWS SDK (Boto3)** to execute the generated query. This connector is responsible for:
 1.  **Initiating Queries**: Sending the `start_query` request to the CloudWatch Logs API.
