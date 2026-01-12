@@ -121,6 +121,39 @@ def get_chat_history():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/alerts")
+def get_alerts():
+    """
+    Retrieves unread alerts.
+    """
+    try:
+        from shared.db.duckdb_client import DuckDBConnector
+        db = DuckDBConnector(read_only=False) # Need write access?? No, read only is fine for select but we might need lock management
+        # Actually DuckDBConnector handles connection creation. 
+        # But get_history uses _get_history_connection which is independent of read_only flag for main DB?
+        # Yes, _get_history_connection just opens history.duckdb.
+        # But wait, DuckDBConnector init calls _init_alerts_schema logic which uses _get_history_connection.
+        # So it's safe.
+        alerts = db.get_alerts()
+        db.close()
+        return alerts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/alerts/{alert_id}/read")
+def read_alert(alert_id: str):
+    """
+    Marks an alert as read.
+    """
+    try:
+        from shared.db.duckdb_client import DuckDBConnector
+        db = DuckDBConnector(read_only=False)
+        db.mark_alert_read(alert_id)
+        db.close()
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/metrics")
 def get_metrics():
     """

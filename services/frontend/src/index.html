@@ -27,6 +27,9 @@
                 <h3>Views</h3>
                 <div class="nav-item active" onclick="switchView('chat')">💬 Chat</div>
                 <div class="nav-item" onclick="switchView('performance')">📊 Performance</div>
+                <div class="nav-item" onclick="switchView('alerts')" id="nav-alerts">
+                    🔔 Alerts <span class="badge" id="alert-count" style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:0.8em; display:none;">0</span>
+                </div>
             </div>
 
             <div class="nav-section">
@@ -145,6 +148,22 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </main>
+
+        <!-- Alerts View -->
+        <main class="chat-area hidden" id="alerts-view">
+            <header class="chat-header">
+                <div class="header-info">
+                    <h2>Active Alerts</h2>
+                    <p>Sentry Proactive Notifications</p>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn" title="Refresh" onclick="checkAlerts()">🔄</button>
+                </div>
+            </header>
+            <div class="metrics-container" id="alerts-list" style="padding: 2rem; overflow-y: auto;">
+                 <!-- Populated by JS -->
             </div>
         </main>
     </div>

@@ -18,6 +18,7 @@ class DuckDBConnector:
              self._init_schema()
              
         self._init_history_schema()
+        self._init_alerts_schema()
         
         # Auto-load catalog if present
         if os.path.exists("data/system_catalog.csv"):
@@ -93,6 +94,25 @@ class DuckDBConnector:
             conn.close()
         except Exception as e:
             print(f"⚠️ Failed to init history schema: {e}")
+
+    def _init_alerts_schema(self):
+        """Initializes the alerts table."""
+        try:
+            conn = self._get_history_connection() # Alerts live in history DB (user facing)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS alerts (
+                    id VARCHAR,
+                    timestamp TIMESTAMP,
+                    severity VARCHAR,
+                    service VARCHAR,
+                    message VARCHAR,
+                    analysis VARCHAR,
+                    is_read BOOLEAN DEFAULT FALSE
+                );
+            """)
+            conn.close()
+        except Exception as e:
+            print(f"⚠️ Failed to init alerts schema: {e}")
             
     def save_message(self, session_id: str, role: str, content: str):
         """Saves a chat message to history DB."""
@@ -121,6 +141,47 @@ class DuckDBConnector:
         except Exception as e:
             print(f"❌ Failed to get history: {e}")
             return []
+        finally:
+            if conn: conn.close()
+
+    def get_alerts(self, unread_only: bool = True):
+        """Retrieves alerts from history DB."""
+        conn = None
+        try:
+            conn = self._get_history_connection()
+            query = "SELECT id, timestamp, severity, service, message, analysis, is_read FROM alerts"
+            if unread_only:
+                query += " WHERE is_read = FALSE"
+            query += " ORDER BY timestamp DESC"
+            
+            rows = conn.execute(query).fetchall()
+            return [
+                {
+                    "id": row[0], 
+                    "timestamp": row[1], 
+                    "severity": row[2], 
+                    "service": row[3], 
+                    "message": row[4], 
+                    "analysis": row[5], 
+                    "is_read": row[6]
+                } 
+                for row in rows
+            ]
+        except Exception as e:
+            print(f"❌ Failed to get alerts: {e}")
+            return []
+        finally:
+            if conn: conn.close()
+
+    def mark_alert_read(self, alert_id: str):
+        """Marks an alert as read."""
+        conn = None
+        try:
+            conn = self._get_history_connection()
+            conn.execute("UPDATE alerts SET is_read = TRUE WHERE id = ?", [alert_id])
+        except Exception as e:
+            print(f"❌ Failed to mark alert read: {e}")
+            raise e
         finally:
             if conn: conn.close()
 

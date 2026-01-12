@@ -197,21 +197,28 @@ async function loadHistory() {
 function switchView(viewName) {
     const chatView = document.getElementById('chat-view');
     const perfView = document.getElementById('performance-view');
+    const alertsView = document.getElementById('alerts-view');
     const navItems = document.querySelectorAll('.nav-item');
 
     // Update Nav
     navItems.forEach(item => item.classList.remove('active'));
     if (viewName === 'chat') navItems[0].classList.add('active');
     if (viewName === 'performance') navItems[1].classList.add('active');
+    if (viewName === 'alerts') navItems[2].classList.add('active');
 
     // Update View
+    chatView.classList.add('hidden');
+    perfView.classList.add('hidden');
+    alertsView.classList.add('hidden');
+
     if (viewName === 'chat') {
         chatView.classList.remove('hidden');
-        perfView.classList.add('hidden');
-    } else {
-        chatView.classList.add('hidden');
+    } else if (viewName === 'performance') {
         perfView.classList.remove('hidden');
-        loadMetrics(); // Auto-load
+        loadMetrics();
+    } else if (viewName === 'alerts') {
+        alertsView.classList.remove('hidden');
+        checkAlerts();
     }
 }
 
@@ -252,8 +259,69 @@ async function loadMetrics() {
     }
 }
 
+async function checkAlerts() {
+    try {
+        const response = await fetch('http://localhost:8000/alerts');
+        const alerts = await response.json();
+        const alertCount = document.getElementById('alert-count');
+        const alertsList = document.getElementById('alerts-list');
+
+        // Update Badge
+        if (alerts.length > 0) {
+            alertCount.textContent = alerts.length;
+            alertCount.style.display = 'inline-block';
+        } else {
+            alertCount.style.display = 'none';
+        }
+
+        // populate list
+        if (alertsList && !document.getElementById('alerts-view').classList.contains('hidden')) {
+            alertsList.innerHTML = '';
+            if (alerts.length === 0) {
+                alertsList.innerHTML = '<div style="color:#9ca3af; text-align:center;">No active alerts. System healthy. 🟢</div>';
+                return;
+            }
+
+            alerts.forEach(alert => {
+                const card = document.createElement('div');
+                card.className = 'metric-card';
+                card.style.cssText = "background: rgba(239, 68, 68, 0.1); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); margin-bottom: 1rem;";
+
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <div>
+                            <h3 style="color: #f87171; font-size: 1.1em; margin-bottom: 0.5rem;">🚨 ${alert.service} Error Spike</h3>
+                            <div style="color: #d1d5db; margin-bottom: 0.5rem;">${alert.message}</div>
+                            <div style="background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 4px; font-size: 0.9em; color: #d1d5db;">
+                                💡 <strong>Analysis:</strong> ${alert.analysis}
+                            </div>
+                            <div style="margin-top:0.5rem; font-size: 0.8em; color: #6b7280;">${new Date(alert.timestamp).toLocaleString()}</div>
+                        </div>
+                        <button onclick="markAlertRead('${alert.id}')" style="background:transparent; border:1px solid #f87171; color:#f87171; padding:0.25rem 0.5rem; border-radius:4px; cursor:pointer;">Dismiss</button>
+                    </div>
+                 `;
+                alertsList.appendChild(card);
+            });
+        }
+
+    } catch (e) {
+        console.error("Alert check failed", e);
+    }
+}
+
+async function markAlertRead(id) {
+    try {
+        await fetch(`http://localhost:8000/alerts/${id}/read`, { method: 'POST' });
+        checkAlerts(); // Refresh
+    } catch (e) {
+        console.error("Failed to mark read", e);
+    }
+}
+
 // Start polling
 checkHealth();
 loadHistory();
+checkAlerts();
+setInterval(checkAlerts, 5000); // 5s poll for demo
 
 chatForm.addEventListener('submit', handleSubmit);
