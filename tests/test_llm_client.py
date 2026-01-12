@@ -1,5 +1,11 @@
 import pytest
+import sys
+import os
 from unittest.mock import MagicMock, patch
+
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
+
 from shared.llm.client import LLMClient
 
 @patch("shared.llm.client.openai.OpenAI")
