@@ -154,7 +154,7 @@ def run_batch_evaluation(run_id: str, limit: Optional[int]):
                     "answer": data.get("answer", ""),
                     "contexts": [metadata.get("rag_context", "")],
                     "rewritten_query": metadata.get("rewritten_query", ""),
-                    "latency": data.get("latency", 0)
+                    "latency": metadata.get("latency", 0)
                 })
                 
             except Exception as e:

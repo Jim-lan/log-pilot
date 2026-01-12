@@ -30,6 +30,7 @@ class QueryResponse(BaseModel):
     sql_result: Optional[str] = None
     context: Optional[str] = None
     intent: str
+    metadata: Optional[Dict[str, Any]] = {}
 
 
 
@@ -46,6 +47,8 @@ def run_query(request: QueryRequest):
     Executes the Pilot Agent for a given query.
     """
     try:
+        import time
+        start_time = time.time()
         print("DEBUG: Fetching History...")
         # Fetch History for Context
         from shared.db.duckdb_client import DuckDBConnector
@@ -85,12 +88,20 @@ def run_query(request: QueryRequest):
         except Exception as e:
             print(f"⚠️ Failed to save history: {e}")
         
+        latency = time.time() - start_time
+        
         return QueryResponse(
             answer=answer,
             sql=final_state.get("sql_query"),
             sql_result=final_state.get("sql_result"),
             context=final_state.get("rag_context"),
-            intent=final_state.get("intent", "unknown")
+            intent=final_state.get("intent", "unknown"),
+            metadata={
+                "rewritten_query": final_state.get("rewritten_query"),
+                "latency": latency,
+                "context_feedback": final_state.get("context_feedback"),
+                "answer_feedback": final_state.get("answer_feedback")
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

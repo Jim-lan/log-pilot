@@ -86,7 +86,31 @@ class FileWatcherConsumer:
                 processed_path = os.path.join(self.processed_dir, f"{base}_{ts}{ext}")
 
             print(f"📖 Processing file: {filepath}")
+            
+            # Verify file stability (wait for write to finish)
+            if not self._wait_for_file_stability(filepath):
+                print(f"⚠️ Skipping unstable file: {filepath}")
+                continue
+                
             yield filepath, processed_path
+
+    def _wait_for_file_stability(self, filepath: str, timeout: int = 5) -> bool:
+        """Waits for file size to stop changing."""
+        start_time = time.time()
+        last_size = -1
+        
+        while time.time() - start_time < timeout:
+            if not os.path.exists(filepath):
+                return False
+                
+            current_size = os.path.getsize(filepath)
+            if current_size == last_size and current_size > 0:
+                return True
+                
+            last_size = current_size
+            time.sleep(0.5) 
+            
+        return False
 
 class MockKafkaConsumer:
     """Simulates a Kafka Consumer yielding raw log lines."""
@@ -172,7 +196,7 @@ class LogIngestor:
         )
 
     def flush_batch(self):
-        """Persists buffered logs to DuckDB and ChromaDB."""
+        """Persists buffered logs to DuckDB and ChromaDB with DLQ support."""
         if not self.batch_buffer:
             return
 
@@ -183,6 +207,7 @@ class LogIngestor:
             self.db.insert_batch(self.batch_buffer)
         except Exception as e:
             print(f"❌ DuckDB Insert Failed: {e}")
+            self._write_to_dlq(self.batch_buffer, "duckdb_insert_error")
 
         # 2. ChromaDB (Vector Data) - ONLY PATTERNS
         if self.log_event_buffer:
@@ -191,10 +216,28 @@ class LogIngestor:
                 self.kb.add_logs(self.log_event_buffer)
             except Exception as e:
                 print(f"❌ ChromaDB Insert Failed: {e}")
+                # We don't necessarily DLQ vector patterns as they are re-creatable, 
+                # but let's log them to be safe.
+                self._write_to_dlq([e.model_dump() for e in self.log_event_buffer], "chroma_insert_error")
 
         # Clear buffers
         self.batch_buffer = []
         self.log_event_buffer = []
+
+    def _write_to_dlq(self, data: List[Dict[str, Any]], error_type: str):
+        """Writes failed data to a Dead Letter Queue (JSON files)."""
+        dlq_dir = "data/dlq"
+        os.makedirs(dlq_dir, exist_ok=True)
+        timestamp = int(time.time())
+        filename = f"{error_type}_{timestamp}_{random.randint(1000,9999)}.json"
+        filepath = os.path.join(dlq_dir, filename)
+        
+        try:
+            with open(filepath, "w") as f:
+                json.dump(data, f, indent=2, default=str)
+            print(f"⚠️  Written {len(data)} records to DLQ: {filepath}")
+        except Exception as e:
+            print(f"💀 CRITICAL: Failed to write to DLQ: {e}")
 
     def process_markdown_smart(self, filepath: str):
         """
