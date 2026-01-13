@@ -4,10 +4,12 @@ from .validator import RegexValidator
 
 class DiscoveryAgent:
     """
-    Orchestrates the schema discovery process:
-    1. Generate Regex (LLM)
-    2. Validate Regex (Python re)
-    3. Retry if invalid (max retries)
+    Orchestrates the schema discovery process using an Agentic Feedback Loop:
+    
+    1. Generate: LLM proposes a regex pattern based on log samples.
+    2. Validate: Deterministic check (Python `re` module) against all samples to ensure High Recall.
+    3. Refine: If validation fails, the loop continues (Retries).
+       (Future improvement: Pass validation error back to LLM for smarter refinement)
     """
     def __init__(self, max_retries: int = 3):
         self.generator = RegexGenerator()

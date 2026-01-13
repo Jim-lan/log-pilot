@@ -236,8 +236,18 @@ class DuckDBConnector:
             if conn: conn.close()
             
     def load_catalog(self, csv_path: str):
-         # Simplistic pass for now
-         pass
+        """Loads a CSV catalog into the system_catalog table."""
+        try:
+             conn = self._get_connection()
+             # Use CREATE OR REPLACE to ensure fresh data on restart
+             conn.execute(f"CREATE TABLE IF NOT EXISTS system_catalog AS SELECT * FROM read_csv_auto('{csv_path}')")
+             # If table exists but we want to reload, we might need to drop or insert. 
+             # For simpler demo: 
+             conn.execute(f"CREATE OR REPLACE TABLE system_catalog AS SELECT * FROM read_csv_auto('{csv_path}')")
+             conn.close()
+             print(f"✅ Loaded System Catalog from {csv_path}")
+        except Exception as e:
+             print(f"⚠️ Failed to load catalog: {e}")
 
     def close(self):
         pass

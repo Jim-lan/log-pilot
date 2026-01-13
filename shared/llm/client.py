@@ -21,7 +21,7 @@ class LLMClient:
     Uses Model Registry for configuration.
     """
     def __init__(self, config_path: str = "config/llm_config.yaml"):
-        # Legacy config load (kept for fallback)
+        # Load file-based config (used if ModelRegistry is unavailable)
         self.config = self._load_config(config_path)
         self._clients = {} # Cache clients by base_url
         self.max_input_tokens = 4096 # Safety limit

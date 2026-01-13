@@ -130,7 +130,16 @@ class LogIngestor:
         self.llm_client = LLMClient() 
         self.batch_size = 5
         self.batch_buffer = []
-        self.log_event_buffer = [] # Buffer for LogEvent objects (needed for KB)
+        self.log_event_buffer = [] # Buffer for LogEvent objects
+        
+        # ==============================================================================
+        # ⚙️  Ingestion Pipeline Overview
+        # ==============================================================================
+        # 1. Parse: Normalize raw text into structured key-value pairs.
+        # 2. Mask: Redact sensitive info (IPs, Emails, etc.)
+        # 3. Mine: Extract structural templates (Drain3) to group similar logs.
+        # 4. Buffer & Flush: Persist to DuckDB (All Logs) and ChromaDB (Unique Patterns).
+        # ==============================================================================
 
     # ... (Keep parse_log and flush_batch methods as is) ...
     # Wait, I cannot use '...' in replacement. I must provide the full content or clever chunks. 
@@ -139,13 +148,15 @@ class LogIngestor:
 
     def parse_log(self, raw_log: str) -> LogEvent:
         """Parses, masks, and enriches a raw log line."""
-        # 1. Parse
+        # 1. Parser: Extract timestamp, severity, service, body
         parsed = self.parser.parse(raw_log)
         
-        # 2. Mask PII
+        # 2. PII Masker: Replace sensitive patterns with <REDACTED>
         masked = self.pii_masker.mask_context(parsed)
         
-        # 3. Mine Template
+        # 3. Template Miner (Drain3):
+        #    - Discovers the underlying log structure (e.g. "User * failed to login").
+        #    - Assigns a stable 'cluster_id' for grouping.
         mining_result = self.miner.mine_template(masked["body"])
         template_str = mining_result["template_mined"]
         cluster_id = mining_result["cluster_id"]

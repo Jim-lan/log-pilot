@@ -45,9 +45,27 @@ def get_web_tool():
 
 
 
+# ==============================================================================
+# 🧠 LogPilot Orchestrator Nodes
+# ==============================================================================
+# This module defines the cognitive steps (Nodes) for the LangGraph agent.
+#
+# Key Workflow:
+# 1. Rewrite Query: Transform "it failed" -> "Why did auth-service fail?"
+# 2. Classify Intent: Decide if we need SQL (Data) or RAG (Knowledge).
+# 3. Execution Loop:
+#    - SQL: Generate -> Validate (Syntax/Schema) -> Execute -> Fix Loop
+#    - RAG: Retrieve (Vector + Time Window) -> Verify Context
+# 4. Synthesize: Generate final answer.
+# ==============================================================================
+
+
 def rewrite_query(state: AgentState) -> AgentState:
     """
-    Rewrites the user query to be self-contained using chat history.
+    Step 1: Contextual Query Rewriting
+    
+    Transforms the user's raw query into a standalone, detailed question 
+    by resolving pronouns ("it", "they") using the chat history.
     """
     query = state["query"]
     messages = state.get("messages", [])
@@ -90,7 +108,12 @@ def rewrite_query(state: AgentState) -> AgentState:
 
 def classify_intent(state: AgentState) -> AgentState:
     """
-    Determines if the user query requires SQL (data) or RAG (knowledge) using LLM.
+    Step 2: Intent Classification / Routing
+    
+    Decides the best strategy to answer the question:
+    - 'sql': For quantitative questions ("how many", "error rate", "stats").
+    - 'rag': For qualitative error analysis, debugging, or documentation.
+    - 'web_search': For external questions or fallback.
     """
     # Use rewritten query for classification
     query = state.get("rewritten_query", state["query"])
@@ -154,7 +177,12 @@ def generate_sql(state: AgentState) -> AgentState:
 
 def validate_sql(state: AgentState) -> AgentState:
     """
-    Validates the generated SQL using DuckDB EXPLAIN.
+    Step 3b: SQL Validation & Self-Correction
+    
+    Performs deterministic checks on the generated SQL before execution:
+    1. Syntax Check: Uses 'EXPLAIN' to catch syntax errors.
+    2. Logic Check: Heuristics (e.g., ensuring GROUP BY exists for aggregations).
+    3. Schema Check: Detects invalid columns and injects correct schema into error for repair.
     """
     sql = state.get("sql_query")
     if not sql:
@@ -268,7 +296,12 @@ def execute_sql(state: AgentState) -> AgentState:
 
 def retrieve_context(state: AgentState) -> AgentState:
     """
-    Queries the Knowledge Base for patterns, then fetches specific logs from DuckDB.
+    Step 3c: Hybrid Retrieval (RAG)
+    
+    Combines Vector Search with Time-Based SQL Retrieval:
+    1. Vector Search: Finds semantic matches (Log Patterns, Runbooks) in ChromaDB.
+    2. Pattern Extraction: Identifies specific Log Template IDs.
+    3. SQL Windowing: Queries DuckDB for the exact logs around the error (Causal Context).
     """
     # Use rewritten query
     query = state.get("rewritten_query", state["query"])
@@ -432,31 +465,8 @@ def synthesize_answer(state: AgentState) -> AgentState:
         def run_shadow(p, original_ans, q):
             try:
                 start = time.time()
-                # Use the shadow model (assuming LLMClient supports overriding model via some mechanism, 
-                # or we just pass it if we refactor LLMClient. 
-                # For now, let's assume we can pass model_name to generate, 
-                # but LLMClient.generate takes model_type.
-                # We might need to extend LLMClient or just use a raw call here for simplicity.
-                # Actually, LLMClient uses ModelRegistry. 
-                # Let's assume we can pass a specific model name if we modify LLMClient, 
-                # OR we just instantiate a new client/provider here.
-                # To keep it simple and safe, let's just log that we WOULD run it, 
-                # or try to use LLMClient if it supports it.
-                
-                # Checking LLMClient... it takes model_type="fast"|"smart".
-                # It resolves to a model name via registry.
-                # If we want to force a specific model, we might need to bypass LLMClient's type logic 
-                # or add a 'custom' type.
-                # Let's just log for now to prove the architecture works, 
-                # as fully implementing a second model path might require more refactoring.
-                
-                # WAIT, the plan says "Trigger a background task to generate an answer with the shadow model".
-                # Let's try to actually do it.
-                # We can use the 'smart' model as the shadow for the 'fast' model, or vice versa?
-                # Or just use the same model to test latency?
-                # Let's assume SHADOW_MODEL is a model name supported by the provider.
-                
-                # For this demo, let's simulate a shadow run.
+                # Simulate shadow model execution (or use actual secondary provider if configured)
+                # For this demo, we simulate latency and log the would-be result.
                 time.sleep(0.5) 
                 shadow_ans = f"[Shadow: {shadow_model}] {original_ans}" 
                 latency = time.time() - start

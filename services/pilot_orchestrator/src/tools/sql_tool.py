@@ -13,8 +13,7 @@ from shared.llm.prompt_factory import PromptFactory
 class SQLGenerator:
     """
     Translates natural language queries into SQL for DuckDB.
-    For the prototype, this uses regex/heuristic matching.
-    In production, this would use an LLM.
+    Uses an LLM (via LLMClient) and a Jinja2 template (via PromptFactory) to generate valid SQL.
     """
     def __init__(self):
         # self.db removed to avoid persistent connection

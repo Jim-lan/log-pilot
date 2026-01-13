@@ -28,6 +28,6 @@ class RegexGenerator:
             samples_str=samples_str
         )
         
-        # In a real scenario, we'd use a more robust prompt or structured output
+        # Generate regex using the prompt template
         regex_pattern = self.llm.generate(prompt, model_type="fast")
         return regex_pattern.strip()

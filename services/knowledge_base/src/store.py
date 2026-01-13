@@ -16,13 +16,25 @@ except ImportError:
 from shared.log_schema import LogEvent
 
 # 3. Setup Embedding Model
-# Use Local HuggingFace Model (BAAI/bge-small-en-v1.5)
-# This runs locally and does not require an API key.
+# 3. Setup Embedding Model
+# We use BAAI/bge-small-en-v1.5 (Local HuggingFace Model)
+# - Privacy: Embeddings run locally, data helps privacy.
+# - Speed: Faster than API calls.
+# - Quality: Good balance for technical domain retrieval.
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 class KnowledgeStore:
     """
     Manages the Knowledge Base using LlamaIndex and ChromaDB.
+    
+    Data Schema:
+    - Log Patterns (from Drain3): Stores the *template* of the log (not every distinct log).
+      - Metadata: cluster_id, service_name, severity
+      - Use Case: Identifying if we've seen this *type* of error before.
+    
+    - Runbook Cards (from Markdown): Synthesized knowledge snippets.
+      - Metadata: topic, type="runbook_card"
+      - Use Case: Providing fix instructions for known errors.
     """
     def __init__(self, persist_dir: str = "data/target/vector_store"):
         self.persist_dir = persist_dir
