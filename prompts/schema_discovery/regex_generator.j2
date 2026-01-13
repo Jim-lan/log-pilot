@@ -3,7 +3,21 @@ Your task is to generate a Python regex pattern that can parse the following log
 The regex MUST capture the following fields if present: timestamp, severity, service, message.
 Use named groups like (?P<timestamp>...), (?P<severity>...), etc.
 
-Log Samples:
+### Examples
+
+**Input:**
+2023-10-25 10:00:01 INFO [AuthService] User login successful
+
+**Output:**
+^(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})\s(?P<severity>\w+)\s\[(?P<service>\w+)\]\s(?P<message>.*)$
+
+**Input:**
+Nov 10 14:30:12 server-1 WARN Disk usage high: 90%
+
+**Output:**
+^(?P<timestamp>[A-Z][a-z]{2}\s\d{1,2}\s\d{2}:\d{2}:\d{2})\s(?P<host>[\w-]+)\s(?P<severity>\w+)\s(?P<message>.*)$
+
+### Log Samples:
 {{ samples_str }}
 
 Return ONLY the regex pattern, nothing else. Do not wrap in code blocks.
