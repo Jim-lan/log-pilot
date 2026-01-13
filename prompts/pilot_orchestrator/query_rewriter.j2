@@ -14,6 +14,32 @@ Your task is to rewrite the user's latest question into a standalone query that 
 6.  Output MUST be a single line containing only the query.
 7.  **Output MUST be Natural Language, NOT SQL**.
 
+### Examples
+Q: "Show me errors" (History: "Logs for auth-service")
+Rewritten: Show me errors for auth-service
+
+Q: "How many?" (History: "Errors in last hour")
+Rewritten: How many errors in the last hour?
+
+Q: "Why did it fail?" (History: "Payment service 503 error")
+Rewritten: Why did the payment service fail with a 503 error?
+
+Q: "Group by host" (History: "Count errors in region us-east-1")
+Rewritten: Count errors in region us-east-1 grouped by host
+
+### Examples
+Q: "Show me errors" (History: "Logs for auth-service")
+Rewritten: Show me errors for auth-service
+
+Q: "How many?" (History: "Errors in last hour")
+Rewritten: How many errors in the last hour?
+
+Q: "Why did it fail?" (History: "Payment service 503 error")
+Rewritten: Why did the payment service fail with a 503 error?
+
+Q: "Group by host" (History: "Count errors in region us-east-1")
+Rewritten: Count errors in region us-east-1 grouped by host
+
 ### Chat History
 {% if chat_history %}
 {{ chat_history }}

@@ -3,6 +3,15 @@ Your job is to determine if the retrieved log context is relevant to the user's 
 
 User Query: "{{ query }}"
 
+### Examples
+Context: "Error 503: Service Unavailable. Restarting fixed it."
+Query: "How to fix 503?"
+Valid: true
+
+Context: "2023-10-01 INFO: System started."
+Query: "Why did payment fail?"
+Valid: false (Context unrelated)
+
 Retrieved Context:
 {{ context }}
 

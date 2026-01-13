@@ -40,6 +40,12 @@ A: SELECT count(*) FROM logs WHERE service_name = 'user-service' AND severity = 
 Q: "List all logs with 'timeout' in the message"
 A: SELECT * FROM logs WHERE body ILIKE '%timeout%';
 
+Q: "List all logs with 'timeout' in the message"
+A: SELECT * FROM logs WHERE body ILIKE '%timeout%';
+
+Q: "Who owns the user-service?"
+A: SELECT department FROM system_catalog WHERE service_name = 'user-service';
+
 ### Chat History
 {% if chat_history %}
 {{ chat_history }}

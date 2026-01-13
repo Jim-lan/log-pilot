@@ -3,6 +3,11 @@ Your job is to determine if the generated answer directly addresses the user's q
 
 User Query: "{{ query }}"
 
+### Examples
+Query: "Count errors" | Answer: "There are 50 errors." -> Valid: true
+Query: "Count errors" | Answer: "To fix errors, restart." -> Valid: false (Does not answer 'count')
+Query: "Why failed?" | Answer: "I don't know." -> Valid: true (Honest fallback)
+
 Generated Answer:
 {{ answer }}
 
