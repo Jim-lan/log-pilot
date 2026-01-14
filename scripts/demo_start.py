@@ -99,7 +99,7 @@ def start_services():
     services = [
         ("Ingestion Worker", ["python3", "services/ingestion-worker/src/main.py"]),
         ("Sentry Service", ["python3", "services/sentry/src/main.py"]),
-        ("Pilot API", ["uvicorn", "services.pilot_orchestrator.src.api:app", "--reload", "--port", "8000"]),
+        ("Pilot API", ["python3", "-m", "uvicorn", "services.pilot_orchestrator.src.api:app", "--reload", "--port", "8000"]),
     ]
     
     procs = []

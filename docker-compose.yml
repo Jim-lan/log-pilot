@@ -19,10 +19,14 @@ services:
     container_name: log-pilot-generator
     volumes:
       - ./scripts:/app/scripts
-      - ./data/source:/app/data/source
+      - ./shared:/app/shared
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
     working_dir: /app
-    # Generate 12 months (365 days) of logs
-    command: python scripts/generate_logs.py --days 365 --count 10000 --output_dir data/source/landing_zone
+    # Generate logs AND copy system catalog (mirroring demo_start.py logic), then sleep
+    command: >
+      sh -c "pip install duckdb==1.1.3 && python scripts/generate_logs.py --days 365 --count 1000 --output_dir data/source/landing_zone &&  cp data/source/system_catalog.csv data/system_catalog.csv && echo 'Generator / Admin Console Ready.' && tail -f /dev/null"
     networks:
       - pilot-net
 
@@ -33,10 +37,7 @@ services:
       dockerfile: services/ingestion-worker/Dockerfile
     container_name: log-pilot-ingestion
     volumes:
-      - ./data/source:/app/data/source
-      # Mount processed dir handling
-      - ./data/source/processed:/app/data/source/processed
-      - duckdb_data:/app/data/target
+      - ./data:/app/data
       - ./config:/app/config
     environment:
       - INGESTION_SOURCE=FILE
@@ -45,7 +46,24 @@ services:
       llm-service:
         condition: service_started
       log-generator:
-        condition: service_completed_successfully
+        condition: service_started
+    networks:
+      - pilot-net
+
+  # 2.5 Sentry Service (Anomaly Detection)
+  sentry-service:
+    build:
+      context: .
+      dockerfile: services/sentry/Dockerfile
+    container_name: log-pilot-sentry
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      ingestion-worker:
+        condition: service_started
     networks:
       - pilot-net
 
@@ -56,7 +74,7 @@ services:
       dockerfile: services/pilot_orchestrator/Dockerfile
     container_name: log-pilot-brain
     volumes:
-      - duckdb_data:/app/data/target
+      - ./data:/app/data
       - ./config:/app/config
       - ./prompts:/app/prompts
     environment:
@@ -87,7 +105,7 @@ services:
       dockerfile: services/mcp_server/Dockerfile
     container_name: log-pilot-mcp
     volumes:
-      - duckdb_data:/app/data/target
+      - ./data:/app/data
       - ./config:/app/config
     ports:
       - "8001:8001"
@@ -103,7 +121,7 @@ services:
       dockerfile: services/evaluation_service/Dockerfile
     container_name: log-pilot-eval
     volumes:
-      - duckdb_data:/app/data/target
+      - ./data:/app/data
       - ./tests/evaluation:/app/tests/evaluation
     ports:
       - "8002:8001"
@@ -118,7 +136,6 @@ services:
 
 volumes:
   ollama_data:
-  duckdb_data:
 
 
 networks:

@@ -54,7 +54,9 @@ def run_query(request: QueryRequest):
         from shared.db.duckdb_client import DuckDBConnector
         # Use a fresh connector for history operations
         print("DEBUG: Initializing DuckDBConnector...")
-        db = DuckDBConnector(read_only=False) 
+        # Use read_only=True to avoid locking logs.duckdb (Ingestion Worker is the writer)
+        # History operations manage their own connection to history.duckdb
+        db = DuckDBConnector(read_only=True) 
         print("DEBUG: DuckDBConnector initialized.")
         
         history_rows = db.get_history("default")
@@ -78,8 +80,8 @@ def run_query(request: QueryRequest):
         
         # Save to History (Session ID = default for demo)
         try:
-            # Re-open DB for saving
-            db = DuckDBConnector(read_only=False)
+            # Re-open DB for saving (read_only=True is fine, history connection is separate)
+            db = DuckDBConnector(read_only=True)
             # Save User Query
             db.save_message("default", "user", request.query)
             # Save AI Answer
@@ -128,12 +130,8 @@ def get_alerts():
     """
     try:
         from shared.db.duckdb_client import DuckDBConnector
-        db = DuckDBConnector(read_only=False) # Need write access?? No, read only is fine for select but we might need lock management
-        # Actually DuckDBConnector handles connection creation. 
-        # But get_history uses _get_history_connection which is independent of read_only flag for main DB?
-        # Yes, _get_history_connection just opens history.duckdb.
-        # But wait, DuckDBConnector init calls _init_alerts_schema logic which uses _get_history_connection.
-        # So it's safe.
+        # Alerts live in history.duckdb, so logs read-only is fine
+        db = DuckDBConnector(read_only=True) 
         alerts = db.get_alerts()
         db.close()
         return alerts
@@ -147,7 +145,8 @@ def read_alert(alert_id: str):
     """
     try:
         from shared.db.duckdb_client import DuckDBConnector
-        db = DuckDBConnector(read_only=False)
+        # Alerts live in history.duckdb, so logs read-only is fine
+        db = DuckDBConnector(read_only=True)
         db.mark_alert_read(alert_id)
         db.close()
         return {"status": "ok"}

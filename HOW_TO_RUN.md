@@ -1,103 +1,129 @@
-# How to Run LogPilot 🚀
+# 🚀 LogPilot: System & Demo Guide
 
-Welcome to **LogPilot**, the Agentic RAG system for log analysis. This guide explains how to run the system locally for demonstration purposes.
+Welcome to **LogPilot**! This guide will help you understand, run, and demonstrate the capabilities of this autonomous log analysis agent.
 
-## 📋 Prerequisites
--   **Python 3.10+** installed.
--   **DuckDB** (Python package).
--   **Ollama** running locally with `mistral` model pulled (`ollama pull mistral`).
+**What is LogPilot?**
+LogPilot is an AI Agent that doesn't just "chat"—it uses tools. It combines the precision of SQL (for data) with the reasoning of LLMs (for knowledge) to solve infrastructure problems, just like a human SRE.
+- 🧠 **Brain**: A LangGraph agent that plans, routes, and corrects itself.
+- 📚 **Memory**: A Vector Database (Chroma) for reading runbooks.
+- 👁️ **Vision**: A Sentry Service that watches for anomalies 24/7.
 
-## 🏗️ Architecture Overview
-The demo consists of 3 main services:
-1.  **Ingestion Worker**: watches `data/source/landing_zone` and ingests logs/docs into DuckDB & ChromaDB.
-2.  **Sentry Service**: Background monitoring that detects log anomalies and triggers alerts.
-3.  **Pilot Orchestrator**: FastAPI backend that powers the Chat and Agentic Logic.
+---
 
-## 🎬 Rapid Demo Guide
+## ✅ Prerequisites
 
-We provide a **unified startup script** to make demonstrating the platform easy.
+Before you start, ensure you have:
+1.  **Docker Desktop** installed and running.
+2.  **8GB+ RAM** available (for running the local LLM).
+3.  **Ports Available**: 8000 (API), 8001 (MCP), 3000 (Frontend).
 
-### 1. Preparation
-Ensure you have the demo runbooks in the source folder (these are typically user-supplied):
--   `data/source/http_runbook.md`
--   `data/source/new_scenario_runbook.md`
+---
 
-### 2. Start the Demo
-Run the following command from the project root:
+## 🎬 Quick Start: Running the Demo
 
+We will run the entire stack (Brain, UI, Ingestion, Database) in Docker containers.
+
+### Step 1: Clean Slate
+First, let's make sure no old processes are blocking our ports.
 ```bash
-python3 scripts/demo_start.py
+# MacOS / Linux
+lsof -ti:8000 | xargs kill -9 2>/dev/null
+lsof -ti:3000 | xargs kill -9 2>/dev/null
+# Or just ensuring Docker is clean
+docker-compose down
 ```
 
-**What this script does:**
-1.  **Cleans Environment**: Deletes old databases (`logs.duckdb`, `history.duckdb`) and previous state.
-2.  **Generates Mock Data**: Creates 1,000 fresh log lines in `data/source/landing_zone`.
-3.  **Launches Services**: Starts Ingestion, Sentry, and API services in the background.
+### Step 2: Launch the Stack
+This command builds the services and starts them in the background.
+```bash
+docker-compose up --build -d
+```
+> ⏳ **Wait Sequence**:
+> 1.  **Build**: ~1-2 minutes on first run.
+> 2.  **Startup**: Wait for the "Brain" to wake up. You can check with: `docker logs -f log-pilot-brain`.
+> 3.  **Ready**: When you see `Uvicorn running on http://0.0.0.0:8000`.
 
-### 3. Access the UI
-Open `services/frontend/src/index.html` in your browser.
+### Step 3: Open the Cockpit
+Navigate to **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-## 🎭 Demo Scenarios
+## 🧪 Demo Scenarios
 
-Once the system is running, you can walk through these 3 scenarios to showcase value.
+Follow this script to demonstrate the agent's evolving intelligence.
 
-### Scenario A: The "Knowledge Gap" (Baseline)
-**Goal:** Show that without knowledge, the AI is generic.
-1.  **Ask**: "How do I fix error 404?"
-2.  **Expected Result**: The AI gives a generic, Wikipedia-style answer about HTTP 404.
+### Scenario 1: The "New Hire" Phase (Baseline)
+**Goal**: Show that without knowledge, the AI is smart but limited.
 
-### Scenario B: Knowledge Injection (Agentic RAG)
-**Goal:** Show how the system learns from static documents.
-1.  **Run**: Inject the knowledge base.
+1.  **Action**: Go to the Chat UI and ask:
+    > *"How do I restart the payment service?"*
+2.  **What to Expect**:
+    *   The AI will think for a moment.
+    *   It will likely say: *"I don't have enough information to answer that"* or try to search the web generically.
+3.  **Why?** (Behind the Scenes):
+    *   The **Router** checked its internal knowledge (RAG) and found nothing about "payment service" in the database.
+    *   It **fell back to Web Search** (the designed safety net), or simply admitted ignorance if internet access is disabled.
+    *   This proves that without the Runbook, the Local knowledge base is empty.
+
+### Scenario 2: Knowledge Injection (Teaching)
+**Goal**: Teach the AI by giving it a Runbook.
+
+1.  **Action**: Run this command in your terminal:
     ```bash
-    python3 scripts/demo_inject_knowledge.py --runbook http_runbook.md
+    docker exec -it log-pilot-generator python scripts/demo_inject_knowledge.py --runbook payment_runbook.md
     ```
-2.  **Wait**: Watch the Ingestion Worker terminal (it will process the file).
-3.  **Ask**: "How do I fix error 404?"
-4.  **Expected Result**: The AI now gives a **specific** answer citing the "Repo-123" runbook logic.
+2.  **What to Expect**:
+    *   Terminal output: `✅ Runbook copied...` and `✅ Ingestion Worker processed...`.
+3.  **Why?** (Behind the Scenes):
+    *   You dropped a Markdown file into the `landing_zone`.
+    *   The **Ingestion Worker** detected the file event.
+    *   It read the text, split it into chunks, embedded them into vectors, and stored them in **ChromaDB**. Now the AI has "memory".
 
-### Scenario C: Proactive Sentry (Alerting)
-**Goal:** Show the system finding issues *before* the user asks.
-1.  **Action**: Simulate a massive error spike.
+### Scenario 3: The "Expert SRE" Phase (RAG)
+**Goal**: Verify the AI can now solve the problem.
+
+1.  **Action**: Ask the exact same question again in the UI:
+    > *"How do I restart the payment service?"*
+2.  **What to Expect**:
+    *   The AI answers confidently: *"To restart the payment service, first drain the node, then execute `systemctl restart payment`..."*
+3.  **Why?** (Behind the Scenes):
+    *   The **Router** saw the intent "How do I..." and chose the **RAG Tool**.
+    *   It queried ChromaDB for "restart payment service".
+    *   It retrieved the runbook we just uploaded and used it as context to generate the answer.
+
+### Scenario 4: The Anomaly (Sentry Spike)
+**Goal**: Demonstrate the system's ability to detect issues proactively.
+
+1.  **Action**: Simulate a disaster by generating 50 errors instantly:
     ```bash
-    python3 scripts/demo_simulate_spike.py --count 50
+    docker exec -it log-pilot-generator python scripts/demo_simulate_spike.py --service auth-service --count 50
     ```
-2.  **Wait**: ~10 seconds.
-3.  **Observe**: 
-    -   A **Red Badge** appears on the "Alerts" tab in the UI.
-    -   Click the tab to see the "Error Spike Detected" alert with AI analysis.
+2.  **What to Expect**:
+    *   Within 10 seconds, a **red badge** appears on the "Alerts" tab in the UI.
+    *   Clicking it shows: **"Critical: Error spike detected in auth-service"**.
+3.  **Why?** (Behind the Scenes):
+    *   The script injected 50 "Error" logs directly into `logs.duckdb`.
+    *   The **Sentry Service** (which scans every 10s) calculated that 50 errors/min is > 1.5x the baseline.
+    *   It created a structured Alert record, which the Frontend displayed instantly.
 
 ---
 
-## 🛠️ Advanced / Utility Scripts
+## 🔧 Troubleshooting
 
-The `scripts/` folder contains tools for manual control:
-
-| Script | Purpose |
-| :--- | :--- |
-| `demo_start.py` | **Start Here**. Cleans DBs, gens logs, starts everything. |
-| `demo_inject_knowledge.py` | Injects a specific markdown file into the system. |
-| `demo_simulate_spike.py` | Injects a burst of 50 errors to trigger Sentry. |
-| `generate_logs.py` | Generates generic mock logs for testing. |
+*   **Brain won't start?**
+    *   Check `docker logs log-pilot-llm`. The local LLM (Ollama) might be downloading the model (4GB). This takes time on the first run.
+*   **"Connection Reset" or API crash?**
+    *   Ensure you ran the cleanup command in Step 1. Port conflicts are the #1 cause of issues.
+*   **Logs not appearing?**
+    *   Check `docker logs log-pilot-ingestion`. Ensure it says "Persisting batch".
 
 ---
 
-## 📂 Project Structure
+## 💡 System Internals (For the curious)
 
--   `services/`: Source code for the 3 main services.
--   `shared/`: Common code (DB Clients, LLM Clients) used by all services.
--   `data/`:
-    -   `source/`: Where raw logs and runbooks live.
-    -   `target/`: Where DuckDB and ChromaDB database files are created.
--   `tests/`: Unit and Integration tests.
--   `docs/`: Architecture diagrams and design decisions.
-
-## ❓ Troubleshooting
-
-**Q: The AI says "I don't know".**
-A: Ensure the Ingestion Worker is running and check `data/ingestion.log` for errors.
-
-**Q: Sentry isn't alerting.**
-A: Sentry checks every 10 seconds. Ensure you injected enough errors (`--count 50`) to trip the 15% threshold.
+| Component | Technology | Responsibility |
+| :--- | :--- | :--- |
+| **Ingestion** | Python, Watchdog, Regex | Cleans, masks, and files raw logs into databases. |
+| **Brain** | LangGraph, Ollama (Llama 3) | The decision maker. Decides *how* to answer. |
+| **Memory** | DuckDB (Data), Chroma (Text) | Stores the "What" (logs) and "How" (docs). |
+| **Sentry** | Python, Statistical Window | The 24/7 guardian that triggers alerts. |
