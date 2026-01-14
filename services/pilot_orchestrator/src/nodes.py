@@ -259,8 +259,18 @@ Fix the SQL query. Output ONLY the fixed SQL query.
     try:
         fixed_sql = llm_client.generate(prompt, model_type="fast").strip()
         # Clean up markdown if present
-        if "```" in fixed_sql:
-            fixed_sql = fixed_sql.split("```")[1].replace("sql", "").strip()
+        # Robust extraction
+        import re
+        match = re.search(r"```sql(.*?)```", fixed_sql, re.DOTALL | re.IGNORECASE)
+        if match:
+            fixed_sql = match.group(1).strip()
+        elif "```" in fixed_sql:
+            fixed_sql = fixed_sql.split("```")[1].strip()
+        else:
+            # Fallback heuristic
+            match_sql = re.search(r"(SELECT|SHOW|DESCRIBE|WITH|VALUES|INSERT|UPDATE|DELETE).*", fixed_sql, re.DOTALL | re.IGNORECASE)
+            if match_sql:
+                fixed_sql = fixed_sql[match_sql.start():].strip()
             
         state["sql_query"] = fixed_sql
         state["retry_count"] = retry_count + 1

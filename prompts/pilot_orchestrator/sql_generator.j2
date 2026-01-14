@@ -4,15 +4,28 @@ Your task is to generate a DuckDB-compatible SQL query.
 ### Schema
 {{ schema }}
 Table: system_catalog
-Columns: service_name (VARCHAR), department (VARCHAR), criticality (VARCHAR)
+Columns: system_name, department, owner_email, criticality
 
-### CRITICAL RULES (Follow or Fail)
-1. **Date/Time Syntax**: DuckDB does NOT support `DATE_SUB` or `DATE_ADD`.
+### Chat History
+{{ chat_history }}
+
+### Query
+{{ query }}
+
+### CRITICAL RULES
+1. Return ONLY the SQL query. No markdown.
+2. The table name is `logs`.
+3. ALWAYS use `ILIKE` for string comparisons (e.g. `department ILIKE '%finance%'`).
+4. **SEVERITY LOGIC**: If the user asks for "errors" (or "issues", "failures"), you MUST include ALL high-severity logs.
+   Use: `severity IN ('ERROR', 'CRITICAL', 'FATAL')`
+   Do NOT use `severity = 'ERROR'` unless the user explicitly excludes criticals.
+5. Limit results to 100 unless specified.
+6. Current timestamp is {{ current_time }}. Use `now()` for relative time.
+7. **Date/Time Syntax**: DuckDB does NOT support `DATE_SUB` or `DATE_ADD`.
    - **ALWAYS** use: `now() - INTERVAL 'X DAYS'` (Quoted interval)
    - **NEVER** use: `DATE_SUB`, `DATE_ADD`, `SYSDATE`, `TRUNC`
    - Example (Last 3 days): `timestamp > now() - INTERVAL '3 DAYS'`
    - Example (Last 1 hour): `timestamp > now() - INTERVAL '1 HOUR'`
-
 2. **JSON Extraction**: Use `->>` operator.
    - `json_extract_string(context, '$.key')` OR `context->>'$.key'`
 

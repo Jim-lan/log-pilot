@@ -29,6 +29,21 @@ def trigger_sentry(service, count):
         "Rate limit exceeded for API key"
     ]
     
+    # Lookup Department from Catalog
+    department = "engineering" # default
+    try:
+        import csv
+        catalog_path = os.path.join(os.path.dirname(__file__), "../data/system_catalog.csv")
+        if os.path.exists(catalog_path):
+            with open(catalog_path, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['system_name'] == service:
+                        department = row['department']
+                        break
+    except Exception as e:
+        print(f"⚠️ Failed to look up department: {e}")
+
     print("⚡ Injecting logs...")
     for i in range(count):
         timestamp = datetime.now()
@@ -49,7 +64,7 @@ def trigger_sentry(service, count):
             body, 
             "production", 
             "app-1", 
-            "engineering", 
+            department, 
             "host-1", 
             "us-east-1", 
             "{}"

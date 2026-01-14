@@ -31,9 +31,30 @@ class SQLGenerator:
             )
             sql = self.llm.generate(prompt, model_type="fast")
             
-            # Clean up markdown if present
-            sql = sql.replace("```sql", "").replace("```", "").strip()
-            return sql
+            # Robust extraction of SQL block or raw SQL
+            import re
+            
+            # 1. Try to find markdown block
+            match = re.search(r"```sql(.*?)```", sql, re.DOTALL | re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+            
+            match = re.search(r"```(.*?)```", sql, re.DOTALL)
+            if match:
+                 return match.group(1).strip()
+            
+            # 2. Heuristic: Look for SELECT/SHOW/DESCRIBE starting line
+            # This is a fallback if no markdown is used
+            match = re.search(r"(SELECT|SHOW|DESCRIBE|WITH|VALUES|INSERT|UPDATE|DELETE).*?($|;)", sql, re.DOTALL | re.IGNORECASE)
+            if match:
+                 # Return the string starting from the SQL keyword
+                 # We grab the full match which might be the whole rest of string if no ;
+                 # But re.search finds the *first* occurrence. 
+                 # Let's take the substring from start of match to end of string to be safe against multi-line
+                 start_idx = match.start()
+                 return sql[start_idx:].strip()
+
+            return sql.strip()
         except Exception as e:
             print(f"❌ SQL Generation Failed: {e}")
             return None
