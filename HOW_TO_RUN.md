@@ -43,6 +43,19 @@ docker-compose up --build -d
 > 2.  **Startup**: Wait for the "Brain" to wake up. You can check with: `docker logs -f log-pilot-brain`.
 > 3.  **Ready**: When you see `Uvicorn running on http://0.0.0.0:8000`.
 
+### Step 2.5: Verify Status (Optional)
+Run this command to confirm your agents are alive:
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}"
+```
+You should see all 6 services running:
+*   `log-pilot-brain` (Orchestrator)
+*   `log-pilot-ui` (Frontend)
+*   `log-pilot-sentry` (Watchdog)
+*   `log-pilot-ingestion` (Worker)
+*   `log-pilot-llm` (Ollama)
+*   `log-pilot-generator` (Admin Console)
+
 ### Step 3: Open the Cockpit
 Navigate to **[http://localhost:3000](http://localhost:3000)** in your browser.
 

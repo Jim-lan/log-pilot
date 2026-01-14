@@ -16,8 +16,10 @@ class SentryService:
         self.db = DuckDBConnector()
         # Initialize alerts schema just in case
         self.db._init_alerts_schema()
-        self.check_interval = 10 # Check every 10s for demo purposes (usually 60m)
+        self.check_interval = 10 # Check every 10s for demo purposes
         self.threshold_ratio = 1.15 # 15% increase
+        self.alert_cooldown = 60 # Cooldown in seconds before re-alerting
+        self.last_alert_time = 0 # Timestamp of last alert
         self.running = True
         
     def run(self):
@@ -64,7 +66,12 @@ class SentryService:
         print(f"🔍 Scan: Current={current_errors} | Avg={avg_errors:.2f} | Ratio={ratio:.2f}")
         
         if ratio > self.threshold_ratio and current_errors > 5:
-            self.trigger_alert(current_errors, avg_errors)
+            # Check cooldown
+            if time.time() - self.last_alert_time > self.alert_cooldown:
+                self.trigger_alert(current_errors, avg_errors)
+                self.last_alert_time = time.time()
+            else:
+                print(f"⏳ Cooldown active. Skipping alert.")
 
     def trigger_alert(self, current, avg):
         print("🚨 ANOMALY DETECTED! Triggering Alert...")
