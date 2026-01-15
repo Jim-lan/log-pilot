@@ -26,6 +26,16 @@ Columns: system_name, department, owner_email, criticality
    - **NEVER** use: `DATE_SUB`, `DATE_ADD`, `SYSDATE`, `TRUNC`
    - Example (Last 3 days): `timestamp > now() - INTERVAL '3 DAYS'`
    - Example (Last 1 hour): `timestamp > now() - INTERVAL '1 HOUR'`
+8. **SEMANTIC INTENT & CONTEXT**:
+   - **Analyze the Relationship**: Does the new query refine the previous one?
+   - **Drill-Down**: If user asks for "details", "list", "show", or "why" after a count, INHERIT ALL FILTERS (time, dept, severity) and show raw logs (`SELECT *`).
+   - **Pivot**: If user changes one dimension (e.g. "What about auth-service?"), INHERIT the other filters (Time=`INTERVAL '46 HOURS'`) but override the changed dimension.
+   - **Implicit Context**: Do NOT wait for keywords like "these" or "those". If the query is short/ambiguous, assume it refers to the active context.
+9. **AMBIGUITY HANDLING**:
+   - If the user's intent is unclear (e.g. "count failures" could mean "login failures" OR "system crashes"), do **NOT** guess.
+   - Return exactly: `AMBIGUOUS: <Short explanation of options>`
+   - Example output: `AMBIGUOUS: Did you mean 'login_failed' events or generic 'ERROR' severity logs?`
+
 2. **JSON Extraction**: Use `->>` operator.
    - `json_extract_string(context, '$.key')` OR `context->>'$.key'`
 
@@ -58,6 +68,15 @@ A: SELECT * FROM logs WHERE body ILIKE '%timeout%';
 
 Q: "Who owns the user-service?"
 A: SELECT department FROM system_catalog WHERE service_name = 'user-service';
+
+Q: "Count errors in finance last 46 hours"
+A: SELECT count(*) FROM logs WHERE department ILIKE '%finance%' AND timestamp > now() - INTERVAL '46 HOURS';
+
+Q: "Show me the details" (Implicit Drill-Down)
+A: SELECT * FROM logs WHERE department ILIKE '%finance%' AND timestamp > now() - INTERVAL '46 HOURS';
+
+Q: "What about the auth service?" (Implicit Pivot - Keep time, change service)
+A: SELECT count(*) FROM logs WHERE service_name = 'auth-service' AND timestamp > now() - INTERVAL '46 HOURS';
 
 ### Chat History
 {% if chat_history %}

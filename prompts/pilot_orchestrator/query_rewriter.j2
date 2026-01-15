@@ -13,6 +13,10 @@ Your task is to rewrite the user's latest question into a standalone query that 
 5.  Do NOT add any explanations, preambles, or markdown.
 6.  Output MUST be a single line containing only the query.
 7.  **Output MUST be Natural Language, NOT SQL**.
+8.  **ROBUSTNESS RULES**:
+    *   **Fix Typos**: Correct obvious spelling errors (e.g. "fialure" -> "failure", "statsitics" -> "statistics").
+    *   **Normalize Intent**: Convert vague questions like "is it broken?" into analytic queries like "Show error rate for service X".
+    *   **Preserve Ambiguity**: If the user asks "option A or B?", keep both options in the rewritten query so the next step can decide or ask for clarification.
 
 ### Examples
 Q: "Show me errors" (History: "Logs for auth-service")

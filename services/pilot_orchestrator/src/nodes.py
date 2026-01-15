@@ -191,6 +191,14 @@ def validate_sql(state: AgentState) -> AgentState:
         return state
 
     try:
+        # 0. Check for Ambiguity Signal
+        if sql and sql.strip().upper().startswith("AMBIGUOUS:"):
+            state["sql_valid"] = False
+            state["sql_error"] = sql.strip() # Pass the explanation forward
+            state["retry_count"] = 999 # Skip fix loop
+            print(f"🛑 Ambiguity Detected: {state['sql_error']}")
+            return state
+
         db = DuckDBConnector(read_only=True)
         try:
             # 1. Syntax Check (EXPLAIN)
