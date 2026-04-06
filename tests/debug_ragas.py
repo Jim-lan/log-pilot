@@ -9,7 +9,7 @@ os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
 def test_ollama():
     print("🤖 Testing Ollama Connection...")
     try:
-        llm = ChatOllama(model="llama3", base_url="http://localhost:11434")
+        llm = ChatOllama(model="gemma4:e4b", base_url="http://localhost:11434")
         resp = llm.invoke("Hello, are you there?")
         print(f"✅ LLM Response: {resp.content}")
     except Exception as e:
@@ -17,7 +17,7 @@ def test_ollama():
 
     print("\n🧠 Testing Embeddings...")
     try:
-        embeddings = OllamaEmbeddings(model="llama3", base_url="http://localhost:11434")
+        embeddings = OllamaEmbeddings(model="gemma4:e4b", base_url="http://localhost:11434")
         vec = embeddings.embed_query("Hello world")
         print(f"✅ Embedding generated (dim: {len(vec)})")
     except Exception as e:

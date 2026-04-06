@@ -16,13 +16,13 @@ llm:
       # Since we heavily use Docker, we default to the service name.
       # If running locally without docker, user must override or use port forwarding.
       api_base: "http://llm-service:11434/v1" # Internal Docker DNS
-      default_model: "llama3" # 8B - Excellent balance for M4 Mac
+      default_model: "gemma4:e4b" # Effective 4B - Excellent balance for M4 Mac
       # --- Model Selection Guide ---
       #
       # [Category A] Lightweight / Consumer Hardware (e.g., M1/M2/M3/M4 Mac, Consumer GPU)
-      # 1. "llama3" (8B) - [RECOMMENDED DEFAULT]
-      #    - Capability: Excellent general purpose, good instruction following.
-      #    - Requirement: ~8GB RAM (runs comfortably on 16GB machines).
+      # 1. "gemma4:e4b" (Effective 4B) - [RECOMMENDED DEFAULT]
+      #    - Capability: Excellent general purpose, optimized instruction following.
+      #    - Requirement: ~4GB RAM (2.5GB for weights).
       #    - Performance: Very fast on Apple Silicon.
       #
       # 2. "mistral" (7B)

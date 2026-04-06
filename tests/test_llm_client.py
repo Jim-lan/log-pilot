@@ -29,7 +29,8 @@ def test_llm_client_init_openai(mock_openai):
                 with patch("os.getenv", return_value="sk-test-key"):
                     client = LLMClient()
                     
-                    # Verify OpenAI init
+                    # Verify OpenAI init by triggering lazy load
+                    client._get_client(None, "sk-test-key")
                     mock_openai.assert_called_with(api_key="sk-test-key", base_url=None)
 
 @patch("shared.llm.client.openai.OpenAI")
@@ -41,7 +42,7 @@ def test_llm_client_init_local(mock_openai):
             "providers": {
                 "local": {
                     "api_base": "http://localhost:11434/v1",
-                    "default_model": "llama3"
+                    "default_model": "gemma4:e4b"
                 }
             }
         }
@@ -52,7 +53,8 @@ def test_llm_client_init_local(mock_openai):
             with patch("builtins.open", MagicMock()):
                 client = LLMClient()
                 
-                # Verify OpenAI init with base_url
+                # Verify OpenAI init with base_url by triggering lazy load
+                client._get_client("http://localhost:11434/v1", "dummy")
                 mock_openai.assert_called_with(api_key="dummy", base_url="http://localhost:11434/v1")
 
 @patch("shared.llm.client.openai.OpenAI")

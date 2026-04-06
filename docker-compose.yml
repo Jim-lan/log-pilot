@@ -9,7 +9,7 @@ services:
       - ollama_data:/root/.ollama
     # Entrypoint script to pull model if missing
     entrypoint: /bin/sh
-    command: -c "ollama serve & sleep 5 && ollama pull llama3 && wait"
+    command: -c "ollama serve & sleep 5 && ollama pull gemma4:e4b && wait"
     networks:
       - pilot-net
 

@@ -80,7 +80,7 @@ Checks the status of the API and the LLM connection.
   "status": "ok",
   "llm": {
     "status": "connected",
-    "model": "llama3"
+    "model": "gemma4:e4b"
   }
 }
 ```

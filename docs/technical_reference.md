@@ -60,7 +60,7 @@ graph TD
          reasoning: "gpt-4o"
      local:
        api_base: "http://localhost:11434/v1"
-       default_model: "llama3"
+       default_model: "gemma4:e4b"
  ```
  *   **`default_provider`**: Controls which provider is active system-wide.
  *   **`providers`**: Defines connection details for each provider.
@@ -71,10 +71,10 @@ graph TD
  
  | Category | Model | Params | Min RAM | Best For | Notes |
  | :--- | :--- | :--- | :--- | :--- | :--- |
- | **Consumer** | `llama3` | 8B | 8GB | **General Purpose** | Recommended default for M-series Macs. |
+ | **Consumer** | `gemma4:e4b` | 4B | 4GB | **General Purpose** | Recommended default for Apple Silicon. |
  | **Consumer** | `mistral` | 7B | 8GB | Reasoning | Strong logic, efficient. |
  | **Consumer** | `phi3` | 3.8B | 4GB | Speed / Simple Tasks | Ultra-lightweight. |
- | **Server** | `llama3:70b` | 70B | 48GB | **Complex Reasoning** | GPT-4 class. Requires heavy hardware. |
+ | **Server** | `gemma4:26b` | 26B | 14GB | **Complex Reasoning** | Requires heavy hardware. |
  | **Server** | `mixtral:8x7b` | 47B | 26GB | Context / RAG | Mixture-of-Experts. Good efficiency. |
  | **Server** | `qwen2.5:72b` | 72B | 48GB | Coding / Math | Top-tier for technical tasks. |
  
@@ -180,7 +180,7 @@ Regardless of the input format, the parser normalizes data into these **Golden F
  # Start all services (LLM, Ingestion, Pilot)
  docker-compose up --build
  ```
- *   **`llm-service`**: Starts Ollama and pulls `llama3` automatically.
+ *   **`llm-service`**: Starts Ollama and pulls `gemma4:e4b` automatically.
  *   **`ingestion-worker`**: Begins processing logs from `data/source`.
  *   **`pilot-orchestrator`**: Starts the agent API.
  

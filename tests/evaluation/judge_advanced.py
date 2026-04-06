@@ -41,9 +41,9 @@ class AdvancedEvaluator:
         self._init_db()
         
         # Initialize LLM & Embeddings for Ragas
-        print("🤖 Initializing Ragas with Ollama (llama3)...")
-        self.llm = ChatOllama(model="llama3", base_url="http://localhost:11434")
-        self.embeddings = OllamaEmbeddings(model="llama3", base_url="http://localhost:11434")
+        print("🤖 Initializing Ragas with Ollama (gemma4:e4b)...")
+        self.llm = ChatOllama(model="gemma4:e4b", base_url="http://localhost:11434")
+        self.embeddings = OllamaEmbeddings(model="gemma4:e4b", base_url="http://localhost:11434")
 
     def _init_db(self):
         self.db.execute("""

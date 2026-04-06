@@ -124,7 +124,7 @@ Follow this script to demonstrate the agent's evolving intelligence.
 ## 🔧 Troubleshooting
 
 *   **Brain won't start?**
-    *   Check `docker logs log-pilot-llm`. The local LLM (Ollama) might be downloading the model (4GB). This takes time on the first run.
+    *   Check `docker logs log-pilot-llm`. The local LLM engine (Ollama Engine) might be downloading the model (4GB). This takes time on the first run.
 *   **"Connection Reset" or API crash?**
     *   Ensure you ran the cleanup command in Step 1. Port conflicts are the #1 cause of issues.
 *   **Logs not appearing?**
@@ -137,6 +137,6 @@ Follow this script to demonstrate the agent's evolving intelligence.
 | Component | Technology | Responsibility |
 | :--- | :--- | :--- |
 | **Ingestion** | Python, Watchdog, Regex | Cleans, masks, and files raw logs into databases. |
-| **Brain** | LangGraph, Ollama (Llama 3) | The decision maker. Decides *how* to answer. |
+| **Brain** | LangGraph, Ollama (Gemma 4) | The decision maker. Decides *how* to answer. |
 | **Memory** | DuckDB (Data), Chroma (Text) | Stores the "What" (logs) and "How" (docs). |
 | **Sentry** | Python, Statistical Window | The 24/7 guardian that triggers alerts. |

@@ -8,22 +8,65 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
 - **Multi-Turn Context**: Understands follow-up questions (e.g., "List them", "Show details").
 - **Hybrid Intelligence**: Combines **SQL Generation** (for precise data) and **RAG** (for runbooks/knowledge).
 - **Modern UI**: Beautiful, dark-mode web interface with chat history.
-- **Local Privacy**: Runs 100% locally using Docker and Ollama (Llama 3 / Phi-3).
+- **Local Privacy**: Runs 100% locally using Docker and Ollama (Gemma 4).
+
+## 🏗️ Architecture
+```mermaid
+graph TD
+    User[User] <--> Frontend["Frontend (Nginx)"]
+    Frontend <--> |REST API| Pilot["Pilot Orchestrator (FastAPI)"]
+    
+    subgraph "Data Layer"
+        Pilot <--> |Read-Only| LogsDB[(logs.duckdb)]
+        Pilot <--> |Read-Write| HistoryDB[(history.duckdb)]
+        Pilot <--> |Read-Only| VectorDB[(ChromaDB)]
+    end
+    
+    subgraph "Ingestion Layer"
+        Generator[Log Generator] --> |Generates| LandingZone[Landing Zone Folder]
+        LandingZone --> |Watch| Worker[Ingestion Worker]
+        Worker --> |Write| LogsDB
+        Worker --> |Embed| VectorDB
+    end
+    
+    subgraph "Intelligence Layer"
+        Pilot <--> |HTTP| LLM["LLM Service (Ollama)"]
+    end
+
+    subgraph "Evaluation Layer"
+        Eval[Evaluation Service] <--> |Batch| Pilot
+        Eval <--> |Judge| LLM
+        Eval --> |Store| MetricsDB[(metrics.duckdb)]
+    end
+
+    subgraph "Monitoring Layer"
+        Sentry[Sentry Service] --> |Monitor| LogsDB
+        Sentry --> |Alert| HistoryDB
+    end
+```
 
 ## 🛠️ Tech Stack
-- **AI/LLM**: Llama 3 (via Ollama), LangGraph (Orchestration), LlamaIndex (RAG).
+- **AI/LLM**: Gemma 4 (via Ollama), LangGraph (Orchestration), LlamaIndex (RAG).
 - **Backend**: Python, FastAPI, DuckDB (High-performance OLAP).
 - **Evaluation**: Ragas, FastAPI (Microservice).
 - **Frontend**: Vanilla JS, HTML5, CSS3 (Glassmorphism).
 - **Infrastructure**: Docker Compose.
 
+## 🎯 What this demonstrates to employers
+This project showcases a production-ready approach to AI Engineering, moving beyond simple wrappers:
+- **Advanced Agentic Patterns**: Implements a "Router-Solver" architecture with *LangGraph* that autonomously routes requests (SQL vs RAG) and self-corrects hallucinations.
+- **Hybrid RAG Systems**: Solves the "Accuracy vs Flexibility" trade-off by combining **DuckDB** (for precise SQL analytics) with **ChromaDB** (for semantic vector search).
+- **Data Engineering & Privacy**: Features a robust ingestion pipeline with regex-based **PII Masking** to sanitize sensitive logs before they touch the database.
+- **Microservices Architecture**: Orchestrates 6+ containerized services (FastAPI, React, Vector DB) using Docker Compose, demonstrating full-stack system design.
+- **LLM Ops (Evaluation)**: Includes a dedicated evaluation microservice using **Ragas** and "LLM-as-a-Judge" to quantitatively measure performance and prevent regression.
+
 ## 💻 System Requirements & LLM Options
 LogPilot runs the LLM locally by default, which requires system RAM.
 
 ### 1. Default (Recommended)
-*   **Model**: `Llama 3` (8B Parameters).
-*   **RAM Required**: ~8GB total system RAM (allocates ~4.5GB for model).
-*   **Performance**: Best balance of speed and reasoning capability.
+*   **Model**: `Gemma 4` (Effective 4B).
+*   **RAM Required**: ~4GB total system RAM (allocates ~2.5GB for model).
+*   **Performance**: Fast reasoning perfectly tuned for local environments.
 
 ### 2. High Performance (Workstation / Server)
 *   **Model**: `Llama 3` (70B) or `Mixtral` (8x7B).
@@ -32,7 +75,7 @@ LogPilot runs the LLM locally by default, which requires system RAM.
 *   **How to Switch**:
     ```bash
     # In docker-compose.yml
-    command: -c "ollama serve & sleep 5 && ollama pull llama3:70b && wait"
+    command: -c "ollama serve & sleep 5 && ollama pull gemma4:26b && wait"
     ```
 
 ### 3. Cloud / High Performance (No Local RAM)
@@ -67,6 +110,20 @@ LogPilot is built on the **"Router-Solver"** pattern with **Agentic RAG**. A cen
 - **Query Rewriter**: Ensures multi-turn conversations are robust by rewriting follow-ups into standalone queries.
 
 This architecture ensures high precision (SQL) and helpful context (RAG) while maintaining a natural user experience.
+
+## 🗺️ Roadmap / Next
+- **Stateless Architecture (Zero-ETL)**: Transitioning from local DuckDB files to direct S3 Parquet querying (`read_parquet`) to enable infinite scale and stateless compute.
+- **Cloud-Native Adaptation**: Building an adapter to query **AWS CloudWatch Logs / Insights** directly, allowing "Bring Your Own Data" without duplication.
+- **Storage Optimization**: Implementing log normalization (storing unique Templates + Parameters) to reduce storage footprint by ~90% for high-volume repetitions.
+- **RLHF Feedback Loop**: Adding simple "Thumbs Up/Down" buttons in the UI to capture user feedback and automatically fine-tune the Intent Router.
+
+## ⚖️ Evaluation Approach
+We don't guess—we measure. The system includes a dedicated `evaluation_service` that runs a **Golden Dataset** (curated Q&A pairs) against the agent.
+- **Framework**: Uses [Ragas](https://docs.ragas.io/) to score responses.
+- **Metrics**:
+    - **Faithfulness**: Does the answer interpret the logs correctly without making things up?
+    - **Answer Relevance**: Does it actually address the user's specific question?
+- **Process**: Triggered via API, it runs batch queries and stores scores in `metrics.duckdb` for longitudinal tracking.
 
 ## 📚 Documentation Center
 

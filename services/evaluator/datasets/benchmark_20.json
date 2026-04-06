@@ -1,0 +1,292 @@
+[
+  {
+    "id": "sql_01",
+    "type": "sql",
+    "question": "How many errors occurred in payment-service?",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT COUNT(*) FROM logs WHERE service_name = 'payment-service' AND severity = 'ERROR'",
+    "expected_answer_keywords": [
+      "count",
+      "payment-service",
+      "error"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "sql_02",
+    "type": "sql",
+    "question": "Show me the distribution of log levels for auth-service.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT severity, COUNT(*) FROM logs WHERE service_name = 'auth-service' GROUP BY severity",
+    "expected_answer_keywords": [
+      "info",
+      "warn",
+      "error",
+      "auth-service"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "sql_03",
+    "type": "sql",
+    "question": "List the top 5 hosts with the most errors.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT host, COUNT(*) as count FROM logs WHERE severity = 'ERROR' GROUP BY host ORDER BY count DESC LIMIT 5",
+    "expected_answer_keywords": [
+      "host",
+      "count"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "sql_04",
+    "type": "sql",
+    "question": "What is the average transaction amount in payment-service?",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT AVG(CAST(json_extract(context, '$.amount') AS DOUBLE)) FROM logs WHERE service_name = 'payment-service'",
+    "expected_answer_keywords": [
+      "average",
+      "amount"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "sql_05",
+    "type": "sql",
+    "question": "Find all failed logins in the last 24 hours.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT * FROM logs WHERE service_name = 'auth-service' AND body LIKE '%failed%' AND timestamp > now() - INTERVAL 24 HOURS",
+    "expected_answer_keywords": [
+      "login",
+      "failed",
+      "bad_password"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "sql_06",
+    "type": "sql",
+    "question": "Which service has the highest number of warnings?",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT service_name, COUNT(*) as count FROM logs WHERE severity = 'WARN' GROUP BY service_name ORDER BY count DESC LIMIT 1",
+    "expected_answer_keywords": [
+      "service",
+      "warn"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "sql_07",
+    "type": "sql",
+    "question": "Count the number of database queries that took longer than 500ms.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT COUNT(*) FROM logs WHERE service_name = 'db-service' AND CAST(json_extract(context, '$.duration') AS INTEGER) > 500",
+    "expected_answer_keywords": [
+      "count",
+      "duration",
+      "500"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "sql_08",
+    "type": "sql",
+    "question": "List errors in eu-central-1 region.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT * FROM logs WHERE region = 'eu-central-1' AND severity = 'ERROR'",
+    "expected_answer_keywords": [
+      "eu-central-1",
+      "error"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "sql_09",
+    "type": "sql",
+    "question": "How many distinctive users had payment errors?",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT COUNT(DISTINCT json_extract(context, '$.user_id')) FROM logs WHERE service_name = 'payment-service' AND severity = 'ERROR'",
+    "expected_answer_keywords": [
+      "distinct",
+      "user",
+      "payment",
+      "error"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "id": "sql_10",
+    "type": "sql",
+    "question": "Show me logs for app_id='com.example.frontend'.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT * FROM logs WHERE app_id = 'com.example.frontend'",
+    "expected_answer_keywords": [
+      "frontend",
+      "app_id"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "sql_11",
+    "type": "sql",
+    "question": "What is the error rate of db-service compared to auth-service?",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT service_name, COUNT(*) FILTER (WHERE severity='ERROR') * 100.0 / COUNT(*) as error_rate FROM logs WHERE service_name IN ('db-service', 'auth-service') GROUP BY service_name",
+    "expected_answer_keywords": [
+      "ratio",
+      "percentage",
+      "rate"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "id": "sql_12",
+    "type": "sql",
+    "question": "List the last 10 logs from host server-001.",
+    "expected_tool": "sql_tool",
+    "expected_sql": "SELECT * FROM logs WHERE host = 'server-001' ORDER BY timestamp DESC LIMIT 10",
+    "expected_answer_keywords": [
+      "server-001",
+      "limit"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "rag_01",
+    "type": "rag",
+    "question": "How does the ingestion layer work?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Ingestion Layer",
+      "Landing Zone",
+      "Worker"
+    ],
+    "expected_answer_keywords": [
+      "ingestion",
+      "worker",
+      "duckdb",
+      "chromadb"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "rag_02",
+    "type": "rag",
+    "question": "What is the architecture of LogPilot?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Router-Solver",
+      "Agentic RAG",
+      "Orchestrator"
+    ],
+    "expected_answer_keywords": [
+      "orchestrator",
+      "frontend",
+      "services"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "rag_03",
+    "type": "rag",
+    "question": "How is PII handled in the logs?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "PII Masking",
+      "sanitize",
+      "regex-based"
+    ],
+    "expected_answer_keywords": [
+      "pii",
+      "masking",
+      "regex",
+      "sanitize"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "rag_04",
+    "type": "rag",
+    "question": "What are the security best practices for deployment?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Security Guide",
+      "Deployment",
+      "Hardening"
+    ],
+    "expected_answer_keywords": [
+      "security",
+      "deployment",
+      "hardening"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "rag_05",
+    "type": "rag",
+    "question": "How do I add a new service to the evaluation?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Evaluation Service",
+      "Docker",
+      "Integration"
+    ],
+    "expected_answer_keywords": [
+      "evaluation",
+      "service",
+      "docker"
+    ],
+    "difficulty": "medium"
+  },
+  {
+    "id": "rag_06",
+    "type": "rag",
+    "question": "Tell me about the design history of the agent.",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Design History",
+      "Evolution",
+      "Agentic"
+    ],
+    "expected_answer_keywords": [
+      "design",
+      "history",
+      "evolution"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "rag_07",
+    "type": "rag",
+    "question": "What are the known limitations in the backlog?",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "Backlog",
+      "Risks",
+      "Limitations"
+    ],
+    "expected_answer_keywords": [
+      "backlog",
+      "limitations",
+      "risks"
+    ],
+    "difficulty": "easy"
+  },
+  {
+    "id": "rag_08",
+    "type": "rag",
+    "question": "Explain the API endpoints for the Pilot Orchestrator.",
+    "expected_tool": "rag_tool",
+    "expected_context_keywords": [
+      "/query",
+      "API Reference",
+      "Endpoints"
+    ],
+    "expected_answer_keywords": [
+      "api",
+      "endpoint",
+      "query"
+    ],
+    "difficulty": "medium"
+  }
+]

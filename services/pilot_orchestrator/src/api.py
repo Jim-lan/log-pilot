@@ -2,7 +2,7 @@ import sys
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
@@ -31,8 +31,7 @@ class QueryResponse(BaseModel):
     context: Optional[str] = None
     intent: str
     metadata: Optional[Dict[str, Any]] = {}
-
-
+    trace: Optional[List[Dict[str, Any]]] = None
 
 @app.get("/health")
 def health_check():
@@ -92,12 +91,25 @@ def run_query(request: QueryRequest):
         
         latency = time.time() - start_time
         
+        # Extract trace from messages (identifying tool calls/outputs)
+        # LangGraph messages usually have 'type' or are BaseMessage objects
+        # We need to serialize them safely
+        trace = []
+        if "messages" in final_state:
+            for m in final_state["messages"]:
+                # Simple serialization for demo
+                msg_dict = {"type": m.type if hasattr(m, "type") else "unknown", "content": str(m.content)}
+                if hasattr(m, "tool_calls") and m.tool_calls:
+                    msg_dict["tool_calls"] = m.tool_calls
+                trace.append(msg_dict)
+        
         return QueryResponse(
             answer=answer,
             sql=final_state.get("sql_query"),
             sql_result=final_state.get("sql_result"),
             context=final_state.get("rag_context"),
             intent=final_state.get("intent", "unknown"),
+            trace=trace,
             metadata={
                 "rewritten_query": final_state.get("rewritten_query"),
                 "latency": latency,

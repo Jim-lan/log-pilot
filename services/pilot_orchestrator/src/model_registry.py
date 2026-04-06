@@ -53,12 +53,12 @@ class ModelRegistry:
         # Determine 'fast' model
         fast_model = models_map.get("fast")
         if not fast_model:
-            fast_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
+            fast_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "gemma4:e4b"))
             
         # Determine 'smart' model (map 'reasoning' -> 'smart')
         smart_model = models_map.get("reasoning")
         if not smart_model:
-            smart_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "llama3"))
+            smart_model = provider_config.get("default_model", os.getenv("LLM_MODEL", "gemma4:e4b"))
 
         self.register(ModelConfig(
             model_id="fast",

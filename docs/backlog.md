@@ -6,7 +6,7 @@ This document tracks identified architectural risks, performance trade-offs, and
 
 ### A. Latency Impact (Router Overhead)
 *   **Risk**: The Chain of Thought (CoT) Router introduces a JSON parsing step and increases token count, adding ~200-500ms latency per query.
-*   **Current Mitigation**: Using `fast` (Llama3-8b) model vs `strong` model.
+*   **Current Mitigation**: Using `fast` (Gemma4-E4B) model vs `strong` model.
 *   **Future Optimization**:
     *   **Router Caching**: Cache the intent for identical queries (e.g., "Show me errors" is always SQL).
     *   **Distillation**: Fine-tune a tiny model (e.g., TinyLlama) specifically for this JSON classification task.

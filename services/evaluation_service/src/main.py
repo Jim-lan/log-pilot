@@ -34,8 +34,8 @@ print(f"🤖 Initializing Ragas with Ollama at {LLM_BASE_URL}...")
 # LLM_BASE_URL usually has /v1 for OpenAI compat, but LangChain ChatOllama expects just the host.
 OLLAMA_HOST = LLM_BASE_URL.replace("/v1", "")
 
-llm = ChatOllama(model="llama3", base_url=OLLAMA_HOST)
-embeddings = OllamaEmbeddings(model="llama3", base_url=OLLAMA_HOST)
+llm = ChatOllama(model="gemma4:e4b", base_url=OLLAMA_HOST)
+embeddings = OllamaEmbeddings(model="gemma4:e4b", base_url=OLLAMA_HOST)
 
 class EvaluateRequest(BaseModel):
     query: str

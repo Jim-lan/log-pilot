@@ -33,7 +33,7 @@ Create a `.env` file in the root directory:
 ```bash
 # LLM Configuration
 LLM_BASE_URL=http://host.docker.internal:11434
-LLM_MODEL=llama3
+LLM_MODEL=gemma4:e4b
 
 # Database Paths
 LOGS_DB_PATH=data/target/logs.duckdb
