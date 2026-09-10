@@ -4,6 +4,8 @@ For the proposed evolution from the current prototype to a dependable internal a
 
 ## 1. Component Diagram
 
+Development verification uses a separate [isolated baseline](testing_baseline.md): selected source is mounted read-only into a network-disabled test container, and real DuckDB tests use disposable storage. This test service is separate from the application components below and does not start them.
+
 The LogPilot system consists of 6 main containerized services:
 
 ```mermaid

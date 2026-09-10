@@ -136,6 +136,7 @@ We don't guess—we measure. The system includes a dedicated `evaluation_service
 -   [**Design History**](docs/design_history/agent_design.md): Evolution of the agentic design.
 
 ### 🔵 For Developers
+-   [**Isolated Test Environment**](docs/testing_baseline.md): Run the offline baseline with temporary data before changing application behavior.
 -   [**Technical Reference**](docs/technical_reference.md): Code structure, modules, and setup.
 -   [**API Reference**](docs/api_reference.md): Endpoints and payloads.
 -   [**Security Guide**](docs/security_deployment.md): Deployment hardening and PII masking.

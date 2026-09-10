@@ -1,8 +1,11 @@
 # LogPilot: reliability and enterprise AI learning roadmap
 
 Date: 2026-09-10  
-Status: Design proposal; implementation has not started.  
-First implementation step: **0.1 — establish an isolated baseline**.
+Status: Step 0.1 implemented and verified; later steps remain planned.
+
+Next implementation step: **0.2 — protected feature contracts and test harness**.
+
+Evidence and run instructions: [isolated test baseline](testing_baseline.md).
 
 ## 1. Purpose and honest starting point
 
@@ -204,7 +207,7 @@ Track implementation with: step ID, status, revision/change link, test evidence,
 
 | Order | Step | Status |
 |---|---|---|
-| 1 | 0.1 — isolated environment and baseline inventory | Not started |
+| 1 | 0.1 — isolated environment and baseline inventory | Complete: 14 checks pass locally and in Docker; see [evidence](testing_baseline.md) |
 | 2 | 0.2 — protected feature contracts and test harness | Not started |
 | 3 | 1.1 — history serialization and MCP compatibility | Not started |
 | 4 | 1.2 — bounded correction and fallback | Not started |

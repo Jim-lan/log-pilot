@@ -1,0 +1,3 @@
+2026-09-10 12:00:00 INFO fixture-service: Started
+2026-09-10 12:00:01 ERROR fixture-service: Login failed for learner@example.com
+2026-09-10 12:00:02 ERROR fixture-service: Retry failed

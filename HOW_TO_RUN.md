@@ -12,6 +12,8 @@ LogPilot is an AI Agent that doesn't just "chat"—it uses tools. It combines th
 
 ## ✅ Prerequisites
 
+For safe development checks before running the demo, use the [isolated test environment](docs/testing_baseline.md). Its standalone Compose file and temporary databases keep tests separate from application data. The cleanup/reset commands in this demo guide are not part of the test workflow.
+
 Before you start, ensure you have:
 1.  **Docker Desktop** installed and running.
 2.  **8GB+ RAM** available (for running the local LLM).

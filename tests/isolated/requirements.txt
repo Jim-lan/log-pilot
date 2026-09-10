@@ -1,0 +1,2 @@
+# Match the application's currently pinned DuckDB version for this baseline.
+duckdb==1.1.3
