@@ -112,6 +112,8 @@ LogPilot is built on the **"Router-Solver"** pattern with **Agentic RAG**. A cen
 This architecture ensures high precision (SQL) and helpful context (RAG) while maintaining a natural user experience.
 
 ## 🗺️ Roadmap / Next
+The current implementation priority is the [enterprise AI learning and reliability roadmap](docs/enterprise_roadmap.md): stabilize existing features, establish trustworthy evaluation, then add security, recoverable ingestion, and operational readiness. The cloud and optimization ideas below are later candidates, not the immediate implementation sequence. Enterprise readiness has not yet been demonstrated.
+
 - **Stateless Architecture (Zero-ETL)**: Transitioning from local DuckDB files to direct S3 Parquet querying (`read_parquet`) to enable infinite scale and stateless compute.
 - **Cloud-Native Adaptation**: Building an adapter to query **AWS CloudWatch Logs / Insights** directly, allowing "Bring Your Own Data" without duplication.
 - **Storage Optimization**: Implementing log normalization (storing unique Templates + Parameters) to reduce storage footprint by ~90% for high-volume repetitions.
@@ -130,6 +132,7 @@ We don't guess—we measure. The system includes a dedicated `evaluation_service
 ### 🟢 For Everyone
 -   [**Detailed Architecture**](docs/architecture.md): The blueprint of the system (Flowcharts, Components).
 -   [**Project Roadmap & Backlog**](docs/backlog.md): Future plans, risks, and enhancement ideas.
+-   [**Enterprise AI Learning Roadmap**](docs/enterprise_roadmap.md): Phased fixes, acceptance gates, rollback procedures, and hands-on learning goals.
 -   [**Design History**](docs/design_history/agent_design.md): Evolution of the agentic design.
 
 ### 🔵 For Developers

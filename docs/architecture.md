@@ -1,5 +1,7 @@
 # Detailed Architecture 🏗️
 
+For the proposed evolution from the current prototype to a dependable internal assistant, see the [enterprise AI learning and reliability roadmap](enterprise_roadmap.md). It defines the implementation order, target trust/storage boundaries, regression gates, and migration safeguards. The target design is not yet implemented; existing diagrams and future options below do not establish enterprise readiness.
+
 ## 1. Component Diagram
 
 The LogPilot system consists of 6 main containerized services:

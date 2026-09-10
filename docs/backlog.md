@@ -2,6 +2,8 @@
 
 This document tracks identified architectural risks, performance trade-offs, and future enhancement opportunities. It serves as a repository for ideas investigated during the "Robustness 2.0" phase.
 
+Implementation order is now defined by the [enterprise AI learning and reliability roadmap](enterprise_roadmap.md), dated 2026-09-10. Stabilization, evaluation integrity, security, and data recovery precede the enhancement ideas below. This backlog is an idea inventory; its proposed benefits are not verified production guarantees.
+
 ## 1. Architectural Risks & Mitigations 🛡️
 
 ### A. Latency Impact (Router Overhead)
