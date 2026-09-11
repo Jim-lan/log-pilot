@@ -69,9 +69,12 @@ def rewrite_query(state: AgentState) -> AgentState:
     """
     query = state["query"]
     messages = state.get("messages", [])
+    context_feedback = state.get("context_feedback", "") if state.get("context_valid") is False else ""
+    if state.get("context_valid") is False:
+        state["context_retry_count"] = state.get("context_retry_count", 0) + 1
     
     # If no history, no need to rewrite (optimization)
-    if not messages:
+    if not messages and not context_feedback:
         state["rewritten_query"] = query
         print(f"⏩ No history, skipping rewrite: {query}")
         return state
@@ -87,7 +90,8 @@ def rewrite_query(state: AgentState) -> AgentState:
             "pilot_orchestrator",
             "query_rewriter",
             query=query,
-            chat_history=chat_history
+            chat_history=chat_history,
+            context_feedback=context_feedback
         )
         # Use 'fast' model
         rewritten = llm_client.generate(prompt, model_type="fast").strip()
@@ -195,7 +199,7 @@ def validate_sql(state: AgentState) -> AgentState:
         if sql and sql.strip().upper().startswith("AMBIGUOUS:"):
             state["sql_valid"] = False
             state["sql_error"] = sql.strip() # Pass the explanation forward
-            state["retry_count"] = 999 # Skip fix loop
+            state["sql_retry_count"] = 3 # Skip SQL repair without exhausting other budgets
             print(f"🛑 Ambiguity Detected: {state['sql_error']}")
             return state
 
@@ -251,7 +255,7 @@ def fix_sql(state: AgentState) -> AgentState:
     query = state.get("rewritten_query", state["query"])
     bad_sql = state.get("sql_query")
     error = state.get("sql_error")
-    retry_count = state.get("retry_count", 0)
+    retry_count = state.get("sql_retry_count", 0)
     
     print(f"🔧 Fixing SQL (Attempt {retry_count + 1})...")
     
@@ -281,11 +285,11 @@ Fix the SQL query. Output ONLY the fixed SQL query.
                 fixed_sql = fixed_sql[match_sql.start():].strip()
             
         state["sql_query"] = fixed_sql
-        state["retry_count"] = retry_count + 1
+        state["sql_retry_count"] = retry_count + 1
     except Exception as e:
         print(f"❌ Fix Failed: {e}")
         # Keep bad sql, will fail validation again or hit limit
-        state["retry_count"] = retry_count + 1
+        state["sql_retry_count"] = retry_count + 1
         
     return state
 
@@ -323,9 +327,8 @@ def retrieve_context(state: AgentState) -> AgentState:
     """
     # Use rewritten query
     query = state.get("rewritten_query", state["query"])
-    kb = get_kb_store()
-    
     try:
+        kb = get_kb_store()
         # 1. Retrieve relevant patterns from Vector DB
         # We get nodes which contain metadata including 'cluster_id'
         nodes = kb.retrieve(query, k=5)
@@ -440,6 +443,8 @@ def synthesize_answer(state: AgentState) -> AgentState:
     # Let's use original query for the "User Question" part of the prompt, 
     # but the context (SQL/RAG) was derived from the rewritten one.
     query = state["query"] 
+    if state.get("answer_valid") is False:
+        state["answer_retry_count"] = state.get("answer_retry_count", 0) + 1
     
     if intent == "sql":
         context = f"SQL: {state.get('sql_query')}\nResult: {state.get('sql_result')}"
@@ -469,7 +474,8 @@ def synthesize_answer(state: AgentState) -> AgentState:
         "synthesize_answer",
         query=query,
         context=context,
-        chat_history=chat_history
+        chat_history=chat_history,
+        answer_feedback=state.get("answer_feedback", "")
     )
     response = llm_client.generate(prompt, model_type="fast")
     
@@ -513,7 +519,9 @@ def verify_context(state: AgentState) -> AgentState:
     context = state.get("rag_context", "")
     
     # Skip verification if context is empty or error
-    if not context or "Error retrieving context" in context or "No relevant logs found" in context:
+    if (not context or "Error retrieving context" in context
+            or context in ("No relevant logs found.", "No relevant log patterns found.")
+            or context.startswith("Found patterns/docs but no usable content.")):
         state["context_valid"] = False
         state["context_feedback"] = "No context retrieved."
         return state
@@ -537,7 +545,7 @@ def verify_context(state: AgentState) -> AgentState:
              response = json_match.group(0)
             
         result = json.loads(response)
-        state["context_valid"] = result.get("valid", False)
+        state["context_valid"] = result.get("valid") is True
         state["context_feedback"] = result.get("feedback", "")
         
         print(f"🧐 Context Verification: {'✅ Valid' if state['context_valid'] else '❌ Invalid'} - {state['context_feedback']}")
@@ -575,14 +583,17 @@ def validate_answer(state: AgentState) -> AgentState:
             response = response.split("```")[1].strip()
             
         result = json.loads(response)
-        state["answer_valid"] = result.get("valid", False)
+        state["answer_valid"] = result.get("valid") is True
+        if state["answer_valid"]:
+            state["outcome"] = "validated"
         state["answer_feedback"] = result.get("feedback", "")
         
         print(f"🛡️ Answer Validation: {'✅ Valid' if state['answer_valid'] else '❌ Invalid'} - {state['answer_feedback']}")
         
     except Exception as e:
         print(f"❌ Answer Validation Failed: {e}")
-        state["answer_valid"] = True # Fail open
+        state["answer_valid"] = False
+        state["answer_feedback"] = "Answer validation unavailable or malformed."
         
     return state
 
@@ -592,14 +603,37 @@ def perform_web_search(state: AgentState) -> AgentState:
     This acts as a fallback for RAG or for general questions.
     """
     query = state.get("rewritten_query", state["query"])
+    # Fallback synthesis must use web evidence rather than rejected RAG context.
+    state["intent"] = "web_search"
+    state["web_results"] = ""
+    if os.getenv("LOGPILOT_ALLOW_WEB_SEARCH", "").lower() != "true":
+        state["failure_reason"] = "web_search_disabled"
+        return state
     print(f"🌍 Performing Web Search for: {query}")
     
     try:
         results = get_web_tool().search(query)
+        # The current search adapter reports failures as text rather than typed
+        # errors. Do not pass those strings to synthesis as supporting evidence.
+        if not results or results.startswith(("Web Search is unavailable", "No web search results found.",
+                                              "Error performing web search:")):
+            state["failure_reason"] = "web_search_unavailable"
+            return state
         state["web_results"] = results
         print("✅ Web Search Completed.")
     except Exception as e:
         print(f"❌ Web Search Failed: {e}")
-        state["web_results"] = "Web search failed."
+        state["failure_reason"] = "web_search_unavailable"
         
+    return state
+
+
+def finish_unverified(state: AgentState) -> AgentState:
+    """Never publish the last rejected candidate as a verified answer."""
+    state["outcome"] = ("dependency_error" if state.get("failure_reason") == "web_search_unavailable"
+                        else "insufficient_evidence")
+    state["final_answer"] = (
+        "I could not validate an answer from the available evidence. "
+        "Please narrow the question or check the source data and try again."
+    )
     return state

@@ -22,7 +22,7 @@ def query_logs(sql_query: str) -> str:
     try:
         db = DuckDBConnector(read_only=True)
         try:
-            result = db.conn.execute(sql_query).fetchall()
+            result = db.query(sql_query)
             return str(result)
         finally:
             db.close()
@@ -53,7 +53,7 @@ def get_recent_logs() -> str:
     try:
         db = DuckDBConnector(read_only=True)
         try:
-            result = db.conn.execute("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50").fetchall()
+            result = db.query("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50")
             return str(result)
         finally:
             db.close()
@@ -68,7 +68,7 @@ def get_schema() -> str:
     try:
         db = DuckDBConnector(read_only=True)
         try:
-            result = db.conn.execute("DESCRIBE logs").fetchall()
+            result = db.query("DESCRIBE logs")
             return str(result)
         finally:
             db.close()
@@ -76,4 +76,3 @@ def get_schema() -> str:
         return f"Error fetching schema: {e}"
 
 # End of file
-

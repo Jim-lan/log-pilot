@@ -55,3 +55,8 @@ No previous history.
 {{ query }}
 
 ### Rewritten Query
+{% if context_feedback %}
+The previous retrieval was rejected for this reason:
+{{ context_feedback }}
+Refine the retrieval question while preserving the user's original scope.
+{% endif %}

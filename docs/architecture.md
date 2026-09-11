@@ -6,6 +6,8 @@ For the proposed evolution from the current prototype to a dependable internal a
 
 Development verification uses a separate [isolated baseline](testing_baseline.md): selected source is mounted read-only into a network-disabled test container, and real DuckDB tests use disposable storage. This test service is separate from the application components below and does not start them.
 
+The first application repair preserves dictionary-based conversation history during API response serialization and routes MCP database operations through the connector's transient query interface. HTTP contract tests use a scripted graph and real temporary DuckDB; MCP handler tests stub registration and forwarding. Full graph execution and MCP transport coverage remain separate work. See [API contracts](api_reference.md).
+
 The LogPilot system consists of 6 main containerized services:
 
 ```mermaid
@@ -134,6 +136,10 @@ sequenceDiagram
 
 
 ## 3. Detailed Request Workflow (The Brain) 🧠
+
+September 2026 correction: SQL, context and answer repairs use independent counters. SQL permits three repairs; context and answer paths each permit two retries after the first attempt. Retrieval feedback reaches query rewriting even without chat history, and answer feedback reaches the next synthesis prompt. Judge output accepts only JSON boolean `true`; malformed answer judgments fail closed. Exhausted answer attempts end at `finish_unverified` with an explicit abstention. A graph recursion limit of 64 is a final execution-step safeguard, not a wall-clock deadline.
+
+After context exhaustion, web search is available only with `LOGPILOT_ALLOW_WEB_SEARCH=true`; otherwise the graph abstains without a search call. Enabled fallback changes the evidence source to web and failed/unavailable search ends without synthesis. The control is opt-in permission, not a complete outbound-data redaction policy. Global deadlines, bounded in-flight provider calls and complete execution-event tracing remain planned.
 
 LogPilot uses **LangGraph** to orchestrate a team of specialized agents. The flow is not linear; it loops and self-corrects based on validation feedback.
 

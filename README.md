@@ -114,6 +114,9 @@ This architecture ensures high precision (SQL) and helpful context (RAG) while m
 ## 🗺️ Roadmap / Next
 The current implementation priority is the [enterprise AI learning and reliability roadmap](docs/enterprise_roadmap.md): stabilize existing features, establish trustworthy evaluation, then add security, recoverable ingestion, and operational readiness. The cloud and optimization ideas below are later candidates, not the immediate implementation sequence. Enterprise readiness has not yet been demonstrated.
 
+Current stabilization work adds isolated HTTP/MCP regression coverage and repairs follow-up history serialization and MCP database access.
+Graph regression coverage now also protects independent repair limits, strict judge verdicts, and evidence-aware fallback. External search requires `LOGPILOT_ALLOW_WEB_SEARCH=true`; it is disabled by default. Request-wide deadlines, multi-user authorization and ingestion recovery remain open.
+
 - **Stateless Architecture (Zero-ETL)**: Transitioning from local DuckDB files to direct S3 Parquet querying (`read_parquet`) to enable infinite scale and stateless compute.
 - **Cloud-Native Adaptation**: Building an adapter to query **AWS CloudWatch Logs / Insights** directly, allowing "Bring Your Own Data" without duplication.
 - **Storage Optimization**: Implementing log normalization (storing unique Templates + Parameters) to reduce storage footprint by ~90% for high-volume repetitions.

@@ -11,7 +11,8 @@ from services.pilot_orchestrator.src.nodes import (
     fix_sql,
     verify_context,
     validate_answer,
-    perform_web_search
+    perform_web_search,
+    finish_unverified
 )
 
 def route_intent(state: AgentState):
@@ -35,7 +36,7 @@ def check_sql_validity(state: AgentState):
     if state.get("sql_valid"):
         return "execute_sql"
     
-    retry_count = state.get("retry_count", 0)
+    retry_count = state.get("sql_retry_count", 0)
     if retry_count < 3:
         return "fix_sql"
     
@@ -45,10 +46,10 @@ def check_context_validity(state: AgentState):
     """
     Conditional edge logic for Context verification.
     """
-    if state.get("context_valid", True): # Default to true if not set
+    if state.get("context_valid") is True:
         return "synthesize_answer"
         
-    retry_count = state.get("retry_count", 0)
+    retry_count = state.get("context_retry_count", 0)
     if retry_count < 2: # Limit retries
         # If context is invalid, we might want to rewrite query again or just try retrieval again
         # For now, let's loop back to rewrite with feedback (if we supported feedback in rewrite)
@@ -62,14 +63,14 @@ def check_answer_validity(state: AgentState):
     """
     Conditional edge logic for Final Answer validation.
     """
-    if state.get("answer_valid", True):
+    if state.get("answer_valid") is True:
         return END
         
-    retry_count = state.get("retry_count", 0)
+    retry_count = state.get("answer_retry_count", 0)
     if retry_count < 2:
         return "synthesize_answer" # Retry synthesis
         
-    return END
+    return "finish_unverified"
 
 # Define the Graph
 workflow = StateGraph(AgentState)
@@ -86,6 +87,8 @@ workflow.add_node("verify_context", verify_context)
 workflow.add_node("synthesize_answer", synthesize_answer)
 workflow.add_node("validate_answer", validate_answer)
 workflow.add_node("perform_web_search", perform_web_search)
+workflow.add_node("finish_unverified", finish_unverified)
+workflow.add_edge("finish_unverified", END)
 
 # Set Entry Point
 workflow.set_entry_point("rewrite_query")
@@ -106,7 +109,11 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_edge("perform_web_search", "synthesize_answer")
+workflow.add_conditional_edges(
+    "perform_web_search",
+    lambda state: "finish_unverified" if state.get("failure_reason") else "synthesize_answer",
+    {"finish_unverified": "finish_unverified", "synthesize_answer": "synthesize_answer"}
+)
 
 # 2. SQL Path (with Validation Loop)
 workflow.add_edge("generate_sql", "validate_sql")
@@ -129,7 +136,8 @@ workflow.add_conditional_edges(
     check_context_validity,
     {
         "synthesize_answer": "synthesize_answer",
-        "rewrite_query": "rewrite_query"
+        "rewrite_query": "rewrite_query",
+        "perform_web_search": "perform_web_search"
     }
 )
 
@@ -140,9 +148,11 @@ workflow.add_conditional_edges(
     check_answer_validity,
     {
         END: END,
-        "synthesize_answer": "synthesize_answer"
+        "synthesize_answer": "synthesize_answer",
+        "finish_unverified": "finish_unverified"
     }
 )
 
 # Compile
-pilot_graph = workflow.compile()
+# Room for combined repair paths; per-stage counters impose the normal bound.
+pilot_graph = workflow.compile().with_config({"recursion_limit": 64})

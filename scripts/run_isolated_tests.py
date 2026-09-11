@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import socket
 from pathlib import Path
 import sys
 import tempfile
@@ -10,7 +11,8 @@ import unittest
 from importlib.metadata import version
 
 ROOT = Path(__file__).resolve().parents[1]
-TEST_FILES = ("tests/test_parser_formats.py", "tests/isolated/test_environment.py")
+TEST_FILES = ("tests/test_parser_formats.py", "tests/isolated/test_environment.py",
+              "tests/isolated/test_api_mcp.py", "tests/isolated/test_graph.py")
 
 
 def install_guards(scratch):
@@ -28,6 +30,10 @@ def install_guards(scratch):
             raise PermissionError("Isolated tests may write only inside scratch storage")
 
     def audit(event, args):
+        # asyncio uses a local socketpair for thread wakeups. Permit creation of
+        # AF_UNIX sockets only; all connect/bind/DNS calls remain prohibited.
+        if event == "socket.__new__" and args[1] == socket.AF_UNIX:
+            return
         if event.startswith("socket.") or event in ("subprocess.Popen", "os.system", "os.posix_spawn", "os.exec", "os.fork"):
             raise PermissionError("Network and child processes are disabled in isolated tests")
         if event == "open":
@@ -49,7 +55,9 @@ def main():
     sys.dont_write_bytecode = True
     # No third-party pytest plugin discovery, application startup or model imports.
     sys.path.insert(0, str(ROOT))
-    baseline = {"python": sys.version.split()[0], "duckdb": version("duckdb"), "suite": list(TEST_FILES)}
+    baseline = {"python": sys.version.split()[0],
+                "dependencies": {name: version(name) for name in ("duckdb", "fastapi", "pydantic", "httpx", "requests")},
+                "suite": list(TEST_FILES)}
     print("Runtime: " + json.dumps(baseline), flush=True)
     with tempfile.TemporaryDirectory(prefix="logpilot-tests-") as directory:
         scratch = Path(directory).resolve()

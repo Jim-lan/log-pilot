@@ -80,6 +80,7 @@ services:
     environment:
       - LOCAL_API_KEY=dummy
       - SHADOW_MODEL=shadow-gpt
+      - LOGPILOT_ALLOW_WEB_SEARCH=${LOGPILOT_ALLOW_WEB_SEARCH:-false}
     ports:
       - "8000:8000"
     depends_on:

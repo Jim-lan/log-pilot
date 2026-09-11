@@ -97,24 +97,36 @@ def run_query(request: QueryRequest):
         trace = []
         if "messages" in final_state:
             for m in final_state["messages"]:
-                # Simple serialization for demo
-                msg_dict = {"type": m.type if hasattr(m, "type") else "unknown", "content": str(m.content)}
-                if hasattr(m, "tool_calls") and m.tool_calls:
-                    msg_dict["tool_calls"] = m.tool_calls
+                # Persisted history uses dictionaries; graph integrations may
+                # return message objects. Preserve both without assuming attrs.
+                if isinstance(m, dict):
+                    msg_dict = {"type": m.get("type", m.get("role", "unknown")),
+                                "content": str(m.get("content", ""))}
+                    tool_calls = m.get("tool_calls")
+                else:
+                    msg_dict = {"type": getattr(m, "type", "unknown"),
+                                "content": str(getattr(m, "content", ""))}
+                    tool_calls = getattr(m, "tool_calls", None)
+                if tool_calls:
+                    msg_dict["tool_calls"] = tool_calls
                 trace.append(msg_dict)
         
         return QueryResponse(
             answer=answer,
             sql=final_state.get("sql_query"),
             sql_result=final_state.get("sql_result"),
-            context=final_state.get("rag_context"),
+            context=(final_state.get("web_results") if final_state.get("intent") == "web_search"
+                     else final_state.get("rag_context")),
             intent=final_state.get("intent", "unknown"),
             trace=trace,
             metadata={
                 "rewritten_query": final_state.get("rewritten_query"),
                 "latency": latency,
                 "context_feedback": final_state.get("context_feedback"),
-                "answer_feedback": final_state.get("answer_feedback")
+                "answer_feedback": final_state.get("answer_feedback"),
+                "outcome": final_state.get("outcome"),
+                "retry_counts": {kind: final_state.get(f"{kind}_retry_count", 0)
+                                 for kind in ("sql", "context", "answer")}
             }
         )
     except Exception as e:

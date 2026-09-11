@@ -16,6 +16,9 @@ services:
       - /tmp:rw,nosuid,nodev,size=256m,mode=1777
     volumes:
       - ./shared:/workspace/shared:ro
+      - ./prompts:/workspace/prompts:ro
+      - ./services/pilot_orchestrator/src:/workspace/services/pilot_orchestrator/src:ro
+      - ./services/mcp_server/src:/workspace/services/mcp_server/src:ro
       - ./scripts/run_isolated_tests.py:/workspace/scripts/run_isolated_tests.py:ro
       - ./tests/test_parser_formats.py:/workspace/tests/test_parser_formats.py:ro
       - ./tests/isolated:/workspace/tests/isolated:ro

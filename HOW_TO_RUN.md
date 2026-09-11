@@ -14,6 +14,8 @@ LogPilot is an AI Agent that doesn't just "chat"—it uses tools. It combines th
 
 For safe development checks before running the demo, use the [isolated test environment](docs/testing_baseline.md). Its standalone Compose file and temporary databases keep tests separate from application data. The cleanup/reset commands in this demo guide are not part of the test workflow.
 
+External web search is now disabled by default. If you deliberately want rewritten questions sent to the search provider, set `LOGPILOT_ALLOW_WEB_SEARCH=true` in the orchestrator environment (the main Compose file forwards this setting). Without opt-in, failed local retrieval ends with an insufficient-evidence response. This changes the web-fallback expectation in the demo scenarios below.
+
 Before you start, ensure you have:
 1.  **Docker Desktop** installed and running.
 2.  **8GB+ RAM** available (for running the local LLM).

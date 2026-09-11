@@ -23,6 +23,11 @@ class AgentState(TypedDict):
     
     # Metadata
     retry_count: int
+    sql_retry_count: int
+    context_retry_count: int
+    answer_retry_count: int
+    outcome: Optional[str]
+    failure_reason: Optional[str]
     history: List[Dict[str, Any]]
     messages: List[Dict[str, str]] # Chat history for context
     rewritten_query: Optional[str] # Standalone query after rewriting

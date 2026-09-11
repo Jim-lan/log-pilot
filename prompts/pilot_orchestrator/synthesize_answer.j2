@@ -48,3 +48,8 @@ User Query: "Count logs"
 Answer: I encountered an error while querying the data: Table not found. Please check the system configuration.
 
 ### Answer
+{% if answer_feedback %}
+The previous answer was rejected for this reason:
+{{ answer_feedback }}
+Correct the answer using the supplied evidence. Do not invent missing evidence.
+{% endif %}
