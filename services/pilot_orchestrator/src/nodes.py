@@ -14,6 +14,7 @@ from services.knowledge_base.src.store import KnowledgeStore
 from shared.db.duckdb_client import DuckDBConnector
 from datetime import datetime, timedelta
 import re
+from shared.execution import current_budget
 
 # Initialize Shared Components
 llm_client = LLMClient()
@@ -481,7 +482,7 @@ def synthesize_answer(state: AgentState) -> AgentState:
     
     # --- Shadow Mode Logic ---
     shadow_model = os.getenv("SHADOW_MODEL")
-    if shadow_model:
+    if shadow_model and current_budget() is None:
         import threading
         import duckdb
         import time

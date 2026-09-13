@@ -1,9 +1,9 @@
 # LogPilot: reliability and enterprise AI learning roadmap
 
 Date: 2026-09-10  
-Status: Step 0.1 complete. API/MCP and real graph contracts protect history/MCP fixes and bounded repair paths. Step 1.2 still needs request-wide deadlines/call budgets; broader coverage and tracing remain open.
+Status: Step 0.1 complete. API/MCP and real graph contracts protect history/MCP fixes and bounded repair paths. Step 1.2 query/provider budgets implemented; broader coverage and tracing remain open.
 
-Next implementation step: **finish 1.2 request/provider budgets and typed dependency failures**, alongside remaining 0.2 coverage.
+Next implementation step: **1.3 safe rendering and comprehensive egress handling**, alongside remaining 0.2 coverage. See [request budget design](request_budgets.md) for the completed controls and cancellation limitations.
 
 Evidence and run instructions: [isolated test baseline](testing_baseline.md).
 
@@ -210,7 +210,7 @@ Track implementation with: step ID, status, revision/change link, test evidence,
 | 1 | 0.1 — isolated environment and baseline inventory | Complete: 14 checks pass locally and in Docker; see [evidence](testing_baseline.md) |
 | 2 | 0.2 — protected feature contracts and test harness | In progress: HTTP, history, MCP handlers and real graph paths covered; UI, ingestion, legacy harness and CI remain |
 | 3 | 1.1 — history serialization and MCP compatibility | Core repairs implemented; complete execution-event trace still pending |
-| 4 | 1.2 — bounded correction and fallback | Independent retries, feedback, strict verdicts and fallback implemented; request/provider budgets and typed LLM failures pending |
+| 4 | 1.2 — bounded correction and fallback | Implemented for `/query`: independent retries, request deadlines, provider budgets/timeouts and typed failures; operational load testing remains |
 | 5 | 1.3 — safe rendering and explicit egress | External search now opt-in; rendering, comprehensive egress redaction and loopback binding pending |
 | 6 | 2.1–2.2 — evaluation integrity and quality baseline | Not started |
 | 7 | Phases 3–6 — permissions, data reliability, storage and operations | Not started; refine estimates after R1 |

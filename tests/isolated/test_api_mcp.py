@@ -10,6 +10,9 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from shared.db.duckdb_client import DuckDBConnector
+# Load the shared budget module outside temporary sys.modules substitutions so
+# exception classes and ContextVars retain their identity across all fixtures.
+import shared.execution
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,6 +44,8 @@ class APIAndMCPContracts(unittest.TestCase):
             self.api = load_source("isolated_api", "services/pilot_orchestrator/src/api.py")
         self.client = TestClient(self.api.app)
         self.addCleanup(self.client.close)
+        if hasattr(self.api, "query_executor"):
+            self.addCleanup(self.api.query_executor.shutdown, wait=True)
 
     def restore(self):
         os.chdir(self.previous)
@@ -116,9 +121,50 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(self.db.get_history(), [])
 
+    def test_request_deadline_returns_before_worker_and_discards_late_result(self):
+        import threading
+        release = threading.Event()
+        self.addCleanup(release.set)
+        self.graph.invoke.side_effect = lambda state: (release.wait(1), self.sql_response(state))[1]
+        with patch.dict(os.environ, {"LOGPILOT_REQUEST_TIMEOUT_SECONDS": "0.05"}):
+            response = self.client.post("/query", json={"query": "slow query"})
+        self.assertEqual(response.status_code, 504, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "deadline_exceeded")
+        free_slots = 0
+        while self.api.query_slots.acquire(blocking=False):
+            free_slots += 1
+        for _ in range(free_slots):
+            self.api.query_slots.release()
+        self.assertEqual(free_slots, self.api.query_workers - 1)
+        release.set()
+        self.api.query_executor.shutdown(wait=True)
+        self.assertEqual(self.db.get_history(), [])
+
     def test_invalid_request_rejected(self):
         response = self.client.post("/query", json={})
         self.assertEqual(response.status_code, 422)
+        self.graph.invoke.assert_not_called()
+
+    def test_exhausted_request_budget_returns_structured_error(self):
+        from shared.execution import invoke_provider
+        def exceed(state):
+            invoke_provider("llm", lambda timeout: "first")
+            invoke_provider("llm", lambda timeout: "second")
+            return self.sql_response(state)
+        self.graph.invoke.side_effect = exceed
+        with patch.dict(os.environ, {"LOGPILOT_MAX_LLM_CALLS": "1"}):
+            response = self.client.post("/query", json={"query": "question"})
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["detail"]["code"], "call_budget_exceeded")
+        self.assertEqual(self.db.get_history(), [])
+
+    def test_busy_workers_reject_instead_of_queueing(self):
+        for _ in range(self.api.query_workers):
+            self.api.query_slots.acquire()
+            self.addCleanup(self.api.query_slots.release)
+        response = self.client.post("/query", json={"query": "question"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "query_capacity_exhausted")
         self.graph.invoke.assert_not_called()
 
     def test_health_contract_with_provider_stub(self):

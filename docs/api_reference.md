@@ -48,7 +48,9 @@ Conversation compatibility: follow-up requests can serialize existing dictionary
 
 Graph validation now uses independent retry counters (three SQL repairs; two context and two answer retries). `metadata.retry_counts` reports `sql`, `context` and `answer`. `metadata.outcome` may be `validated`, `insufficient_evidence` or `dependency_error`; `validated` means the configured judge accepted the answer, not that factual correctness is guaranteed. These are additive fields. Transport/request exceptions still use HTTP error responses.
 
-When the answer judge repeatedly rejects or cannot parse its response, the returned answer explicitly abstains. An enabled RAG-to-web fallback returns `intent: "web_search"` and the web evidence in `context`, rather than the rejected RAG context. External search is disabled unless the operator sets `LOGPILOT_ALLOW_WEB_SEARCH=true`; this flag permits sending the rewritten question to the external search provider. Search absence/outage does not become supporting evidence for synthesis. Authentication, comprehensive egress redaction and overall request deadlines are still pending.
+When the answer judge repeatedly rejects or cannot parse its response, the returned answer explicitly abstains. An enabled RAG-to-web fallback returns `intent: "web_search"` and the web evidence in `context`, rather than the rejected RAG context. External search is disabled unless the operator sets `LOGPILOT_ALLOW_WEB_SEARCH=true`; this flag permits sending the rewritten question to the external search provider. Search absence/outage does not become supporting evidence for synthesis. Authentication and comprehensive egress redaction are still pending.
+
+Update: `/query` now enforces an overall HTTP deadline, per-provider timeouts and call budgets, and bounded worker capacity. See [request budgets](request_budgets.md) for operator defaults, cancellation limitations and structured 429/502/503/504 error contracts. Successful responses include `metadata.provider_calls`. Authentication and comprehensive egress redaction remain pending.
 
 ---
 

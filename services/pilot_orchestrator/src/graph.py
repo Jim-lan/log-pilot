@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from shared.execution import guarded_node
 from services.pilot_orchestrator.src.state import AgentState
 from services.pilot_orchestrator.src.nodes import (
     classify_intent,
@@ -76,18 +77,18 @@ def check_answer_validity(state: AgentState):
 workflow = StateGraph(AgentState)
 
 # Add Nodes
-workflow.add_node("rewrite_query", rewrite_query)
-workflow.add_node("classify_intent", classify_intent)
-workflow.add_node("generate_sql", generate_sql)
-workflow.add_node("validate_sql", validate_sql)
-workflow.add_node("fix_sql", fix_sql)
-workflow.add_node("execute_sql", execute_sql)
-workflow.add_node("retrieve_context", retrieve_context)
-workflow.add_node("verify_context", verify_context)
-workflow.add_node("synthesize_answer", synthesize_answer)
-workflow.add_node("validate_answer", validate_answer)
-workflow.add_node("perform_web_search", perform_web_search)
-workflow.add_node("finish_unverified", finish_unverified)
+workflow.add_node("rewrite_query", guarded_node(rewrite_query))
+workflow.add_node("classify_intent", guarded_node(classify_intent))
+workflow.add_node("generate_sql", guarded_node(generate_sql))
+workflow.add_node("validate_sql", guarded_node(validate_sql))
+workflow.add_node("fix_sql", guarded_node(fix_sql))
+workflow.add_node("execute_sql", guarded_node(execute_sql))
+workflow.add_node("retrieve_context", guarded_node(retrieve_context))
+workflow.add_node("verify_context", guarded_node(verify_context))
+workflow.add_node("synthesize_answer", guarded_node(synthesize_answer))
+workflow.add_node("validate_answer", guarded_node(validate_answer))
+workflow.add_node("perform_web_search", guarded_node(perform_web_search))
+workflow.add_node("finish_unverified", guarded_node(finish_unverified))
 workflow.add_edge("finish_unverified", END)
 
 # Set Entry Point

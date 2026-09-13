@@ -16,6 +16,8 @@ For safe development checks before running the demo, use the [isolated test envi
 
 External web search is now disabled by default. If you deliberately want rewritten questions sent to the search provider, set `LOGPILOT_ALLOW_WEB_SEARCH=true` in the orchestrator environment (the main Compose file forwards this setting). Without opt-in, failed local retrieval ends with an insufficient-evidence response. This changes the web-fallback expectation in the demo scenarios below.
 
+Queries default to a 120-second HTTP deadline, 30-second LLM timeout, 10-second search timeout, 16 LLM calls and one search call. Four active query workers are allowed per API process. See [request budgets](docs/request_budgets.md) before adjusting these settings; a timed-out synchronous operation retains its slot until it stops.
+
 Before you start, ensure you have:
 1.  **Docker Desktop** installed and running.
 2.  **8GB+ RAM** available (for running the local LLM).

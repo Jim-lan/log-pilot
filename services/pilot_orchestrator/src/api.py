@@ -1,5 +1,9 @@
 import sys
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from shared.execution import RequestBudget, ExecutionFailure, DeadlineExceeded, use_budget, setting
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
@@ -12,6 +16,9 @@ from services.pilot_orchestrator.src.graph import pilot_graph
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="LogPilot Orchestrator API", version="1.0.0")
+query_workers = setting("LOGPILOT_QUERY_WORKERS", 4, int)
+query_executor = ThreadPoolExecutor(max_workers=query_workers, thread_name_prefix="pilot-query")
+query_slots = threading.BoundedSemaphore(query_workers)
 
 app.add_middleware(
     CORSMiddleware,
@@ -41,13 +48,47 @@ def health_check():
     return {"status": "ok", "llm": llm_status}
 
 @app.post("/query", response_model=QueryResponse)
-def run_query(request: QueryRequest):
+async def run_query(request: QueryRequest):
+    budget = RequestBudget.from_env()
+    if not query_slots.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail={"code": "query_capacity_exhausted",
+                                                     "message": "All query workers are busy. Please retry later."})
+
+    def work():
+        try:
+            with use_budget(budget):
+                return _run_query(request, budget)
+        finally:
+            # A timeout does not free capacity until the synchronous work stops.
+            query_slots.release()
+
+    try:
+        future = asyncio.get_running_loop().run_in_executor(query_executor, work)
+    except Exception:
+        query_slots.release()
+        raise
+    future.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
+    try:
+        return await asyncio.wait_for(asyncio.shield(future), timeout=budget.remaining())
+    except asyncio.TimeoutError:
+        budget.cancel()
+        failure = DeadlineExceeded()
+        raise HTTPException(status_code=failure.status, detail={"code": failure.code, "message": failure.message})
+    except ExecutionFailure as failure:
+        raise HTTPException(status_code=failure.status, detail={"code": failure.code, "message": failure.message})
+    except asyncio.CancelledError:
+        budget.cancel()
+        raise
+
+
+def _run_query(request: QueryRequest, budget: RequestBudget):
     """
     Executes the Pilot Agent for a given query.
     """
     try:
         import time
         start_time = time.time()
+        budget.check()
         print("DEBUG: Fetching History...")
         # Fetch History for Context
         from shared.db.duckdb_client import DuckDBConnector
@@ -74,6 +115,7 @@ def run_query(request: QueryRequest):
         # Run the graph
         # invoke returns the final state
         final_state = pilot_graph.invoke(initial_state)
+        budget.check()
         
         answer = final_state.get("final_answer", "No answer generated.")
         
@@ -81,11 +123,14 @@ def run_query(request: QueryRequest):
         try:
             # Re-open DB for saving (read_only=True is fine, history connection is separate)
             db = DuckDBConnector(read_only=True)
+            budget.check()
             # Save User Query
             db.save_message("default", "user", request.query)
             # Save AI Answer
             db.save_message("default", "ai", answer)
             db.close() # Close connection
+        except ExecutionFailure:
+            raise
         except Exception as e:
             print(f"⚠️ Failed to save history: {e}")
         
@@ -111,6 +156,7 @@ def run_query(request: QueryRequest):
                     msg_dict["tool_calls"] = tool_calls
                 trace.append(msg_dict)
         
+        budget.check()
         return QueryResponse(
             answer=answer,
             sql=final_state.get("sql_query"),
@@ -126,9 +172,12 @@ def run_query(request: QueryRequest):
                 "answer_feedback": final_state.get("answer_feedback"),
                 "outcome": final_state.get("outcome"),
                 "retry_counts": {kind: final_state.get(f"{kind}_retry_count", 0)
-                                 for kind in ("sql", "context", "answer")}
+                                 for kind in ("sql", "context", "answer")},
+                "provider_calls": dict(budget.calls)
             }
         )
+    except ExecutionFailure:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

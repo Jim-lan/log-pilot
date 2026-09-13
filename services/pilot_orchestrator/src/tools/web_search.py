@@ -5,27 +5,29 @@ except ImportError:
     HAS_DDGS = False
     
 import logging
+from shared.execution import invoke_provider, ExecutionFailure, ProviderTimeout
 
 class WebSearchTool:
     """
     Wrapper for DuckDuckGo Search.
     """
     def __init__(self):
-        if HAS_DDGS:
-            self.ddgs = DDGS()
-        else:
-            self.ddgs = None
-            logging.warning("duckduckgo_search not installed. Web Search disabled.")
+        pass
         
     def search(self, query: str, max_results: int = 5) -> str:
         """
         Performs a web search and returns formatted results.
         """
-        if not self.ddgs:
-            return "Web Search is unavailable (duckduckgo_search package not installed)."
-            
-        try:
-            results = self.ddgs.text(query, max_results=max_results)
+        def request(timeout):
+            if not HAS_DDGS:
+                raise ExecutionFailure()
+            # Client is per call: concurrent requests cannot share mutable timeout
+            # settings, and transport resources close before releasing capacity.
+            transport_timeout = int(timeout)
+            if transport_timeout < 1:
+                raise ProviderTimeout()
+            with DDGS(timeout=transport_timeout) as client:
+                results = list(client.text(query, max_results=max_results))
             if not results:
                 return "No web search results found."
             
@@ -37,6 +39,4 @@ class WebSearchTool:
                 
             return summary.strip()
             
-        except Exception as e:
-            logging.error(f"Web Search Failed: {e}")
-            return f"Error performing web search: {str(e)}"
+        return invoke_provider("search", request)

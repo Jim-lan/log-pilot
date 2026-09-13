@@ -46,7 +46,10 @@ class GraphContracts(unittest.TestCase):
                 raise response
             return response
 
-        self.llm = SimpleNamespace(generate=generate)
+        from shared.execution import current_budget, invoke_provider
+        self.llm = SimpleNamespace(generate=lambda prompt, model_type="fast":
+            invoke_provider("llm", lambda timeout: generate(prompt, model_type))
+            if current_budget() is not None else generate(prompt, model_type))
         self.kb = Mock()
         self.kb.retrieve.return_value = [SimpleNamespace(metadata={"type": "runbook_card", "topic": "fixture"},
                                                         get_content=lambda: "Runbook fixture evidence")]
@@ -183,3 +186,19 @@ class GraphContracts(unittest.TestCase):
         self.assertEqual(self.count("fix_sql"), 3)
         self.assertEqual(self.count("synthesize_answer"), 3)
         self.assertEqual(result["outcome"], "insufficient_evidence")
+
+    def test_call_budget_propagates_through_real_graph(self):
+        from shared.execution import RequestBudget, use_budget, CallBudgetExceeded
+        budget = RequestBudget(timeout=5, max_llm_calls=2)
+        with use_budget(budget), self.assertRaises(CallBudgetExceeded):
+            self.invoke()
+        self.assertEqual(budget.calls["llm"], 2)
+        self.assertEqual(self.count("synthesize_answer"), 0)
+
+    def test_caught_provider_failure_still_stops_graph(self):
+        from shared.execution import RequestBudget, use_budget, ProviderTimeout
+        self.responses["intent_classifier"] = TimeoutError("synthetic")
+        budget = RequestBudget(timeout=5, max_llm_calls=5)
+        with use_budget(budget), self.assertRaises(ProviderTimeout):
+            self.invoke()
+        self.assertEqual(self.count("synthesize_answer"), 0)

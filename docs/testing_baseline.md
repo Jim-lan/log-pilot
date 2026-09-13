@@ -42,13 +42,13 @@ Docker provides the OS-level boundary. Local Python audit hooks only guard accid
 
 ## How data and dependencies are isolated
 
-The runner selects exactly four files rather than discovering the legacy suite. It disables bytecode writes, creates a fresh temporary working directory before importing tests, clears inherited environment variables (including provider credentials), redirects home/cache paths, enables model-library offline flags and blocks Python network/child-process operations before test collection. Local AF_UNIX socketpair creation is permitted for asyncio thread wakeups used by the in-process HTTP client; network sockets, connect, bind and DNS calls remain blocked. Docker still has `network_mode: none`.
+The runner selects exactly five files rather than discovering the legacy suite. It disables bytecode writes, creates a fresh temporary working directory before importing tests, clears inherited environment variables (including provider credentials), redirects home/cache paths, enables model-library offline flags and blocks Python network/child-process operations before test collection. Local AF_UNIX socketpair creation is permitted for asyncio thread wakeups used by the in-process HTTP client; network sockets, connect, bind and DNS calls remain blocked. Docker still has `network_mode: none`.
 
 Each storage test gets a separate temporary working directory. Existing relative paths such as `data/target/history.duckdb` therefore resolve into disposable storage. Tests execute real parser, masker and DuckDB connector code. No application data path changes are needed for this initial allowlist. The audit guard rejects Python reads of the project's real data directory and writes outside scratch storage.
 
 No real LLM, embedding model, ingestion worker or RAG store is imported. HTTP tests import the actual API after substituting a scripted graph, then exercise it through FastAPI's in-process client with real temporary DuckDB. MCP tests import real handler code after replacing registration decorators; forwarding uses a mocked HTTP call. They do not verify the MCP transport. Scripted LLM/search doubles in `tests/isolated/fakes.py` remain available for later full graph tests. Synthetic fixtures are under `tests/isolated/fixtures/`; the runbook is not embedded or indexed in this phase.
 
-## Scope of the 41 checks
+## Scope of the 57 checks
 
 | Area | Checks |
 |---|---|
@@ -56,8 +56,10 @@ No real LLM, embedding model, ingestion worker or RAG store is imported. HTTP te
 | Real temporary persistence | Fresh log/history files; parse-mask-insert-query results; history separation at connector level; alert dismissal (4) |
 | Safety guards | Reject sockets, child processes, project writes and project-data reads (4) |
 | Reusable external doubles | Scripted responses, errors, call tracking and unexpected-call rejection (1) |
-| HTTP contracts | First/follow-up queries, history reload, ten-message context limit, RAG response evidence, dictionary/object tool metadata, graph errors, request validation, health and web-fallback evidence/metadata (10) |
+| HTTP contracts | First/follow-up queries, history reload, ten-message context limit, RAG response evidence, dictionary/object tool metadata, graph errors, request validation, health, fallback evidence/metadata, deadlines and capacity/budget errors (13) |
 | MCP handlers | Real query, recent logs, schema, query errors, and mocked forwarding/timeout (5) |
+| Real graph | Happy paths, bounded repair, strict verdicts, search policy/outage, budget propagation and sticky provider failure (14) |
+| Budgets and provider adapters | Fake-clock limits/cancellation/context separation plus actual SDK mocked transport and search lifecycle (11) |
 
 Connector-level session separation does not establish API authorization: the current API still uses a shared default session. Passing these checks verifies the repaired history serialization and MCP connector calls, not full RAG execution, MCP transport, ingestion recovery or evaluation correctness.
 
@@ -128,3 +130,11 @@ Before graph repair: 36 checks ran with four assertion failures and two recursio
 Final verification: **41 passed, zero failures/errors/skips** locally (Python 3.9.6) and in Docker (Python 3.11.16), both using DuckDB 1.1.3. Scratch cleanup completed; `git diff --check` and both Compose configuration checks passed. The application behavior is changed on the working branch, not deployed. Earlier chat/MCP repairs remain in this same uncommitted increment.
 
 Learning: verify termination and failure semantics on the real state machine, not just isolated node mocks. A recursion-step limit and per-stage retry counts do not establish a wall-clock deadline; global request deadlines, provider timeouts/call budgets and comprehensive typed LLM failure handling remain the next increment. Full graph execution traces, UI/ingestion coverage and CI also remain open.
+
+### Request-budget increment — 2026-09-11
+
+Previous 41-check changes are locally checkpointed at `3963756`. The new `test_budgets.py` expands the allowlist to five files. Tests use the real OpenAI SDK 2.30.0 with HTTPX MockTransport, not live network calls; model registry/token-counting setup and search-client lifecycle use controlled substitutes. The original SDK error-string paths are replaced with typed failures, including the legacy configuration route.
+
+Before implementation, the new HTTP deadline regression failed (returned late success) and five budget-contract tests failed to import the not-yet-implemented module. Final verification: **57 passed, zero failures/errors/skips**, locally with Python 3.9.6 and in Docker with Python 3.11.16. Both Compose configuration checks and `git diff --check` passed. Temporary storage cleanup completed. The strengthened timeout test confirms an occupied worker slot is retained until its operation returns, then checks that the delayed graph answer was not saved.
+
+[Request-budget design](request_budgets.md) records defaults, typed error codes, cancellation/persistence limits and standalone-script scope. Step 1.2 is implemented for the `/query` boundary; live provider performance, load/soak testing, atomic history writes and deployment-wide quotas are not established by this isolated suite. Existing application data and running services were not changed. The query-budget changes remain uncommitted after the local checkpoint.
