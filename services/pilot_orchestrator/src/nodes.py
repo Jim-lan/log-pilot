@@ -309,6 +309,7 @@ def execute_sql(state: AgentState) -> AgentState:
             print(f"⚡ Executing SQL: {sql}")
             result = db.query(sql)
             state["sql_result"] = str(result)
+            state["sql_rows"] = [list(row) for row in result]
         finally:
             db.close()
     except Exception as e:

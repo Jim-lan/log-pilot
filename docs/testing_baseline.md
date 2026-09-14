@@ -169,3 +169,10 @@ The backend suite expanded to 70 tests: versioned storage, case-weighted failure
 A disposable existing Nginx image served the current `rendering.js` through HTTP with source mounted read-only, no application data mounts and networking disabled. An initial attempt dropping all Linux capabilities failed to start Nginx; rerunning with the image's standard capabilities succeeded. This is a frontend serving smoke test, not a full-stack or live-model deployment check. The container was removed automatically.
 
 An indexed `UPDATE ... RETURNING` in DuckDB 1.1.3 failed during new storage tests; the implementation now checks and updates inside a transaction without RETURNING, retaining duplicate-write rejection. No production storage was touched.
+
+
+## Quality corpus and CI (2026-09-14)
+
+The backend suite now contains 73 tests. `test_versioned_quality_fixtures_execute_real_graph_and_database` covers six versioned synthetic SQL cases in real LangGraph/DuckDB, with scripted SQL generation. Additional contracts verify duplicate-preserving row comparison and request-local template/model provenance. These are application correctness tests, not live-model accuracy measurements.
+
+`.github/workflows/isolated-regressions.yml` runs on pull requests, main/codex branch pushes and manual dispatch. Backend tests use the existing network-disabled Docker profile. Browser tests use pinned npm dependencies and Playwright Chromium with every application request fulfilled from synthetic fixtures. Action implementations are pinned to verified commit SHAs and receive read-only contents permission; checkout credentials are not persisted. Dependency/image/browser installation requires network, while the test execution boundaries remain isolated. Remote workflow success must be confirmed from its actual run, not inferred from this configuration.

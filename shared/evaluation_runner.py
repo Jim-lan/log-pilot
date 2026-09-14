@@ -1,11 +1,20 @@
 """Deterministic contracts are independent of optional model-judge scores."""
 import time
+import json
 
 import requests
 
 
 def score_case(case, response):
     checks = []
+    if 'expected_rows' in case:
+        actual, expected = response.get('sql_rows'), case['expected_rows']
+        if not isinstance(actual, list) or not isinstance(expected, list):
+            checks.append(False)
+        else:
+            actual = [json.dumps(row, sort_keys=True, allow_nan=False) for row in actual]
+            expected = [json.dumps(row, sort_keys=True, allow_nan=False) for row in expected]
+            checks.append(actual == expected if case.get('ordered', True) else sorted(actual) == sorted(expected))
     if 'expected_sql_result' in case:
         checks.append(response.get('sql_result') == case['expected_sql_result'])
     if 'expected_answer' in case:
@@ -27,7 +36,7 @@ def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.mono
                 result.raise_for_status()
                 response = result.json()
                 status, reason = score_case(case, response)
-                evidence = {key: response.get(key) for key in ('answer', 'context', 'sql', 'sql_result', 'intent', 'metadata')}
+                evidence = {key: response.get(key) for key in ('answer', 'context', 'sql', 'sql_result', 'sql_rows', 'intent', 'metadata')}
             except Exception:
                 status, reason, evidence = 'error', 'request_failed', {}
             store.record(run_id, case['id'], status, clock() - started, evidence, reason)

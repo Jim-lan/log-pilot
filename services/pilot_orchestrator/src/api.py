@@ -36,6 +36,7 @@ class QueryResponse(BaseModel):
     answer: str
     sql: Optional[str] = None
     sql_result: Optional[str] = None
+    sql_rows: Optional[List[List[Any]]] = None
     context: Optional[str] = None
     intent: str
     metadata: Optional[Dict[str, Any]] = {}
@@ -164,6 +165,7 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
             answer=answer,
             sql=final_state.get("sql_query"),
             sql_result=final_state.get("sql_result"),
+            sql_rows=final_state.get("sql_rows"),
             context=(final_state.get("web_results") if final_state.get("intent") == "web_search"
                      else final_state.get("rag_context")),
             intent=final_state.get("intent", "unknown"),
@@ -176,7 +178,8 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
                 "outcome": final_state.get("outcome"),
                 "retry_counts": {kind: final_state.get(f"{kind}_retry_count", 0)
                                  for kind in ("sql", "context", "answer")},
-                "provider_calls": dict(budget.calls)
+                "provider_calls": dict(budget.calls),
+                "provenance": budget.provenance
             }
         )
     except ExecutionFailure:

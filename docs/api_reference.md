@@ -103,3 +103,5 @@ Checks the status of the API and the LLM connection.
 ## Evaluation integrity v1
 
 `POST /query` adds optional `persist_history` (default true). False creates a stateless request that cannot read or append ordinary chat history. `GET /metrics` now reads the versioned evaluation tables, returns null for unavailable metrics, uses a true UTC 24-hour window and exposes run status. See [full evaluation contracts and migration limits](evaluation_contract.md).
+
+`QueryResponse.sql_rows` adds JSON rows alongside the unchanged readable `sql_result`. Metadata adds request-local `provenance.model_calls` and `provenance.templates`; template hashes identify template source, not private rendered prompts. Empty arrays represent successful empty results; null represents no structured result.

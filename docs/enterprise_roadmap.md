@@ -1,9 +1,9 @@
 # LogPilot: reliability and enterprise AI learning roadmap
 
 Date: 2026-09-10  
-Status: Step 1.3 initial safeguards implemented and frontend Nginx smoke checked. Phase 2.1 evaluation integrity repairs implemented; Phase 2.2 quality fixtures and remaining release gates are still open.
+Status: Step 1.3 initial safeguards implemented and frontend Nginx smoke checked. Phase 2.1 evaluation integrity repairs implemented; Phase 2.2 has a versioned SQL corpus and request provenance; retrieval/citation scoring, live measurements and remaining release gates are open.
 
-Next implementation step: **2.2 deterministic quality fixtures and provenance**, alongside remaining 0.2 coverage and deployment checks. See [evaluation contract](evaluation_contract.md).
+Next implementation step: **2.2 retrieval/citation quality and CI verification**, alongside remaining 0.2 coverage and deployment checks. See [evaluation contract](evaluation_contract.md).
 
 Evidence and run instructions: [isolated test baseline](testing_baseline.md).
 
@@ -208,11 +208,11 @@ Track implementation with: step ID, status, revision/change link, test evidence,
 | Order | Step | Status |
 |---|---|---|
 | 1 | 0.1 — isolated environment and baseline inventory | Complete: 14 checks pass locally and in Docker; see [evidence](testing_baseline.md) |
-| 2 | 0.2 — protected feature contracts and test harness | In progress: HTTP, history, MCP handlers and real graph paths covered; four browser rendering contracts added; ingestion, legacy harness and CI remain |
+| 2 | 0.2 — protected feature contracts and test harness | In progress: HTTP, history, MCP handlers and real graph paths covered; four browser rendering contracts added; ingestion and legacy harness remain; CI configured, remote run verification pending |
 | 3 | 1.1 — history serialization and MCP compatibility | Core repairs implemented; complete execution-event trace still pending |
 | 4 | 1.2 — bounded correction and fallback | Implemented for `/query`: independent retries, request deadlines, provider budgets/timeouts and typed failures; operational load testing remains |
 | 5 | 1.3 — safe rendering and explicit egress | Initial safeguards implemented: sanitized Markdown, literal evidence/alerts, opt-in search, supported-pattern outbound redaction and loopback binding; comprehensive egress governance remains |
-| 6 | 2.1–2.2 — evaluation integrity and quality baseline | 2.1 core contract implemented; 2.2 quality corpus, model/prompt provenance and live measurements pending |
+| 6 | 2.1–2.2 — evaluation integrity and quality baseline | 2.1 core contract implemented; 2.2 SQL corpus and per-case model/template provenance implemented; retrieval/citation scoring and live measurements pending |
 | 7 | Phases 3–6 — permissions, data reliability, storage and operations | Not started; refine estimates after R1 |
 | 8 | Phase 7 — measured enhancements | Deferred until pilot gates pass |
 

@@ -118,6 +118,10 @@ class ProviderContracts(unittest.TestCase):
         self.assertNotIn(b"learner@example.com", seen[0].content)
         self.assertTrue(all(0 < t <= 5 for t in seen[0].extensions["timeout"].values()))
         self.assertEqual(self.budget.calls["llm"], 1)
+        provenance = self.budget.provenance['model_calls']
+        self.assertEqual(len(provenance), 1)
+        self.assertEqual(provenance[0]['returned_model'], 'fixture')
+        self.assertNotIn('hunter2', str(provenance))
 
     def test_sdk_timeout_has_no_hidden_retries(self):
         import httpx

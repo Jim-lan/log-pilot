@@ -43,6 +43,14 @@ class EvaluationContracts(unittest.TestCase):
         self.assertEqual(score_case({'expected_keywords': ['good']}, {'answer': 'good'})[0], 'unscored')
         self.assertEqual(score_case({'expected_sql_result': '[(1,)]'}, {'sql_result': '[(2,)]'})[0], 'failed')
 
+    def test_structured_rows_preserve_duplicates_but_allow_unordered_aggregates(self):
+        from shared.evaluation_runner import score_case
+        case = {'expected_rows': [['ERROR', 2], ['INFO', 1]], 'ordered': False}
+        self.assertEqual(score_case(case, {'sql_rows': [['INFO', 1], ['ERROR', 2]]})[0], 'passed')
+        self.assertEqual(score_case(case, {'sql_rows': [['ERROR', 2], ['ERROR', 2]]})[0], 'failed')
+        self.assertEqual(score_case({'expected_rows': []}, {'sql_rows': []})[0], 'passed')
+        self.assertEqual(score_case({'expected_rows': []}, {'sql_rows': None})[0], 'failed')
+
     def test_batch_api_creates_durable_run_without_importing_a_judge(self):
         import importlib.util
         import json

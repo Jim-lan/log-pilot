@@ -90,6 +90,28 @@ class GraphContracts(unittest.TestCase):
     def count(self, task):
         return sum(name == task for name, _ in self.calls)
 
+    def test_versioned_quality_fixtures_execute_real_graph_and_database(self):
+        import json
+        from datetime import datetime
+        from shared.evaluation_runner import score_case
+        fixture = json.loads((Path(__file__).parent / "quality_cases_v1.json").read_text())
+        self.db.query("DELETE FROM logs")
+        self.db.insert_batch([{**row, "timestamp": datetime.fromisoformat(row["timestamp"])} for row in fixture["logs"]])
+        for case in fixture["cases"]:
+            with self.subTest(case=case["id"]):
+                self.responses["sql_generator"] = case["sql"]
+                result = self.graph.pilot_graph.invoke({"query": case["question"], "messages": []})
+                self.assertEqual(score_case(case, result)[0], "passed")
+
+    def test_template_provenance_is_request_local(self):
+        from shared.execution import RequestBudget, use_budget
+        first, second = RequestBudget(60, 16), RequestBudget(60, 16)
+        with use_budget(first):
+            self.invoke()
+        self.assertTrue(first.provenance["templates"])
+        self.assertTrue(all(len(value) == 64 for value in first.provenance["templates"].values()))
+        self.assertEqual(second.provenance["templates"], {})
+
     def test_sql_happy_path_uses_real_database(self):
         result = self.invoke()
         self.assertEqual(result["sql_result"], "[(1,)]")

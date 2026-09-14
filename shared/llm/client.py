@@ -78,6 +78,12 @@ class LLMClient:
             client = self._get_client(api_base, api_key).with_options(timeout=timeout, max_retries=0)
             response = client.chat.completions.create(
                 model=model_name, messages=[{"role": "user", "content": prompt}], temperature=temperature)
+            from shared.execution import current_budget
+            budget = current_budget()
+            if budget is not None:
+                budget.provenance['model_calls'].append({
+                    'requested_model': model_name, 'returned_model': response.model,
+                    'temperature': temperature, 'system_fingerprint': response.system_fingerprint})
             content = response.choices[0].message.content
             if not isinstance(content, str) or not content.strip():
                 raise ExecutionFailure()
