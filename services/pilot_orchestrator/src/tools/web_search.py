@@ -1,3 +1,4 @@
+from shared.privacy import redact_outbound
 try:
     from duckduckgo_search import DDGS
     HAS_DDGS = True
@@ -27,7 +28,7 @@ class WebSearchTool:
             if transport_timeout < 1:
                 raise ProviderTimeout()
             with DDGS(timeout=transport_timeout) as client:
-                results = list(client.text(query, max_results=max_results))
+                results = list(client.text(redact_outbound(query), max_results=max_results))
             if not results:
                 return "No web search results found."
             

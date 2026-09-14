@@ -4,7 +4,7 @@ services:
     image: ollama/ollama:latest
     container_name: log-pilot-llm
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     # Entrypoint script to pull model if missing
@@ -88,7 +88,7 @@ services:
       - LOGPILOT_MAX_SEARCH_CALLS=${LOGPILOT_MAX_SEARCH_CALLS:-1}
       - LOGPILOT_QUERY_WORKERS=${LOGPILOT_QUERY_WORKERS:-4}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       - llm-service
     networks:
@@ -101,7 +101,7 @@ services:
       dockerfile: Dockerfile
     container_name: log-pilot-ui
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     networks:
       - pilot-net
 
@@ -115,7 +115,7 @@ services:
       - ./data:/app/data
       - ./config:/app/config
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     depends_on:
       - pilot-orchestrator
     networks:
@@ -131,7 +131,7 @@ services:
       - ./data:/app/data
       - ./tests/evaluation:/app/tests/evaluation
     ports:
-      - "8002:8001"
+      - "127.0.0.1:8002:8001"
     environment:
       - LLM_BASE_URL=http://log-pilot-llm:11434/v1
       - PILOT_API_URL=http://pilot-orchestrator:8000

@@ -30,17 +30,12 @@ class PIIMasker:
 
     def mask_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Recursively masks PII in a dictionary."""
-        masked_context = {}
-        for k, v in context.items():
-            if isinstance(v, str):
-                masked_context[k] = self.mask_text(v)
-            elif isinstance(v, dict):
-                masked_context[k] = self.mask_context(v)
-            elif isinstance(v, list):
-                masked_context[k] = [
-                    self.mask_text(i) if isinstance(i, str) else i 
-                    for i in v
-                ]
-            else:
-                masked_context[k] = v
-        return masked_context
+        def mask_value(value):
+            if isinstance(value, str):
+                return self.mask_text(value)
+            if isinstance(value, dict):
+                return {key: mask_value(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [mask_value(item) for item in value]
+            return value
+        return mask_value(context)

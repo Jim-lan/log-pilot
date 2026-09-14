@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir \
 
 # Copy source code
 COPY services/evaluation_service/src/ /app/src/
+COPY shared/ /app/shared/
 # Copy shared modules (if any needed, but trying to keep decoupled)
 # For now, we assume evaluation service is self-contained or accesses data via API
 

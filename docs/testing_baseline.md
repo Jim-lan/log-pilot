@@ -138,3 +138,34 @@ Previous 41-check changes are locally checkpointed at `3963756`. The new `test_b
 Before implementation, the new HTTP deadline regression failed (returned late success) and five budget-contract tests failed to import the not-yet-implemented module. Final verification: **57 passed, zero failures/errors/skips**, locally with Python 3.9.6 and in Docker with Python 3.11.16. Both Compose configuration checks and `git diff --check` passed. Temporary storage cleanup completed. The strengthened timeout test confirms an occupied worker slot is retained until its operation returns, then checks that the delayed graph answer was not saved.
 
 [Request-budget design](request_budgets.md) records defaults, typed error codes, cancellation/persistence limits and standalone-script scope. Step 1.2 is implemented for the `/query` boundary; live provider performance, load/soak testing, atomic history writes and deployment-wide quotas are not established by this isolated suite. Existing application data and running services were not changed. The query-budget changes remain uncommitted after the local checkpoint.
+
+
+## Step 1.3 evidence (2026-09-13)
+
+Before repairs, all four new browser tests failed and privacy tests exposed nested masking plus the missing outbound policy. After repairs:
+
+```text
+Local Python: Result: {"tests": 61, "failures": 0, "errors": 0, "skipped": 0}
+Docker Python: Ran 61 tests; OK
+Chrome browser: tests 4; pass 4; fail 0
+```
+
+Backend adapter contracts inspect actual OpenAI SDK request bodies via MockTransport and the mocked search client's query to verify redaction before dispatch. They also retain timeout and call-budget checks. Browser contracts exercise real frontend files with synthetic history, model output, references, alerts and HTTP errors; every HTTP request is intercepted locally. No application database or live model is used.
+
+Reproduce browser checks with Node.js 22 or newer and installed Chrome:
+
+```sh
+npm ci --prefix tests/frontend --ignore-scripts --no-audit --no-fund
+npm test --prefix tests/frontend
+```
+
+The default browser path is macOS Google Chrome. On other systems set `LOGPILOT_CHROME_PATH` to an installed Chrome/Chromium executable. Dependency installation needs network access; tests need permission to launch the browser. These tests are separate from the Python-only Docker harness. Full deployment, ingestion, live-model quality, authentication and load coverage remain outstanding.
+
+
+## Evaluation integrity checkpoint (2026-09-14)
+
+The backend suite expanded to 70 tests: versioned storage, case-weighted failure totals, real UTC time windows, measured latency, unfinished runs, stateless history protection, runner evidence extraction and evaluation API validation. Local Python and network-disabled Docker both report `tests: 70, failures: 0, errors: 0, skipped: 0`. Five Chrome tests pass, including missing metrics displayed as Unavailable.
+
+A disposable existing Nginx image served the current `rendering.js` through HTTP with source mounted read-only, no application data mounts and networking disabled. An initial attempt dropping all Linux capabilities failed to start Nginx; rerunning with the image's standard capabilities succeeded. This is a frontend serving smoke test, not a full-stack or live-model deployment check. The container was removed automatically.
+
+An indexed `UPDATE ... RETURNING` in DuckDB 1.1.3 failed during new storage tests; the implementation now checks and updates inside a transaction without RETURNING, retaining duplicate-write rejection. No production storage was touched.

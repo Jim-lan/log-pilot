@@ -323,3 +323,11 @@ body {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Reference formatting is trusted CSS; generated inline styles are stripped. */
+.references { margin-top: 1rem; border-top: 1px solid rgba(255,255,255,.1); padding-top: .5rem; }
+.references details { margin-bottom: .5rem; }
+.references summary { cursor: pointer; font-size: .85em; color: #60a5fa; font-weight: 500; }
+.references details > div { background: rgba(0,0,0,.3); padding: .5rem; border-radius: 4px; margin-top: .5rem; }
+.references pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.references code { font-size: .8em; }

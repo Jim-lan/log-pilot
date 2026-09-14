@@ -18,6 +18,8 @@ External web search is now disabled by default. If you deliberately want rewritt
 
 Queries default to a 120-second HTTP deadline, 30-second LLM timeout, 10-second search timeout, 16 LLM calls and one search call. Four active query workers are allowed per API process. See [request budgets](docs/request_budgets.md) before adjusting these settings; a timed-out synchronous operation retains its slot until it stops.
 
+Published Docker ports now bind to `127.0.0.1`; access the frontend on this Mac at `http://localhost:3000`. Recreating the affected containers applies this change; an existing running deployment is unchanged. LAN access requires a separate authenticated deployment design. Model prompts and opt-in search queries receive best-effort redaction; see [scope and limitations](docs/rendering_and_privacy.md).
+
 Before you start, ensure you have:
 1.  **Docker Desktop** installed and running.
 2.  **8GB+ RAM** available (for running the local LLM).
@@ -146,3 +148,8 @@ Follow this script to demonstrate the agent's evolving intelligence.
 | **Brain** | LangGraph, Ollama (Gemma 4) | The decision maker. Decides *how* to answer. |
 | **Memory** | DuckDB (Data), Chroma (Text) | Stores the "What" (logs) and "How" (docs). |
 | **Sentry** | Python, Statistical Window | The 24/7 guardian that triggers alerts. |
+
+
+## Evaluation development
+
+Use a synthetic dataset configured with `EVALUATION_DATASET_PATH` on the evaluation service. Include `id`, `question` and `expected_answer` or `expected_sql_result` per case. Batch requests are stateless and do not change ordinary chat history. Legacy keyword-only cases are unscored. New dashboard metrics use additive v1 tables; unavailable metrics display Unavailable. See [evaluation design and remaining limits](docs/evaluation_contract.md).

@@ -112,8 +112,10 @@ class ProviderContracts(unittest.TestCase):
                 "model": "fixture", "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "fixture answer"}}]})
         self.sdk(response)
         with use_budget(self.budget):
-            self.assertEqual(self.client.generate("question"), "fixture answer")
+            self.assertEqual(self.client.generate("question password=hunter2 learner@example.com"), "fixture answer")
         self.assertEqual(len(seen), 1)
+        self.assertNotIn(b"hunter2", seen[0].content)
+        self.assertNotIn(b"learner@example.com", seen[0].content)
         self.assertTrue(all(0 < t <= 5 for t in seen[0].extensions["timeout"].values()))
         self.assertEqual(self.budget.calls["llm"], 1)
 
@@ -150,15 +152,18 @@ class ProviderContracts(unittest.TestCase):
         from shared.execution import use_budget
         factory = Mock()
         handle = factory.return_value.__enter__ = Mock(return_value=SimpleNamespace(
-            text=lambda *args, **kwargs: [{"title": "fixture", "href": "https://fixture.invalid", "body": "evidence"}]))
+            text=Mock(return_value=[{"title": "fixture", "href": "https://fixture.invalid", "body": "evidence"}])))
         factory.return_value.__exit__ = Mock(return_value=False)
         dependency = ModuleType("duckduckgo_search")
         dependency.DDGS = factory
         with patch.dict(sys.modules, {"duckduckgo_search": dependency}):
             module = self.load("budget_search", "services/pilot_orchestrator/src/tools/web_search.py")
         with use_budget(self.budget):
-            result = module.WebSearchTool().search("fixture")
+            result = module.WebSearchTool().search("fixture password=hunter2 learner@example.com")
         self.assertIn("evidence", result)
+        query = handle.return_value.text.call_args.args[0]
+        self.assertNotIn("hunter2", query)
+        self.assertNotIn("learner@example.com", query)
         self.assertTrue(0 < factory.call_args.kwargs["timeout"] <= 5)
         factory.return_value.__exit__.assert_called_once()
         self.assertEqual(self.budget.calls["search"], 1)

@@ -64,6 +64,28 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertGreaterEqual(data["metadata"]["latency"], 0)
         self.assertEqual(data["trace"], [])
 
+    def test_evaluation_request_does_not_read_or_write_user_history(self):
+        self.db.save_message("default", "user", "private ordinary conversation")
+        self.graph.invoke.side_effect = self.sql_response
+        result = self.client.post("/query", json={"query": "fixture", "persist_history": False})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(self.graph.invoke.call_args.args[0]["messages"], [])
+        history = self.client.get("/history").json()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["content"], "private ordinary conversation")
+
+    def test_metrics_endpoint_reads_versioned_store(self):
+        from shared.evaluation import EvaluationStore
+        store = EvaluationStore("data/target/metrics.duckdb")
+        store.start("fixture", ["pass", "fail"], {})
+        store.record("fixture", "pass", "passed", 1, {})
+        store.record("fixture", "fail", "error", 3, {}, "dependency_error")
+        store.finish("fixture")
+        result = self.client.get("/metrics").json()
+        self.assertEqual(result["pass_rate_24h"], 50)
+        self.assertEqual(result["avg_latency_24h"], 2)
+        self.assertEqual(result["schema_version"], 1)
+
     def test_two_turn_query_and_history_reload(self):
         self.graph.invoke.side_effect = self.sql_response
         first = self.client.post("/query", json={"query": "count errors"})

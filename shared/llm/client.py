@@ -70,6 +70,8 @@ class LLMClient:
         return self._complete(prompt, model_name, api_base, api_key, temperature)
 
     def _complete(self, prompt, model_name, api_base, api_key, temperature):
+        from shared.privacy import redact_outbound
+        prompt = redact_outbound(prompt)
         def request(timeout):
             if token_counter and token_counter.count_tokens(prompt, model_name) > self.max_input_tokens:
                 raise ExecutionFailure()

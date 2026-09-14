@@ -23,6 +23,7 @@ MANIFEST
 .env
 .venv
 .venv-test/
+tests/frontend/node_modules/
 env/
 venv/
 ENV/

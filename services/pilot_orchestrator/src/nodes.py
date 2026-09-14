@@ -480,34 +480,7 @@ def synthesize_answer(state: AgentState) -> AgentState:
     )
     response = llm_client.generate(prompt, model_type="fast")
     
-    # --- Shadow Mode Logic ---
-    shadow_model = os.getenv("SHADOW_MODEL")
-    if shadow_model and current_budget() is None:
-        import threading
-        import duckdb
-        import time
-        
-        def run_shadow(p, original_ans, q):
-            try:
-                start = time.time()
-                # Simulate shadow model execution (or use actual secondary provider if configured)
-                # For this demo, we simulate latency and log the would-be result.
-                time.sleep(0.5) 
-                shadow_ans = f"[Shadow: {shadow_model}] {original_ans}" 
-                latency = time.time() - start
-                
-                # Log to metrics DB
-                conn = duckdb.connect("data/target/metrics.duckdb")
-                conn.execute("CREATE TABLE IF NOT EXISTS shadow_logs (timestamp TIMESTAMP, query VARCHAR, shadow_model VARCHAR, answer VARCHAR, latency DOUBLE)")
-                conn.execute("INSERT INTO shadow_logs VALUES (current_timestamp, ?, ?, ?, ?)", (q, shadow_model, shadow_ans, latency))
-                conn.close()
-                print(f"👻 Shadow Run ({shadow_model}): Completed in {latency:.2f}s")
-            except Exception as e:
-                print(f"❌ Shadow Run Failed: {e}")
-
-        # Start background thread
-        threading.Thread(target=run_shadow, args=(prompt, response, query)).start()
-    # -------------------------
+    # Simulated shadow outputs are disabled; comparisons require independent inference.
 
     state["final_answer"] = response
     return state

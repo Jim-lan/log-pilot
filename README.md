@@ -8,7 +8,7 @@ LogPilot is an AI-powered observability assistant that allows you to query your 
 - **Multi-Turn Context**: Understands follow-up questions (e.g., "List them", "Show details").
 - **Hybrid Intelligence**: Combines **SQL Generation** (for precise data) and **RAG** (for runbooks/knowledge).
 - **Modern UI**: Beautiful, dark-mode web interface with chat history.
-- **Local Privacy**: Runs 100% locally using Docker and Ollama (Gemma 4).
+- **Local-first operation**: Docker and Ollama support local inference; configured cloud providers and opt-in web search can send redacted content externally. See [rendering and egress safeguards](docs/rendering_and_privacy.md).
 
 ## 🏗️ Architecture
 ```mermaid
@@ -123,8 +123,8 @@ Graph regression coverage now also protects independent repair limits, strict ju
 - **RLHF Feedback Loop**: Adding simple "Thumbs Up/Down" buttons in the UI to capture user feedback and automatically fine-tune the Intent Router.
 
 ## ⚖️ Evaluation Approach
-We don't guess—we measure. The system includes a dedicated `evaluation_service` that runs a **Golden Dataset** (curated Q&A pairs) against the agent.
-- **Framework**: Uses [Ragas](https://docs.ragas.io/) to score responses.
+We don't guess—we measure. The system includes an `evaluation_service` with [versioned evaluation contracts](docs/evaluation_contract.md). Deterministic cases require exact expected answers or SQL results; legacy keyword-only cases are unscored. Failed requests remain in totals.
+- **Framework**: Exact-result checks for batch evaluation; optional Ragas judge scores remain separate.
 - **Metrics**:
     - **Faithfulness**: Does the answer interpret the logs correctly without making things up?
     - **Answer Relevance**: Does it actually address the user's specific question?

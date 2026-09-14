@@ -1,41 +1,21 @@
-import os
+"""Evaluation API: explicit initialization, durable runs, optional judge."""
+import hashlib
 import json
-import duckdb
-import requests
+import os
 import uuid
-import pandas as pd
-from datetime import datetime
-from typing import List, Dict, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from pathlib import Path
+from typing import Optional
 
-# Ragas Imports
-try:
-    from ragas import evaluate
-    from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
-    from datasets import Dataset
-    from langchain_community.chat_models import ChatOllama
-    from langchain_community.embeddings import OllamaEmbeddings
-except ImportError:
-    print("⚠️ Ragas not installed or import failed.")
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from shared.evaluation import EvaluationStore
+from shared.evaluation_runner import run_cases
 
 app = FastAPI(title="LogPilot Evaluation Service")
-
-# Configuration
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1")
 PILOT_API_URL = os.getenv("PILOT_API_URL", "http://pilot-orchestrator:8000")
-METRICS_DB_PATH = "/app/data/target/metrics.duckdb"
-DATASET_PATH = "/app/tests/evaluation/golden_dataset.json"
+METRICS_DB_PATH = os.getenv("METRICS_DB_PATH", "/app/data/target/metrics.duckdb")
+DATASET_PATH = os.getenv("EVALUATION_DATASET_PATH", "/app/tests/evaluation/golden_dataset.json")
 
-# Initialize Ragas Components
-print(f"🤖 Initializing Ragas with Ollama at {LLM_BASE_URL}...")
-# Note: Ragas uses LangChain objects. We need to ensure they point to the right URL.
-# The base_url for ChatOllama should be the Ollama server URL (e.g. http://log-pilot-llm:11434)
-# LLM_BASE_URL usually has /v1 for OpenAI compat, but LangChain ChatOllama expects just the host.
-OLLAMA_HOST = LLM_BASE_URL.replace("/v1", "")
-
-llm = ChatOllama(model="gemma4:e4b", base_url=OLLAMA_HOST)
-embeddings = OllamaEmbeddings(model="gemma4:e4b", base_url=OLLAMA_HOST)
 
 class EvaluateRequest(BaseModel):
     query: str
@@ -43,175 +23,58 @@ class EvaluateRequest(BaseModel):
     rag_context: str
     final_answer: str
 
+
 class BatchEvaluateRequest(BaseModel):
-    dataset_path: Optional[str] = DATASET_PATH
-    limit: Optional[int] = None
+    dataset_path: Optional[str] = None
+    limit: Optional[int] = Field(default=None, gt=0, le=1000)
 
-def _init_db():
-    conn = duckdb.connect(METRICS_DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS eval_runs_micro (
-            run_id VARCHAR PRIMARY KEY,
-            timestamp TIMESTAMP,
-            total_cases INTEGER,
-            avg_faithfulness DOUBLE,
-            avg_answer_relevancy DOUBLE,
-            avg_latency DOUBLE
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS eval_results_micro (
-            run_id VARCHAR,
-            case_id VARCHAR,
-            case_type VARCHAR,
-            query VARCHAR,
-            rewritten_query VARCHAR,
-            final_answer VARCHAR,
-            contexts VARCHAR,
-            faithfulness DOUBLE,
-            answer_relevancy DOUBLE,
-            latency DOUBLE,
-            FOREIGN KEY (run_id) REFERENCES eval_runs_micro(run_id)
-        )
-    """)
-    conn.close()
-
-_init_db()
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ragas": "ready"}
+    return {"status": "ok", "schema_version": 1, "ragas": "on_demand"}
+
 
 @app.post("/evaluate")
 def evaluate_single(req: EvaluateRequest):
-    """
-    Evaluates a single RAG interaction.
-    """
+    # A judge is supplementary; it does not determine deterministic pass rates.
     try:
-        # Create a mini dataset for Ragas
-        data = {
-            "question": [req.query],
-            "answer": [req.final_answer],
-            "contexts": [[req.rag_context]],
-            # "ground_truth": ...
-        }
-        dataset = Dataset.from_dict(data)
-        
-        scores = evaluate(
-            dataset,
-            metrics=[faithfulness, answer_relevancy],
-            llm=llm,
-            embeddings=embeddings
-        )
-        
+        from ragas import evaluate
+        from ragas.metrics import faithfulness, answer_relevancy
+        from datasets import Dataset
+        from langchain_community.chat_models import ChatOllama
+        from langchain_community.embeddings import OllamaEmbeddings
+        host = os.getenv("LLM_BASE_URL", "http://log-pilot-llm:11434/v1").removesuffix("/v1")
+        model = os.getenv("EVALUATION_JUDGE_MODEL", "gemma4:e4b")
+        scores = evaluate(Dataset.from_dict({"question": [req.query], "answer": [req.final_answer],
+            "contexts": [[req.rag_context]]}), metrics=[faithfulness, answer_relevancy],
+            llm=ChatOllama(model=model, base_url=host), embeddings=OllamaEmbeddings(model=model, base_url=host))
         return scores.to_pandas().to_dict(orient="records")[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Evaluation judge unavailable")
 
-def run_batch_evaluation(run_id: str, limit: Optional[int]):
-    print(f"🚀 Starting Batch Evaluation {run_id}...")
-    conn = duckdb.connect(METRICS_DB_PATH)
-    
-    try:
-        # 1. Load Dataset
-        with open(DATASET_PATH, "r") as f:
-            dataset = json.load(f)
-        
-        rag_cases = [c for c in dataset if c["type"] == "rag"]
-        if limit:
-            rag_cases = rag_cases[:limit]
-            
-        print(f"ℹ️ Processing {len(rag_cases)} cases...")
-        
-        results_data = []
-        
-        # 2. Invoke Pilot for each case
-        for case in rag_cases:
-            try:
-                # Call Pilot Orchestrator API
-                # We assume there's an endpoint or we use the graph directly?
-                # Ideally we call the API.
-                # POST /query
-                resp = requests.post(f"{PILOT_API_URL}/query", json={
-                    "query": case["question"]
-                })
-                resp.raise_for_status()
-                data = resp.json()
-                
-                # Extract internals (Pilot API needs to return these or we infer)
-                # If Pilot API doesn't return internals, we might need to update Pilot API 
-                # OR use a special "debug" endpoint.
-                # For now, let's assume Pilot returns standard response and we might miss 'rewritten_query'
-                # unless we update Pilot to return metadata.
-                # Let's assume data has 'metadata' field.
-                
-                metadata = data.get("metadata", {})
-                
-                results_data.append({
-                    "case_id": case["id"],
-                    "case_type": case["type"],
-                    "question": case["question"],
-                    "answer": data.get("answer", ""),
-                    "contexts": [metadata.get("rag_context", "")],
-                    "rewritten_query": metadata.get("rewritten_query", ""),
-                    "latency": metadata.get("latency", 0)
-                })
-                
-            except Exception as e:
-                print(f"❌ Error invoking pilot for {case['id']}: {e}")
-        
-        if not results_data:
-            print("⚠️ No results to evaluate.")
-            return
-
-        # 3. Run Ragas
-        hf_dataset = Dataset.from_pandas(pd.DataFrame(results_data))
-        scores = evaluate(
-            hf_dataset,
-            metrics=[faithfulness, answer_relevancy],
-            llm=llm,
-            embeddings=embeddings
-        )
-        
-        # 4. Save Results
-        df_scores = scores.to_pandas()
-        avg_faith = df_scores["faithfulness"].mean()
-        avg_rel = df_scores["answer_relevancy"].mean()
-        avg_lat = 0 # df_scores["latency"].mean() if available
-        
-        conn.execute("INSERT INTO eval_runs_micro VALUES (?, ?, ?, ?, ?, ?)", 
-                        (run_id, datetime.now(), len(results_data), avg_faith, avg_rel, avg_lat))
-        
-        for _, row in df_scores.iterrows():
-            conn.execute("""
-                INSERT INTO eval_results_micro 
-                (run_id, case_id, case_type, query, rewritten_query, final_answer, contexts, faithfulness, answer_relevancy, latency)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                run_id, 
-                row["case_id"], 
-                row["case_type"], 
-                row["question"], 
-                row["rewritten_query"], 
-                row["answer"], 
-                str(row["contexts"]), 
-                row["faithfulness"], 
-                row["answer_relevancy"], 
-                0 # latency
-            ))
-            
-        print(f"✅ Batch Evaluation {run_id} Complete.")
-        
-    except Exception as e:
-        print(f"❌ Batch Evaluation Failed: {e}")
-    finally:
-        conn.close()
 
 @app.post("/evaluate/batch")
 def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTasks):
-    """
-    Triggers a background batch evaluation run.
-    """
+    # Restrict file access to the server-configured dataset, never an arbitrary client path.
+    if req.dataset_path is not None and req.dataset_path != DATASET_PATH:
+        raise HTTPException(status_code=400, detail="Use the configured evaluation dataset")
+    try:
+        raw = Path(DATASET_PATH).read_bytes()
+        cases = json.loads(raw)
+        if not isinstance(cases, list) or not cases:
+            raise ValueError()
+        cases = cases[:req.limit] if req.limit else cases
+        if any(not isinstance(c.get('id'), str) or not isinstance(c.get('question'), str) for c in cases):
+            raise ValueError()
+        if len({c['id'] for c in cases}) != len(cases):
+            raise ValueError()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or unavailable evaluation dataset")
     run_id = str(uuid.uuid4())
-    background_tasks.add_task(run_batch_evaluation, run_id, req.limit)
-    return {"status": "started", "run_id": run_id}
+    store = EvaluationStore(METRICS_DB_PATH)
+    store.start(run_id, [c['id'] for c in cases], {
+        "dataset_sha256": hashlib.sha256(raw).hexdigest(), "limit": req.limit,
+        "contract_version": 1, "scorer": "exact_result_v1",
+        "model_identity": "unrecorded", "prompt_version": "unrecorded"})
+    background_tasks.add_task(run_cases, store, run_id, cases, PILOT_API_URL)
+    return {"status": "started", "run_id": run_id, "schema_version": 1}

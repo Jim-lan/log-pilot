@@ -1,3 +1,4 @@
+const { escapeText, renderMarkdown, sanitizeHTML } = window.LogPilotRendering;
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
 const messagesContainer = document.getElementById('messages');
@@ -15,13 +16,14 @@ function clearChat() {
 
 function addMessage(role, htmlContent) {
     const div = document.createElement('div');
+    role = role === 'user' ? 'user' : 'ai';
     div.className = `message ${role}`;
 
     const avatar = role === 'ai' ? '🤖' : '👤';
 
     div.innerHTML = `
         <div class="avatar">${avatar}</div>
-        <div class="content">${htmlContent}</div>
+        <div class="content">${sanitizeHTML(htmlContent)}</div>
     `;
 
     messagesContainer.appendChild(div);
@@ -46,7 +48,7 @@ async function handleSubmit(e) {
     if (!query) return;
 
     // 1. Add User Message
-    addMessage('user', `<p>${query}</p>`);
+    addMessage('user', `<p>${escapeText(query)}</p>`);
     userInput.value = '';
     showTyping(true);
 
@@ -66,8 +68,14 @@ async function handleSubmit(e) {
         const data = await response.json();
         showTyping(false);
 
+        if (!response.ok) {
+            const message = typeof data.detail?.message === 'string' ? data.detail.message : `Request failed (${response.status}).`;
+            addMessage('ai', `<p>Error: ${escapeText(message)}</p>`);
+            return;
+        }
+
         // 3. Format Response
-        let responseHtml = marked.parse(data.answer);
+        let responseHtml = renderMarkdown(data.answer);
 
         // 4. Append References (SQL/RAG)
         if (data.sql || data.context) {
@@ -80,10 +88,10 @@ async function handleSubmit(e) {
                         <summary style="cursor: pointer; font-size: 0.85em; color: #60a5fa; font-weight: 500;">🔍 View SQL Query & Results</summary>
                         <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
                             <div style="font-size: 0.75em; color: #9ca3af; margin-bottom: 0.25rem;">Generated SQL:</div>
-                            <pre style="margin: 0; background: transparent;"><code class="language-sql" style="font-size: 0.8em;">${data.sql}</code></pre>
+                            <pre style="margin: 0; background: transparent;"><code class="language-sql" style="font-size: 0.8em;">${escapeText(data.sql)}</code></pre>
                             ${data.sql_result ? `
                                 <div style="font-size: 0.75em; color: #9ca3af; margin: 0.5rem 0 0.25rem;">Execution Result:</div>
-                                <pre style="margin: 0; background: transparent;"><code class="language-json" style="font-size: 0.8em;">${data.sql_result}</code></pre>
+                                <pre style="margin: 0; background: transparent;"><code class="language-json" style="font-size: 0.8em;">${escapeText(data.sql_result)}</code></pre>
                             ` : ''}
                         </div>
                     </details>
@@ -96,7 +104,7 @@ async function handleSubmit(e) {
                     <details>
                         <summary style="cursor: pointer; font-size: 0.85em; color: #34d399; font-weight: 500;">📄 View Retrieved Context</summary>
                         <div style="background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
-                            <pre style="margin: 0; background: transparent;"><code class="language-text" style="font-size: 0.8em;">${data.context}</code></pre>
+                            <pre style="margin: 0; background: transparent;"><code class="language-text" style="font-size: 0.8em;">${escapeText(data.context)}</code></pre>
                         </div>
                     </details>
                 `;
@@ -129,7 +137,7 @@ async function checkHealth() {
                 const banner = document.createElement('div');
                 banner.id = 'status-banner';
                 banner.style.cssText = 'background: #eab308; color: #000; padding: 0.5rem; text-align: center; font-weight: bold; position: sticky; top: 0; z-index: 100;';
-                banner.innerHTML = `⚠️ Model is downloading... (${data.llm.model}). Please wait.`;
+                banner.textContent = `⚠️ Model is downloading... (${data.llm.model}). Please wait.`;
                 document.body.prepend(banner);
             }
             userInput.disabled = true;
@@ -165,7 +173,7 @@ async function loadHistory() {
         } else {
             history.forEach(msg => {
                 // Simple markdown parsing for history
-                const html = marked.parse(msg.content);
+                const html = msg.role === 'user' ? `<p>${escapeText(msg.content)}</p>` : renderMarkdown(msg.content);
                 addMessage(msg.role, html);
             });
         }
@@ -229,9 +237,9 @@ async function loadMetrics() {
         const data = await response.json();
 
         // Update Cards
-        document.getElementById('metric-pass-rate').textContent = `${data.pass_rate_24h}%`;
-        document.getElementById('metric-latency').textContent = `${data.avg_latency_24h}s`;
-        document.getElementById('metric-runs').textContent = data.total_runs;
+        document.getElementById('metric-pass-rate').textContent = data.pass_rate_24h == null ? 'Unavailable' : `${data.pass_rate_24h}%`;
+        document.getElementById('metric-latency').textContent = data.avg_latency_24h == null ? 'Unavailable' : `${data.avg_latency_24h}s`;
+        document.getElementById('metric-runs').textContent = data.total_runs ?? 'Unavailable';
 
         // Update Table
         const tbody = document.getElementById('metrics-history-body');
@@ -247,9 +255,10 @@ async function loadMetrics() {
             else if (run.pass_rate >= 70) color = '#eab308'; // yellow
 
             tr.innerHTML = `
-                <td style="padding: 1rem; font-family: monospace; color: #d1d5db;">${run.run_id.substring(0, 8)}...</td>
+                <td style="padding: 1rem; font-family: monospace; color: #d1d5db;">${escapeText(String(run.run_id).substring(0, 8))}...</td>
+                <td style="padding: 1rem;">${escapeText(run.status ?? 'unknown')}</td>
                 <td style="padding: 1rem; color: #9ca3af;">${new Date(run.timestamp).toLocaleString()}</td>
-                <td style="padding: 1rem; font-weight: bold; color: ${color};">${run.pass_rate.toFixed(1)}%</td>
+                <td style="padding: 1rem; font-weight: bold; color: ${color};">${run.pass_rate == null ? 'Unavailable' : Number(run.pass_rate).toFixed(1) + '%'}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -290,16 +299,17 @@ async function checkAlerts() {
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:start;">
                         <div>
-                            <h3 style="color: #f87171; font-size: 1.1em; margin-bottom: 0.5rem;">🚨 ${alert.service} Error Spike</h3>
-                            <div style="color: #d1d5db; margin-bottom: 0.5rem;">${alert.message}</div>
+                            <h3 style="color: #f87171; font-size: 1.1em; margin-bottom: 0.5rem;">🚨 ${escapeText(alert.service)} Error Spike</h3>
+                            <div style="color: #d1d5db; margin-bottom: 0.5rem;">${escapeText(alert.message)}</div>
                             <div style="background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 4px; font-size: 0.9em; color: #d1d5db;">
-                                💡 <strong>Analysis:</strong> ${alert.analysis}
+                                💡 <strong>Analysis:</strong> ${escapeText(alert.analysis)}
                             </div>
                             <div style="margin-top:0.5rem; font-size: 0.8em; color: #6b7280;">${new Date(alert.timestamp).toLocaleString()}</div>
                         </div>
-                        <button onclick="markAlertRead('${alert.id}')" style="background:transparent; border:1px solid #f87171; color:#f87171; padding:0.25rem 0.5rem; border-radius:4px; cursor:pointer;">Dismiss</button>
+                        <button style="background:transparent; border:1px solid #f87171; color:#f87171; padding:0.25rem 0.5rem; border-radius:4px; cursor:pointer;">Dismiss</button>
                     </div>
                  `;
+                card.querySelector('button').addEventListener('click', () => markAlertRead(alert.id));
                 alertsList.appendChild(card);
             });
         }
@@ -311,7 +321,7 @@ async function checkAlerts() {
 
 async function markAlertRead(id) {
     try {
-        await fetch(`http://localhost:8000/alerts/${id}/read`, { method: 'POST' });
+        await fetch(`http://localhost:8000/alerts/${encodeURIComponent(id)}/read`, { method: 'POST' });
         checkAlerts(); // Refresh
     } catch (e) {
         console.error("Failed to mark read", e);

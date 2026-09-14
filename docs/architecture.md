@@ -2,6 +2,10 @@
 
 For the proposed evolution from the current prototype to a dependable internal assistant, see the [enterprise AI learning and reliability roadmap](enterprise_roadmap.md). It defines the implementation order, target trust/storage boundaries, regression gates, and migration safeguards. The target design is not yet implemented; existing diagrams and future options below do not establish enterprise readiness.
 
+The browser treats API/model content as untrusted: plain evidence is escaped, Markdown is sanitized by locally pinned DOMPurify, and alert actions use event listeners. The shared LLM and search adapters apply supported-pattern redaction at dispatch. Published Compose ports bind to loopback. See [rendering and privacy design](rendering_and_privacy.md) for trust boundaries and limitations.
+
+Evaluation now shares a [versioned storage/read contract](evaluation_contract.md) across the runner and dashboard. Runs persist pending cases before execution, retain failures, and use stateless query requests. Model judges are supplementary; simulated shadow output is disabled.
+
 ## 1. Component Diagram
 
 Development verification uses a separate [isolated baseline](testing_baseline.md): selected source is mounted read-only into a network-disabled test container, and real DuckDB tests use disposable storage. This test service is separate from the application components below and does not start them.
@@ -220,7 +224,7 @@ The system is composed of **10 distinct Nodes (Agents)**, each with a specific r
 ### Evaluation Service (New)
 -   **Role**: Offline performance measurement.
 -   **Stack**: FastAPI + Ragas.
--   **Function**: Runs the `golden_dataset.json` against the Pilot and scores results using an LLM Judge.
+-   **Function**: Runs configured cases statelessly against Pilot, retaining failures and actual evidence in v1 tables. Deterministic expected results determine batch pass rates; the optional single-interaction LLM judge is separate.
 
 ### Sentry Service (New) 🛡️
 -   **Role**: Proactive background monitoring.

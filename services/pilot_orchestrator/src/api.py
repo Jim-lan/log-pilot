@@ -30,6 +30,7 @@ app.add_middleware(
 
 class QueryRequest(BaseModel):
     query: str
+    persist_history: bool = True
 
 class QueryResponse(BaseModel):
     answer: str
@@ -99,7 +100,7 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
         db = DuckDBConnector(read_only=True) 
         print("DEBUG: DuckDBConnector initialized.")
         
-        history_rows = db.get_history("default")
+        history_rows = db.get_history("default") if request.persist_history else []
         print(f"DEBUG: History fetched: {len(history_rows)} rows.")
         # Format: [{"role": "user", "content": "..."}, ...]
         # Limit to last 10 messages to avoid context overflow
@@ -125,9 +126,11 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
             db = DuckDBConnector(read_only=True)
             budget.check()
             # Save User Query
-            db.save_message("default", "user", request.query)
+            if request.persist_history:
+                db.save_message("default", "user", request.query)
             # Save AI Answer
-            db.save_message("default", "ai", answer)
+            if request.persist_history:
+                db.save_message("default", "ai", answer)
             db.close() # Close connection
         except ExecutionFailure:
             raise
@@ -228,58 +231,8 @@ def read_alert(alert_id: str):
 
 @app.get("/metrics")
 def get_metrics():
-    """
-    Retrieves evaluation metrics from the metrics database.
-    """
-    try:
-        import duckdb
-        db_path = "data/target/metrics.duckdb"
-        
-        if not os.path.exists(db_path):
-            return {
-                "pass_rate_24h": 0,
-                "avg_latency_24h": 0,
-                "total_runs": 0,
-                "history": []
-            }
-
-        conn = duckdb.connect(db_path, read_only=True)
-        
-        # 1. Pass Rate (Last 24h) - aggregating from eval_runs
-        # Note: In a real app, we'd filter by timestamp > now() - interval '24 hours'
-        # For demo, we just take the average of all runs
-        pass_rate = conn.execute("SELECT AVG(pass_rate) FROM eval_runs").fetchone()[0] or 0
-        
-        # 2. Average Latency (Last 24h) - aggregating from eval_results
-        avg_latency = conn.execute("SELECT AVG(latency) FROM eval_results").fetchone()[0] or 0
-        
-        # 3. Total Runs
-        total_runs = conn.execute("SELECT COUNT(*) FROM eval_runs").fetchone()[0] or 0
-        
-        # 4. History for Chart (Last 10 runs)
-        history = conn.execute("""
-            SELECT run_id, timestamp, pass_rate 
-            FROM eval_runs 
-            ORDER BY timestamp DESC 
-            LIMIT 10
-        """).fetchall()
-        
-        conn.close()
-        
-        return {
-            "pass_rate_24h": round(pass_rate, 1),
-            "avg_latency_24h": round(avg_latency, 2),
-            "total_runs": total_runs,
-            "history": [{"run_id": h[0], "timestamp": str(h[1]), "pass_rate": h[2]} for h in history]
-        }
-    except Exception as e:
-        print(f"❌ Metrics Error: {e}")
-        return {
-            "pass_rate_24h": 0,
-            "avg_latency_24h": 0,
-            "total_runs": 0,
-            "history": []
-        }
+    from shared.evaluation import EvaluationStore
+    return EvaluationStore(os.getenv("METRICS_DB_PATH", "data/target/metrics.duckdb")).summary()
 
 if __name__ == "__main__":
     import uvicorn

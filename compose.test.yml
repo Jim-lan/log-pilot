@@ -18,6 +18,7 @@ services:
       - ./shared:/workspace/shared:ro
       - ./prompts:/workspace/prompts:ro
       - ./services/pilot_orchestrator/src:/workspace/services/pilot_orchestrator/src:ro
+      - ./services/evaluation_service/src:/workspace/services/evaluation_service/src:ro
       - ./services/mcp_server/src:/workspace/services/mcp_server/src:ro
       - ./scripts/run_isolated_tests.py:/workspace/scripts/run_isolated_tests.py:ro
       - ./tests/test_parser_formats.py:/workspace/tests/test_parser_formats.py:ro

@@ -1,0 +1,11 @@
+{
+  "name": "logpilot-browser-contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test rendering.test.mjs"},
+  "devDependencies": {
+    "dompurify": "3.4.15",
+    "marked": "18.0.13",
+    "playwright": "1.63.0"
+  }
+}

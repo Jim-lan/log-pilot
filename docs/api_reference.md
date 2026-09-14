@@ -98,3 +98,8 @@ Checks the status of the API and the LLM connection.
 ## MCP database operations
 
 `query_logs`, `logs://recent` and `logs://schema` use the connector's transient `query()` method with a read-only logs connection. They preserve their string result/error contracts. `ask_log_pilot` forwards to the API with a 60-second HTTP timeout. This compatibility repair does not add authorization, SQL sandboxing or new transport guarantees.
+
+
+## Evaluation integrity v1
+
+`POST /query` adds optional `persist_history` (default true). False creates a stateless request that cannot read or append ordinary chat history. `GET /metrics` now reads the versioned evaluation tables, returns null for unavailable metrics, uses a true UTC 24-hour window and exposes run status. See [full evaluation contracts and migration limits](evaluation_contract.md).
