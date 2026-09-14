@@ -1,3 +1,4 @@
+from shared.evidence import source_record, cited_sources
 import sys
 import os
 from typing import Dict, Any
@@ -329,6 +330,7 @@ def retrieve_context(state: AgentState) -> AgentState:
     """
     # Use rewritten query
     query = state.get("rewritten_query", state["query"])
+    state["sources"] = []
     try:
         kb = get_kb_store()
         # 1. Retrieve relevant patterns from Vector DB
@@ -350,14 +352,19 @@ def retrieve_context(state: AgentState) -> AgentState:
             if node_type == "runbook_card":
                 topic = node.metadata.get("topic", "General")
                 content = node.get_content()
-                knowledge_cards.append(f"📘 Runbook Card ({topic}):\n{content}")
+                source = source_record(node, content)
+                state["sources"].append(source)
+                knowledge_cards.append(f"[source:{source['source_id']}] 📘 Runbook Card ({topic}):\n{content}")
                 continue
 
             # Check for Log Patterns
             t_id = node.metadata.get("cluster_id")
             if t_id:
                 template_ids.append(str(t_id))
-                patterns.append(node.get_content())
+                content = node.get_content()
+                source = source_record(node, content)
+                state["sources"].append(source)
+                patterns.append(f"[source:{source['source_id']}] {content}")
 
         if not template_ids and not knowledge_cards:
              state["rag_context"] = f"Found patterns/docs but no usable content. Raw: {nodes}"
@@ -541,6 +548,11 @@ def validate_answer(state: AgentState) -> AgentState:
     """
     query = state["query"]
     answer = state.get("final_answer", "")
+    available = {source['source_id'] for source in state.get('sources', [])}
+    if set(cited_sources(answer)) - available:
+        state['answer_valid'] = False
+        state['answer_feedback'] = 'Use only supplied [source:ID] citations; an unknown citation was found.'
+        return state
     
     try:
         prompt = prompt_factory.create_prompt(
@@ -581,6 +593,7 @@ def perform_web_search(state: AgentState) -> AgentState:
     # Fallback synthesis must use web evidence rather than rejected RAG context.
     state["intent"] = "web_search"
     state["web_results"] = ""
+    state["sources"] = []
     if os.getenv("LOGPILOT_ALLOW_WEB_SEARCH", "").lower() != "true":
         state["failure_reason"] = "web_search_disabled"
         return state

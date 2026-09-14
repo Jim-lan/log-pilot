@@ -38,6 +38,7 @@ class QueryResponse(BaseModel):
     sql_result: Optional[str] = None
     sql_rows: Optional[List[List[Any]]] = None
     context: Optional[str] = None
+    sources: List[Dict[str, Any]] = []
     intent: str
     metadata: Optional[Dict[str, Any]] = {}
     trace: Optional[List[Dict[str, Any]]] = None
@@ -170,6 +171,7 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
                      else final_state.get("rag_context")),
             intent=final_state.get("intent", "unknown"),
             trace=trace,
+            sources=final_state.get("sources", []),
             metadata={
                 "rewritten_query": final_state.get("rewritten_query"),
                 "latency": latency,

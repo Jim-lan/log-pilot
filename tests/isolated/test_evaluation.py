@@ -51,6 +51,22 @@ class EvaluationContracts(unittest.TestCase):
         self.assertEqual(score_case({'expected_rows': []}, {'sql_rows': []})[0], 'passed')
         self.assertEqual(score_case({'expected_rows': []}, {'sql_rows': None})[0], 'failed')
 
+    def test_retrieval_citation_and_answer_failures_are_distinct(self):
+        from shared.evaluation_runner import score_case, score_dimensions
+        case = {'expected_answer': 'Restart [source:known]', 'expected_source_ids': ['known'],
+                'expected_citation_ids': ['known']}
+        response = {'answer': 'Restart [source:known]', 'sources': [{'source_id': 'known'}]}
+        self.assertEqual(score_case(case, response)[0], 'passed')
+        wrong_answer = {**response, 'answer': 'Delete data [source:known]'}
+        self.assertEqual(score_dimensions(case, wrong_answer)['retrieval']['recall'], 1)
+        self.assertEqual(score_case(case, wrong_answer)[0], 'failed')
+        wrong_source = {**response, 'sources': [{'source_id': 'unrelated'}]}
+        self.assertEqual(score_dimensions(case, wrong_source)['retrieval']['recall'], 0)
+        self.assertFalse(score_dimensions(case, wrong_source)['citation_validity'])
+        self.assertEqual(score_case(case, wrong_source)[0], 'failed')
+        no_citation = {**response, 'answer': 'Restart'}
+        self.assertEqual(score_dimensions(case, no_citation)['citations']['recall'], 0)
+
     def test_batch_api_creates_durable_run_without_importing_a_judge(self):
         import importlib.util
         import json

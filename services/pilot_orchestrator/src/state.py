@@ -16,6 +16,7 @@ class AgentState(TypedDict):
     
     # RAG Path
     # RAG Path
+    sources: List[Dict[str, Any]]
     rag_context: Optional[str]
     web_results: Optional[str]
     

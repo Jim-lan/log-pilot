@@ -27,3 +27,14 @@ Each run records the dataset SHA-256, limit, contract version and scorer. Each c
 Disposable DuckDB tests cover a passing case, incorrect output, failed request, unfinished run, old results outside the time window, actual evidence and request latency. API tests prove ordinary history is unchanged and the dashboard reads the same schema. Browser tests protect unavailable values and existing rendering behavior.
 
 No existing data migration or application container restart is performed by these repairs. Try the new evaluator with a synthetic configured dataset before normal use. Rollback may ignore the additive v1 tables; retain them for reconciliation rather than deleting results. These tests do not establish live-model quality, concurrent storage safety or completion of Phase 2.
+
+
+## Retrieval and citation dimensions
+
+`QueryResponse.sources` lists the retrieved KB artifacts actually assembled into local context. Each has an opaque `source_id`, content SHA-256, kind and title. IDs use the indexed node identity when available, otherwise content identity. Content hashes change when an artifact changes; an index rebuild may change node IDs. These identify the retrieved artifact, not an authenticated original document/version/span. Original runbook preservation remains Phase 4.3.
+
+Context includes exact `[source:ID]` markers and synthesis is instructed to use them. Unknown citation IDs are rejected deterministically before the LLM judge, with the existing two-repair limit followed by abstention. Web fallback clears local source identities; external citation provenance remains separate work. Missing citations are visible in evaluation rather than silently treated as proof of support. A valid ID does not establish that the source entails the answer.
+
+Evaluation cases may specify `expected_source_ids` and `expected_citation_ids`. Stored dimensions separate retrieval precision/recall, citation presence, citation validity and citation precision/recall. A deterministic answer or SQL expectation is still required for an overall pass; retrieval alone cannot certify answer quality. Explicit source/citation expectations must match fully for fixture acceptance. This provides reproducible attribution checks; semantic factuality, source authenticity and adversarial live-model robustness still require additional evidence.
+
+The frontend displays retrieved artifact identifiers and hashes as escaped text beneath answers. User/model text cannot create executable source markup. Context is described to the model as evidence, not instructions to execute; this prompt guidance is not an authorization boundary.

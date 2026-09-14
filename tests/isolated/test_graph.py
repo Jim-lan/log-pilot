@@ -123,6 +123,29 @@ class GraphContracts(unittest.TestCase):
         result = self.invoke()
         self.assertIn("Runbook fixture evidence", result["rag_context"])
         self.web.search.assert_not_called()
+        self.assertEqual(len(result['sources']), 1)
+        source = result['sources'][0]
+        self.assertIn('[source:' + source['source_id'] + ']', result['rag_context'])
+        self.assertEqual(len(source['content_sha256']), 64)
+
+    def test_fabricated_citation_fails_without_trusting_model_judge(self):
+        self.responses['intent_classifier'] = 'rag'
+        self.responses['synthesize_answer'] = 'Invented answer [source:nonexistent]'
+        result = self.invoke()
+        self.assertEqual(result['outcome'], 'insufficient_evidence')
+        self.assertEqual(self.count('synthesize_answer'), 3)
+        self.assertEqual(self.count('validate_answer'), 0)
+        self.assertNotIn('nonexistent', result['final_answer'])
+
+    def test_cited_runbook_answer_keeps_matching_artifact_identity(self):
+        from shared.evidence import source_record
+        node = self.kb.retrieve.return_value[0]
+        source = source_record(node, node.get_content())
+        self.responses['intent_classifier'] = 'rag'
+        self.responses['synthesize_answer'] = 'Use the runbook [source:' + source['source_id'] + ']'
+        result = self.invoke()
+        self.assertEqual(result['outcome'], 'validated')
+        self.assertEqual(result['sources'][0], source)
 
     def test_rejected_context_terminates_with_used_fallback(self):
         self.responses["intent_classifier"] = "rag"

@@ -100,3 +100,15 @@ test('missing evaluation metrics display unavailable instead of zero', async t =
   await page.waitForFunction(() => document.querySelector('#metric-pass-rate').textContent === 'Unavailable');
   assert.equal(await page.locator('#metric-latency').innerText(), 'Unavailable');
 });
+
+
+test('retrieved artifact identities render literally', async t => {
+  const { page } = await pageFor(t, { answer: { answer: 'Use evidence [source:kb-fixture]', sources: [
+    { title: '<img src=x onerror="window.__xss=1">', source_id: 'kb-fixture', content_sha256: 'fixture-hash' }
+  ] } });
+  await page.locator('#user-input').fill('question');
+  await page.locator('#chat-form').evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('fixture-hash'));
+  assert.match(await page.locator('#messages').textContent(), /<img/);
+  assert.equal(await page.locator('#messages img').count(), 0);
+});

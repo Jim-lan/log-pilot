@@ -4,7 +4,7 @@ For the proposed evolution from the current prototype to a dependable internal a
 
 The browser treats API/model content as untrusted: plain evidence is escaped, Markdown is sanitized by locally pinned DOMPurify, and alert actions use event listeners. The shared LLM and search adapters apply supported-pattern redaction at dispatch. Published Compose ports bind to loopback. See [rendering and privacy design](rendering_and_privacy.md) for trust boundaries and limitations.
 
-Evaluation now shares a [versioned storage/read contract](evaluation_contract.md) across the runner and dashboard. Runs persist pending cases before execution, retain failures, and use stateless query requests. Model judges are supplementary; simulated shadow output is disabled. SQL execution preserves structured rows alongside display text, and request-local metadata records model configuration and template hashes for evaluation.
+Evaluation now shares a [versioned storage/read contract](evaluation_contract.md) across the runner and dashboard. Runs persist pending cases before execution, retain failures, and use stateless query requests. Model judges are supplementary; simulated shadow output is disabled. Retrieved KB artifacts retain identifiers and content hashes; citation IDs are checked before model judging. The browser exposes these artifacts and evaluation scores retrieval/citations separately. SQL execution preserves structured rows alongside display text, and request-local metadata records model configuration and template hashes for evaluation.
 
 ## 1. Component Diagram
 

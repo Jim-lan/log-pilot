@@ -176,3 +176,10 @@ An indexed `UPDATE ... RETURNING` in DuckDB 1.1.3 failed during new storage test
 The backend suite now contains 73 tests. `test_versioned_quality_fixtures_execute_real_graph_and_database` covers six versioned synthetic SQL cases in real LangGraph/DuckDB, with scripted SQL generation. Additional contracts verify duplicate-preserving row comparison and request-local template/model provenance. These are application correctness tests, not live-model accuracy measurements.
 
 `.github/workflows/isolated-regressions.yml` runs on pull requests, main/codex branch pushes and manual dispatch. Backend tests use the existing network-disabled Docker profile. Browser tests use pinned npm dependencies and Playwright Chromium with every application request fulfilled from synthetic fixtures. Action implementations are pinned to verified commit SHAs and receive read-only contents permission; checkout credentials are not persisted. Dependency/image/browser installation requires network, while the test execution boundaries remain isolated. Remote workflow success must be confirmed from its actual run, not inferred from this configuration.
+
+GitHub Actions verification: [run 34857485746](https://github.com/Jim-lan/log-pilot/actions/runs/34857485746) completed successfully for commit `8f3f8b3dd58a53d673b1c9cf90a2f9e4b40cd892`. Both the Ubuntu Docker backend job and Playwright Chromium browser job passed. This confirms clean remote installation and execution for that revision; later code changes require their own run.
+
+
+## Retrieval attribution checkpoint (2026-09-14)
+
+76 backend contracts pass locally and in the isolated Docker profile. Added checks cover retrieved artifact identity, a correctly cited answer, deterministic rejection of fabricated citation IDs without relying on the model judge, and independent retrieval/citation/answer failures. Six browser contracts include inert rendering of hostile source titles and readable IDs/hashes. Synthetic KB nodes and scripted LLM output are used; no claim of live retrieval/model quality follows from these tests.

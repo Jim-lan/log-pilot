@@ -3,6 +3,20 @@ import time
 import json
 
 import requests
+from shared.evidence import cited_sources, retrieval_metrics
+
+
+def score_dimensions(case, response):
+    """Keep retrieval and citation validity distinct from answer correctness."""
+    sources = {item['source_id'] for item in response.get('sources', [])}
+    citations = set(cited_sources(response.get('answer', '')))
+    result = {'citation_validity': not bool(citations - sources),
+              'citation_present': bool(citations)}
+    if 'expected_source_ids' in case:
+        result['retrieval'] = retrieval_metrics(case['expected_source_ids'], sources)
+    if 'expected_citation_ids' in case:
+        result['citations'] = retrieval_metrics(case['expected_citation_ids'], citations)
+    return result
 
 
 def score_case(case, response):
@@ -23,6 +37,11 @@ def score_case(case, response):
         return 'unscored', 'missing_deterministic_expectation'
     if 'expected_intent' in case:
         checks.append(response.get('intent') == case['expected_intent'])
+    dimensions = score_dimensions(case, response)
+    checks.append(dimensions['citation_validity'])
+    for dimension in ('retrieval', 'citations'):
+        if dimension in dimensions:
+            checks.append(dimensions[dimension]['precision'] == 1 and dimensions[dimension]['recall'] == 1)
     return ('passed', None) if all(checks) else ('failed', 'incorrect_result')
 
 
@@ -36,7 +55,8 @@ def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.mono
                 result.raise_for_status()
                 response = result.json()
                 status, reason = score_case(case, response)
-                evidence = {key: response.get(key) for key in ('answer', 'context', 'sql', 'sql_result', 'sql_rows', 'intent', 'metadata')}
+                evidence = {key: response.get(key) for key in ('answer', 'context', 'sources', 'sql', 'sql_result', 'sql_rows', 'intent', 'metadata')}
+                evidence['dimensions'] = score_dimensions(case, response)
             except Exception:
                 status, reason, evidence = 'error', 'request_failed', {}
             store.record(run_id, case['id'], status, clock() - started, evidence, reason)

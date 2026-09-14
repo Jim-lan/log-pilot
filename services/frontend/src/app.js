@@ -113,6 +113,14 @@ async function handleSubmit(e) {
             responseHtml += `</div>`;
         }
 
+        if (Array.isArray(data.sources) && data.sources.length) {
+            responseHtml += '<details class="references"><summary>Retrieved sources</summary><ul>';
+            for (const source of data.sources) {
+                responseHtml += `<li>${escapeText(source.title)} <code>${escapeText(source.source_id)}</code><br>Content SHA-256: <code>${escapeText(source.content_sha256)}</code></li>`;
+            }
+            responseHtml += '</ul></details>';
+        }
+
         addMessage('ai', responseHtml);
 
     } catch (error) {
