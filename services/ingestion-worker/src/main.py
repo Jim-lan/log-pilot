@@ -3,12 +3,15 @@ import os
 import time
 import random
 import json
+import hashlib
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List
 
 # Add project root to python path to allow importing shared modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
+from shared.ingestion_ledger import IngestionLedger
 from shared.log_schema import LogEvent
 from shared.db.duckdb_client import DuckDBConnector
 from shared.utils.pii_masker import PIIMasker
@@ -128,6 +131,7 @@ class LogIngestor:
         self.parser = LogParser()
         self.janitor = Janitor(self.kb) # Initialize Janitor
         self.llm_client = LLMClient() 
+        self.ledger = IngestionLedger()
         self.batch_size = 5
         self.batch_buffer = []
         self.log_event_buffer = [] # Buffer for LogEvent objects
@@ -140,11 +144,6 @@ class LogIngestor:
         # 3. Mine: Extract structural templates (Drain3) to group similar logs.
         # 4. Buffer & Flush: Persist to DuckDB (All Logs) and ChromaDB (Unique Patterns).
         # ==============================================================================
-
-    # ... (Keep parse_log and flush_batch methods as is) ...
-    # Wait, I cannot use '...' in replacement. I must provide the full content or clever chunks. 
-    # Since I'm replacing the whole file logic or large parts, I should be careful.
-    # The tool allows replacing a chunk. Let's target the LogFileHandler and FileWatcherConsumer and run loop first.
 
     def parse_log(self, raw_log: str) -> LogEvent:
         """Parses, masks, and enriches a raw log line."""
@@ -194,6 +193,7 @@ class LogIngestor:
         except Exception as e:
             print(f"❌ DuckDB Insert Failed: {e}")
             self._write_to_dlq(self.batch_buffer, "duckdb_insert_error")
+            raise
 
         # 2. ChromaDB (Vector Data) - ONLY PATTERNS
         if self.log_event_buffer:
@@ -205,6 +205,7 @@ class LogIngestor:
                 # We don't necessarily DLQ vector patterns as they are re-creatable, 
                 # but let's log them to be safe.
                 self._write_to_dlq([e.model_dump() for e in self.log_event_buffer], "chroma_insert_error")
+                raise
 
         # Clear buffers
         self.batch_buffer = []
@@ -269,6 +270,9 @@ class LogIngestor:
                 print(f"   ❌ Failed to parse topics JSON: {topics_json}")
                 topics = ["General Content"] # Fallback
 
+            if not isinstance(topics, list) or not 1 <= len(topics) <= 32 or any(not isinstance(topic, str) or not topic.strip() or len(topic) > 200 for topic in topics):
+                raise ValueError("Invalid or excessive discovered topics")
+
             # Pass 2: Synthesis
             documents = []
             for topic in topics:
@@ -309,8 +313,53 @@ class LogIngestor:
                 self.kb.add_documents(documents)
                 
         except Exception as e:
-            print(f"❌ Smart Ingestion Failed: {e}")
+            print("❌ Smart ingestion failed; file not acknowledged.")
+            raise
 
+
+    def process_file(self, filepath, processed_path):
+        """Acknowledge only complete immutable files; partial failures need review."""
+        source = Path(filepath)
+        if source.suffix not in ('.log', '.md') or source.is_symlink() or not source.is_file():
+            raise ValueError("Expected a regular immutable input file")
+        if source.stat().st_size > 8 * 1024 * 1024:
+            raise ValueError("File exceeds the 8 MiB ingestion limit")
+        with source.open('rb') as stream:
+            raw = stream.read(8 * 1024 * 1024 + 1)
+        if len(raw) > 8 * 1024 * 1024:
+            raise ValueError("File exceeds the 8 MiB ingestion limit")
+        fingerprint = hashlib.sha256(source.suffix.encode() + b"\0" + raw).hexdigest()
+        claimed = self.ledger.claim(fingerprint, source.name)
+        if claimed:
+            try:
+                if self.batch_buffer or self.log_event_buffer:
+                    raise RuntimeError("Unresolved buffers from a previous file")
+                if source.suffix == '.md':
+                    self.process_markdown_smart(filepath)
+                else:
+                    for line in raw.decode('utf-8').splitlines():
+                        if line.strip():
+                            self.process_raw_log(line.strip())
+                    self.flush_batch()
+                    self.ledger.mark(fingerprint, 'persisted')
+                if source.read_bytes() != raw:
+                    raise RuntimeError("Input changed during ingestion")
+                self.ledger.mark(fingerprint, 'indexed')
+            except Exception:
+                self.ledger.mark(fingerprint, 'failed', 'processing_failed')
+                quarantine = source.parent.parent / 'quarantine'
+                quarantine.mkdir(parents=True, exist_ok=True)
+                destination = quarantine / (fingerprint + '-' + source.name)
+                if not destination.exists():
+                    shutil.move(str(source), str(destination))
+                self.batch_buffer.clear()
+                self.log_event_buffer.clear()
+                raise
+        # If this move fails, indexed status remains durable; retry only moves
+        # the identical file and does not run database/vector writes again.
+        if Path(processed_path).exists():
+            raise FileExistsError("Processed destination already exists")
+        shutil.move(str(source), processed_path)
 
     def run(self):
         print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
@@ -318,43 +367,24 @@ class LogIngestor:
         print("🗄️  DuckDB Persistence Enabled")
         print("🧠 ChromaDB Persistence Enabled")
         
-        self.janitor.run_cleanup(retention_days=30)
+        # Retention deletion requires a separately verified recovery procedure.
+        # Do not delete existing vectors automatically on worker startup.
  
         try:
             # File Watcher Path (Logs + Markdown)
             for filepath, processed_path in self.consumer:
-                filename = os.path.basename(filepath)
-                
-                if filename.endswith(".md"):
-                    # Smart Ingestion for Runbooks
-                    self.process_markdown_smart(filepath)
-                else:
-                    # Log Processing
-                    try:
-                        # wait slightly to ensure writing is done
-                        time.sleep(0.5) 
-                        with open(filepath, 'r') as f:
-                            for line in f:
-                                if line.strip():
-                                    self.process_raw_log(line.strip())
-                        self.flush_batch()
-                    except Exception as e:
-                        print(f"❌ Error reading log file {filepath}: {e}")
-                        
-                # Move to processed
-                print(f"✅ Finished {filename}, moving to processed.")
-                try:
-                    shutil.move(filepath, processed_path)
-                except Exception as e:
-                        print(f"⚠️ Failed to move file {filepath}: {e}")
+                self.process_file(filepath, processed_path)
 
             # Safe cleanup
             self.db.close()
 
         except KeyboardInterrupt:
             print("\n🛑 Stopping worker...")
-            self.flush_batch()
+            # Do not retry partially persisted buffers implicitly on shutdown.
             self.db.close()
+        finally:
+            self.consumer.observer.stop()
+            self.consumer.observer.join()
             
     def process_raw_log(self, raw_log):
         try:
@@ -383,7 +413,8 @@ class LogIngestor:
             if len(self.batch_buffer) >= self.batch_size:
                 self.flush_batch()
         except Exception as e:
-            print(f"⚠️ Failed to process log: {raw_log} -> {e}")
+            print("⚠️ Log processing failed; file not acknowledged.")
+            raise
 
 if __name__ == "__main__":
     ingestor = LogIngestor()

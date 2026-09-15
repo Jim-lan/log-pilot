@@ -158,3 +158,8 @@ Use a synthetic dataset configured with `EVALUATION_DATASET_PATH` on the evaluat
 ## Restricted analytics
 
 Rebuild orchestrator and MCP images before deploying the SQL-policy increment: both now require pinned `sqlglot==26.33.0`. Model/user analytics is capped at 1000 rows and five seconds, with external reads disabled. Use narrower queries when limits are exceeded. See [allowed operations and remaining isolation gates](docs/sql_execution_policy.md). No rebuild of running application services is performed by the isolated tests.
+
+
+## File ingestion handoff
+
+Provide completed immutable UTF-8 `.log`/`.md` files (maximum 8 MiB). Write a temporary file, close it, then atomically rename it into `data/source/landing_zone`. Do not append after handoff. Successful files move to processed; failures are quarantined and recorded in `data/state/ingestion.sqlite3`. Preserve this ledger with application backups. Incomplete claims require recovery review; do not reset the ledger to force replay. Startup vector deletion is disabled pending retention/recovery validation. See [operator inspection and limitations](docs/ingestion_recovery.md).

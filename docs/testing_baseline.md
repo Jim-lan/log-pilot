@@ -190,3 +190,10 @@ GitHub Actions verification: [run 34857485746](https://github.com/Jim-lan/log-pi
 84 backend tests pass locally and in the rebuilt network-disabled Docker image. New policy tests reject external readers, multiple statements, hidden/unknown tables and columns, extension/configuration commands and CTE scope confusion. Real DuckDB verifies row limits, engine-level external-read denial even when parsing is bypassed in a test, expensive-query interruption and post-cancellation reuse. MCP and graph tests verify the shared execution boundary and preserve typed request deadline failures. The pinned parser dependency is `sqlglot==26.33.0`.
 
 The preceding citation revision `6840e40817a6842e0aad4342d6c6900a71de921d` also passed [GitHub Actions run 34858072080](https://github.com/Jim-lan/log-pilot/actions/runs/34858072080). No application containers or data were changed by these tests. See [SQL policy scope](sql_execution_policy.md); process isolation, response byte bounds, tenant permissions and concurrent storage ownership are not established by these checks.
+
+
+## File acknowledgement checkpoint (2026-09-15)
+
+92 tests pass locally and in the isolated Docker profile. Real ingestion worker methods, DuckDB and SQLite are exercised with synthetic files and stubbed watcher/vector/model dependencies. Eight additional contracts cover successful acknowledgement, database/vector failure, quarantine, duplicate completed-file handling, move collision recovery, interrupted claims, empty runbook discovery and changed inputs. This verifies truthful acknowledgement and safe refusal of incomplete replay; it does not establish idempotent partial replay or real Chroma recovery.
+
+The preceding SQL-policy revision `6cbdfa3d6978f10dd21780f2631c0817f856aeed` passed [GitHub Actions run 34969976591](https://github.com/Jim-lan/log-pilot/actions/runs/34969976591). Application data and running services remain untouched.

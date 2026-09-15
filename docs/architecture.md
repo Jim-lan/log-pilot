@@ -220,7 +220,7 @@ The system is composed of **10 distinct Nodes (Agents)**, each with a specific r
 -   **Role**: Real-time log processing.
 -   **Mechanism**:
     -   **File Watcher**: Uses `watchdog` to listen for new files in `landing_zone`.
-    -   **Processing**: Automatically ingests files and moves them to `processed/`.
+    -   **Processing**: Completed immutable files are tracked by a durable acknowledgement ledger. Only successful files move to `processed/`; failures are quarantined and incomplete claims require recovery review. See [ingestion recovery](ingestion_recovery.md).
 -   **PII Masking**: Regex-based masking for emails, IP addresses, and SSNs before storage.
 
 ### Evaluation Service (New)
