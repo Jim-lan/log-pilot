@@ -107,3 +107,5 @@ Checks the status of the API and the LLM connection.
 `QueryResponse.sql_rows` adds JSON rows alongside the unchanged readable `sql_result`. Metadata adds request-local `provenance.model_calls` and `provenance.templates`; template hashes identify template source, not private rendered prompts. Empty arrays represent successful empty results; null represents no structured result.
 
 `QueryResponse.sources` adds retrieved KB artifact IDs, content hashes, kind and title. `[source:ID]` answer markers are checked against supplied local artifacts before model validation; fabricated IDs trigger bounded repair and abstention. See [retrieval/citation limits](evaluation_contract.md).
+
+SQL execution rejection/failure returns HTTP 422 with `detail.code=sql_execution_failed`; it does not synthesize a success from missing results. Model SQL validation and execution, MCP `query_logs`, and recent-log reads use the [restricted analytics policy](sql_execution_policy.md). MCP retains its string error response contract.

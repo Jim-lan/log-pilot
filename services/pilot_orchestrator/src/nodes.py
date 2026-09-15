@@ -15,7 +15,7 @@ from services.knowledge_base.src.store import KnowledgeStore
 from shared.db.duckdb_client import DuckDBConnector
 from datetime import datetime, timedelta
 import re
-from shared.execution import current_budget
+from shared.execution import current_budget, ExecutionFailure
 
 # Initialize Shared Components
 llm_client = LLMClient()
@@ -208,7 +208,7 @@ def validate_sql(state: AgentState) -> AgentState:
         db = DuckDBConnector(read_only=True)
         try:
             # 1. Syntax Check (EXPLAIN)
-            db.query(f"EXPLAIN {sql}")
+            db.query_analytics(sql, explain=True)
             
             # 2. Heuristic Logic Check
             query_lower = state.get("rewritten_query", state["query"]).lower()
@@ -308,14 +308,17 @@ def execute_sql(state: AgentState) -> AgentState:
         db = DuckDBConnector(read_only=True)
         try:
             print(f"⚡ Executing SQL: {sql}")
-            result = db.query(sql)
+            result = db.query_analytics(sql)
             state["sql_result"] = str(result)
             state["sql_rows"] = [list(row) for row in result]
         finally:
             db.close()
-    except Exception as e:
-        state["sql_error"] = str(e)
-        # No retry logic here, handled by validation loop
+    except ExecutionFailure:
+        raise
+    except Exception:
+        from shared.execution import SQLExecutionFailure
+        # Never let a rejected/failed execution become apparently valid evidence.
+        raise SQLExecutionFailure() from None
     
     return state
 

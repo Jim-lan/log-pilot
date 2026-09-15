@@ -32,6 +32,11 @@ class ProviderTimeout(ExecutionFailure):
     message = "A required provider timed out. Please try again."
 
 
+class SQLExecutionFailure(ExecutionFailure):
+    code, status = 'sql_execution_failed', 422
+    message = 'The SQL query could not execute within the allowed policy and limits. Narrow the query and try again.'
+
+
 def setting(name, default, cast=float):
     value = cast(os.getenv(name, str(default)))
     if not math.isfinite(value) or value <= 0:

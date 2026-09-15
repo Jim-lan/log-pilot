@@ -11,3 +11,4 @@ llama-index
 llama-index-vector-stores-chroma
 llama-index-embeddings-huggingface
 duckduckgo-search
+sqlglot==26.33.0

@@ -234,6 +234,11 @@ class DuckDBConnector:
             return conn.execute(sql).fetchall()
         finally:
             if conn: conn.close()
+
+    def query_analytics(self, sql: str, params: List[Any] = None, *, explain=False):
+        """Execution boundary for model/user SQL, unlike trusted internal query()."""
+        from shared.sql_policy import execute_query
+        return execute_query(self.db_path, sql, params, explain=explain)
             
     def load_catalog(self, csv_path: str):
         """Loads a CSV catalog into the system_catalog table."""

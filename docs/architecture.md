@@ -6,6 +6,8 @@ The browser treats API/model content as untrusted: plain evidence is escaped, Ma
 
 Evaluation now shares a [versioned storage/read contract](evaluation_contract.md) across the runner and dashboard. Runs persist pending cases before execution, retain failures, and use stateless query requests. Model judges are supplementary; simulated shadow output is disabled. Retrieved KB artifacts retain identifiers and content hashes; citation IDs are checked before model judging. The browser exposes these artifacts and evaluation scores retrieval/citations separately. SQL execution preserves structured rows alongside display text, and request-local metadata records model configuration and template hashes for evaluation.
 
+Model/user SQL now passes through a [restricted analytics executor](sql_execution_policy.md) before both EXPLAIN and execution. This adds operation/column/function allowlists and engine limits; tenant scope and OS process isolation remain future gates.
+
 ## 1. Component Diagram
 
 Development verification uses a separate [isolated baseline](testing_baseline.md): selected source is mounted read-only into a network-disabled test container, and real DuckDB tests use disposable storage. This test service is separate from the application components below and does not start them.

@@ -118,6 +118,24 @@ class GraphContracts(unittest.TestCase):
         self.assertEqual(result["final_answer"], "One error.")
         self.assertEqual(self.count("synthesize_answer"), 1)
 
+    def test_execution_rejection_cannot_be_synthesized_as_success(self):
+        from shared.execution import SQLExecutionFailure
+        from shared.sql_policy import SQLPolicyError
+        def execute(sql, params=None, *, explain=False):
+            if explain:
+                return []
+            raise SQLPolicyError('row limit exceeded')
+        with patch.object(self.nodes.DuckDBConnector, 'query_analytics', side_effect=execute):
+            with self.assertRaises(SQLExecutionFailure):
+                self.invoke()
+        self.assertEqual(self.count('synthesize_answer'), 0)
+
+    def test_execution_preserves_request_deadline_failure(self):
+        from shared.execution import DeadlineExceeded
+        with patch.object(self.nodes.DuckDBConnector, 'query_analytics', side_effect=DeadlineExceeded()):
+            with self.assertRaises(DeadlineExceeded):
+                self.nodes.execute_sql({'sql_query': 'SELECT count(*) FROM logs'})
+
     def test_rag_happy_path_uses_runbook(self):
         self.responses["intent_classifier"] = "rag"
         result = self.invoke()

@@ -206,6 +206,11 @@ class APIAndMCPContracts(unittest.TestCase):
     def test_mcp_query_uses_real_connector(self):
         self.assertEqual(self.mcp().query_logs("SELECT count(*) FROM logs"), "[(1,)]")
 
+    def test_mcp_rejects_external_reads_and_multiple_statements(self):
+        mcp = self.mcp()
+        self.assertIn('Error executing SQL:', mcp.query_logs("SELECT * FROM read_csv('/private/fixture.csv')"))
+        self.assertIn('Error executing SQL:', mcp.query_logs("SELECT 1; SELECT 2"))
+
     def test_mcp_recent_logs_uses_real_connector(self):
         result = self.mcp().get_recent_logs()
         self.assertNotIn("Error fetching", result)

@@ -183,3 +183,10 @@ GitHub Actions verification: [run 34857485746](https://github.com/Jim-lan/log-pi
 ## Retrieval attribution checkpoint (2026-09-14)
 
 76 backend contracts pass locally and in the isolated Docker profile. Added checks cover retrieved artifact identity, a correctly cited answer, deterministic rejection of fabricated citation IDs without relying on the model judge, and independent retrieval/citation/answer failures. Six browser contracts include inert rendering of hostile source titles and readable IDs/hashes. Synthetic KB nodes and scripted LLM output are used; no claim of live retrieval/model quality follows from these tests.
+
+
+## SQL policy checkpoint (2026-09-15)
+
+84 backend tests pass locally and in the rebuilt network-disabled Docker image. New policy tests reject external readers, multiple statements, hidden/unknown tables and columns, extension/configuration commands and CTE scope confusion. Real DuckDB verifies row limits, engine-level external-read denial even when parsing is bypassed in a test, expensive-query interruption and post-cancellation reuse. MCP and graph tests verify the shared execution boundary and preserve typed request deadline failures. The pinned parser dependency is `sqlglot==26.33.0`.
+
+The preceding citation revision `6840e40817a6842e0aad4342d6c6900a71de921d` also passed [GitHub Actions run 34858072080](https://github.com/Jim-lan/log-pilot/actions/runs/34858072080). No application containers or data were changed by these tests. See [SQL policy scope](sql_execution_policy.md); process isolation, response byte bounds, tenant permissions and concurrent storage ownership are not established by these checks.

@@ -153,3 +153,8 @@ Follow this script to demonstrate the agent's evolving intelligence.
 ## Evaluation development
 
 Use a synthetic dataset configured with `EVALUATION_DATASET_PATH` on the evaluation service. Include `id`, `question` and `expected_answer` or `expected_sql_result` per case. Batch requests are stateless and do not change ordinary chat history. Legacy keyword-only cases are unscored. New dashboard metrics use additive v1 tables; unavailable metrics display Unavailable. See [evaluation design and remaining limits](docs/evaluation_contract.md).
+
+
+## Restricted analytics
+
+Rebuild orchestrator and MCP images before deploying the SQL-policy increment: both now require pinned `sqlglot==26.33.0`. Model/user analytics is capped at 1000 rows and five seconds, with external reads disabled. Use narrower queries when limits are exceeded. See [allowed operations and remaining isolation gates](docs/sql_execution_policy.md). No rebuild of running application services is performed by the isolated tests.

@@ -8,3 +8,4 @@ langgraph==0.6.11
 Jinja2==3.1.6
 PyYAML==6.0.2
 openai==2.30.0
+sqlglot==26.33.0

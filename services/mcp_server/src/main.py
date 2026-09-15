@@ -22,7 +22,7 @@ def query_logs(sql_query: str) -> str:
     try:
         db = DuckDBConnector(read_only=True)
         try:
-            result = db.query(sql_query)
+            result = db.query_analytics(sql_query)
             return str(result)
         finally:
             db.close()
@@ -53,7 +53,7 @@ def get_recent_logs() -> str:
     try:
         db = DuckDBConnector(read_only=True)
         try:
-            result = db.query("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50")
+            result = db.query_analytics("SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50")
             return str(result)
         finally:
             db.close()
