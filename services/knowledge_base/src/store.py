@@ -95,6 +95,11 @@ class KnowledgeStore:
             self.index.insert(doc)
         print(f"✅ Added {len(documents)} documents to Knowledge Base.")
 
+    def upsert_logs(self, logs: List[LogEvent]):
+        from shared.vector_upsert import upsert_pattern
+        for event in logs:
+            upsert_pattern(self.collection, Settings.embed_model, event)
+
     def delete_older_than(self, timestamp: float):
         """
         Deletes logs older than the given timestamp.

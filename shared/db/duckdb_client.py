@@ -239,6 +239,40 @@ class DuckDBConnector:
         """Execution boundary for model/user SQL, unlike trusted internal query()."""
         from shared.sql_policy import execute_query
         return execute_query(self.db_path, sql, params, explain=explain)
+
+    def persist_ingestion_batch(self, records):
+        """Atomically persist new events and their recoverable vector work."""
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            conn.execute('CREATE TABLE IF NOT EXISTS ingestion_events_v1 (event_id VARCHAR PRIMARY KEY)')
+            conn.execute('''CREATE TABLE IF NOT EXISTS ingestion_outbox_v1 (
+                event_id VARCHAR PRIMARY KEY, file_id VARCHAR, payload VARCHAR, done BOOLEAN DEFAULT false)''')
+            columns = ['timestamp', 'severity', 'service_name', 'trace_id', 'body',
+                       'environment', 'app_id', 'department', 'host', 'region']
+            for record in records:
+                event_id = record['_event_id']
+                if conn.execute('SELECT 1 FROM ingestion_events_v1 WHERE event_id=?', [event_id]).fetchone():
+                    continue
+                values = [record.get(key) for key in columns] + [json.dumps(record.get('context', {}))]
+                conn.execute('INSERT INTO logs (' + ','.join(columns + ['context']) + ') VALUES (' + ','.join(['?'] * 11) + ')', values)
+                conn.execute('INSERT INTO ingestion_events_v1 VALUES (?)', [event_id])
+                if record.get('_pattern') is not None:
+                    conn.execute('INSERT INTO ingestion_outbox_v1(event_id,file_id,payload) VALUES (?,?,?)',
+                                 [event_id, record['_file_id'], json.dumps(record['_pattern'], default=str)])
+            conn.execute('COMMIT')
+
+    def pending_ingestion_patterns(self, file_id):
+        with self._get_connection() as conn:
+            return conn.execute('SELECT event_id,payload FROM ingestion_outbox_v1 WHERE file_id=? AND NOT done ORDER BY event_id', [file_id]).fetchall()
+
+    def ingestion_event_committed(self, event_id):
+        with self._get_connection() as conn:
+            tables = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name='ingestion_events_v1'").fetchone()
+            return bool(tables and conn.execute('SELECT 1 FROM ingestion_events_v1 WHERE event_id=?', [event_id]).fetchone())
+
+    def complete_ingestion_pattern(self, event_id):
+        with self._get_connection() as conn:
+            conn.execute('UPDATE ingestion_outbox_v1 SET done=true WHERE event_id=?', [event_id])
             
     def load_catalog(self, csv_path: str):
         """Loads a CSV catalog into the system_catalog table."""

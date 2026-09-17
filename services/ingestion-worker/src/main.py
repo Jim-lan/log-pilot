@@ -116,11 +116,11 @@ class FileWatcherConsumer:
         return False
 
 class LogIngestor:
-    def __init__(self):
+    def __init__(self, watch=True):
         print("DEBUG: Initializing LogIngestor...")
         
         print("DATA SOURCE: 📁 File Processor (Real-Time Watcher)")
-        self.consumer = FileWatcherConsumer()
+        self.consumer = FileWatcherConsumer() if watch else None
             
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
         print("DEBUG: Initializing KnowledgeStore...")
@@ -181,35 +181,25 @@ class LogIngestor:
         )
 
     def flush_batch(self):
-        """Persists buffered logs to DuckDB and ChromaDB with DLQ support."""
+        """Persist event identities and durable indexing work, then drain upserts."""
         if not self.batch_buffer:
             return
 
         print(f"💾 Persisting batch of {len(self.batch_buffer)} logs...")
         
-        # 1. DuckDB (Structured Data) - ALL LOGS
-        try:
-            self.db.insert_batch(self.batch_buffer)
-        except Exception as e:
-            print(f"❌ DuckDB Insert Failed: {e}")
-            self._write_to_dlq(self.batch_buffer, "duckdb_insert_error")
-            raise
-
-        # 2. ChromaDB (Vector Data) - ONLY PATTERNS
-        if self.log_event_buffer:
-            try:
-                print(f"🧠 Indexing {len(self.log_event_buffer)} new/updated patterns to ChromaDB...")
-                self.kb.add_logs(self.log_event_buffer)
-            except Exception as e:
-                print(f"❌ ChromaDB Insert Failed: {e}")
-                # We don't necessarily DLQ vector patterns as they are re-creatable, 
-                # but let's log them to be safe.
-                self._write_to_dlq([e.model_dump() for e in self.log_event_buffer], "chroma_insert_error")
-                raise
+        # Event keys, log rows and indexing payloads commit together.
+        self.db.persist_ingestion_batch(self.batch_buffer)
+        self.drain_indexing(self.file_fingerprint)
 
         # Clear buffers
         self.batch_buffer = []
         self.log_event_buffer = []
+
+    def drain_indexing(self, file_id):
+        for event_id, payload in self.db.pending_ingestion_patterns(file_id):
+            self.kb.upsert_logs([LogEvent.model_validate(json.loads(payload))])
+            # A crash here safely repeats the same vector upsert.
+            self.db.complete_ingestion_pattern(event_id)
 
     def _write_to_dlq(self, data: List[Dict[str, Any]], error_type: str):
         """Writes failed data to a Dead Letter Queue (JSON files)."""
@@ -317,8 +307,8 @@ class LogIngestor:
             raise
 
 
-    def process_file(self, filepath, processed_path):
-        """Acknowledge only complete immutable files; partial failures need review."""
+    def process_file(self, filepath, processed_path, *, replay=False):
+        """Acknowledge immutable files; explicitly resume journaled protocol-2 logs."""
         source = Path(filepath)
         if source.suffix not in ('.log', '.md') or source.is_symlink() or not source.is_file():
             raise ValueError("Expected a regular immutable input file")
@@ -329,7 +319,8 @@ class LogIngestor:
         if len(raw) > 8 * 1024 * 1024:
             raise ValueError("File exceeds the 8 MiB ingestion limit")
         fingerprint = hashlib.sha256(source.suffix.encode() + b"\0" + raw).hexdigest()
-        claimed = self.ledger.claim(fingerprint, source.name)
+        claimed = self.ledger.claim(fingerprint, source.name, protocol=2 if source.suffix == '.log' else 1, replay=replay)
+        self.file_fingerprint = fingerprint
         if claimed:
             try:
                 if self.batch_buffer or self.log_event_buffer:
@@ -337,10 +328,14 @@ class LogIngestor:
                 if source.suffix == '.md':
                     self.process_markdown_smart(filepath)
                 else:
-                    for line in raw.decode('utf-8').splitlines():
-                        if line.strip():
+                    for line_number, line in enumerate(raw.decode('utf-8').splitlines(), 1):
+                        self.event_id = fingerprint + ':' + str(line_number).zfill(12)
+                        if line.strip() and not self.db.ingestion_event_committed(self.event_id):
                             self.process_raw_log(line.strip())
                     self.flush_batch()
+                    # Empty files still establish the journal schema.
+                    self.db.persist_ingestion_batch([])
+                    self.drain_indexing(fingerprint)
                     self.ledger.mark(fingerprint, 'persisted')
                 if source.read_bytes() != raw:
                     raise RuntimeError("Input changed during ingestion")
@@ -349,7 +344,8 @@ class LogIngestor:
                 self.ledger.mark(fingerprint, 'failed', 'processing_failed')
                 quarantine = source.parent.parent / 'quarantine'
                 quarantine.mkdir(parents=True, exist_ok=True)
-                destination = quarantine / (fingerprint + '-' + source.name)
+                name = source.name if source.name.startswith(fingerprint + '-') else fingerprint + '-' + source.name
+                destination = quarantine / name
                 if not destination.exists():
                     shutil.move(str(source), str(destination))
                 self.batch_buffer.clear()
@@ -390,12 +386,17 @@ class LogIngestor:
         try:
             event = self.parse_log(raw_log)
             # 1. Add to DuckDB Buffer (Always)
-            self.batch_buffer.append(event.model_dump())
+            record = event.model_dump()
+            record['_event_id'] = self.event_id
+            record['_file_id'] = self.file_fingerprint
+            record['context']['ingest_event_id'] = self.event_id
+            self.batch_buffer.append(record)
             
-            # 2. Add to ChromaDB Buffer (Only if Pattern Changed/Created)
-            change_type = event.context.get("change_type")
-            if change_type in ["cluster_created", "cluster_template_changed"]:
-                print(f"✨ New Pattern Discovered: {event.context['template_str']}")
+            # 2. Prepare recoverable pattern indexing work
+            # Mining may already have advanced before a failed DB commit.
+            # Persist recoverable pattern work even when replay reports no change.
+            if event.context.get("template_id") and event.context.get("template_str"):
+                print("🧠 Queued stable pattern indexing work")
                 pattern_event = LogEvent(
                     timestamp=event.timestamp,
                     severity=event.severity,
@@ -406,6 +407,7 @@ class LogIngestor:
                         "is_pattern": True
                     }
                 )
+                record['_pattern'] = pattern_event.model_dump(mode='json')
                 self.log_event_buffer.append(pattern_event)
             
             print(f"✅ Processed: {event.timestamp} [{event.service_name}] {event.body}")
@@ -417,6 +419,24 @@ class LogIngestor:
             raise
 
 if __name__ == "__main__":
-    ingestor = LogIngestor()
-    ingestor.run()
-
+    import argparse
+    import fcntl
+    parser = argparse.ArgumentParser(description='Immutable file ingestion and explicit log replay')
+    parser.add_argument('--replay', help='Exact protocol-2 log file to resume; stop the normal worker first')
+    parser.add_argument('--processed-file', help='Unused destination for the acknowledged file')
+    args = parser.parse_args()
+    if bool(args.replay) != bool(args.processed_file):
+        parser.error('--replay and --processed-file must be supplied together')
+    if args.replay and Path(args.replay).suffix != '.log':
+        parser.error('Explicit replay currently supports protocol-2 .log files only')
+    Path('data/state').mkdir(parents=True, exist_ok=True)
+    with open('data/state/ingestion.lock', 'a') as lease:
+        try:
+            fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit('Another ingestion worker/replay owns this local data directory')
+        ingestor = LogIngestor(watch=not bool(args.replay))
+        if args.replay:
+            ingestor.process_file(args.replay, args.processed_file, replay=True)
+        else:
+            ingestor.run()

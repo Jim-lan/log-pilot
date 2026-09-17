@@ -1,4 +1,4 @@
-"""Local file acknowledgement ledger, separate from future transactional replay."""
+"""File acknowledgement ledger with explicit protocol-gated log replay."""
 import sqlite3
 from pathlib import Path
 
@@ -11,16 +11,23 @@ class IngestionLedger:
             conn.execute('''CREATE TABLE IF NOT EXISTS files (
                 fingerprint TEXT PRIMARY KEY, name TEXT NOT NULL, state TEXT NOT NULL,
                 failure_code TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+            if 'protocol' not in {row[1] for row in conn.execute('PRAGMA table_info(files)')}:
+                conn.execute('ALTER TABLE files ADD COLUMN protocol INTEGER NOT NULL DEFAULT 1')
 
-    def claim(self, fingerprint, name):
+    def claim(self, fingerprint, name, *, protocol=1, replay=False):
         with sqlite3.connect(self.path) as conn:
             conn.execute('BEGIN IMMEDIATE')
-            row = conn.execute('SELECT state FROM files WHERE fingerprint=?', (fingerprint,)).fetchone()
+            row = conn.execute('SELECT state,protocol FROM files WHERE fingerprint=?', (fingerprint,)).fetchone()
             if row:
                 if row[0] == 'indexed':
                     return False
+                if replay and protocol == 2 and row[1] == 2:
+                    conn.execute("UPDATE files SET state='processing',failure_code=NULL WHERE fingerprint=?", (fingerprint,))
+                    return True
                 raise RuntimeError('Prior incomplete ingestion requires recovery review')
-            conn.execute("INSERT INTO files(fingerprint,name,state) VALUES (?,?,'pending')", (fingerprint, name))
+            if replay:
+                raise RuntimeError('Replay requires an existing claim for these exact file bytes')
+            conn.execute("INSERT INTO files(fingerprint,name,state,protocol) VALUES (?,?,'pending',?)", (fingerprint, name, protocol))
             conn.execute("UPDATE files SET state='processing' WHERE fingerprint=?", (fingerprint,))
             return True
 

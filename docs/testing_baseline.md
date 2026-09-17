@@ -197,3 +197,18 @@ The preceding citation revision `6840e40817a6842e0aad4342d6c6900a71de921d` also 
 92 tests pass locally and in the isolated Docker profile. Real ingestion worker methods, DuckDB and SQLite are exercised with synthetic files and stubbed watcher/vector/model dependencies. Eight additional contracts cover successful acknowledgement, database/vector failure, quarantine, duplicate completed-file handling, move collision recovery, interrupted claims, empty runbook discovery and changed inputs. This verifies truthful acknowledgement and safe refusal of incomplete replay; it does not establish idempotent partial replay or real Chroma recovery.
 
 The preceding SQL-policy revision `6cbdfa3d6978f10dd21780f2631c0817f856aeed` passed [GitHub Actions run 34969976591](https://github.com/Jim-lan/log-pilot/actions/runs/34969976591). Application data and running services remain untouched.
+
+
+## Transactional log replay checkpoint (2026-09-17)
+
+98 tests pass locally and in the isolated Docker profile. New contracts cover atomic rollback of rows/event keys, duplicate-safe vector-outage replay, failure between vector upsert and acknowledgement, refusal of legacy/unknown replay inputs, and distinct physical-line identities for duplicate text. Committed records are skipped before parsing/mining during replay.
+
+A separate process-crash test exits abruptly immediately before and after DuckDB COMMIT, then reopens the database and replays twice. Both cases retain exactly one row, one event key and one pending indexing task. It is now part of backend CI:
+
+```sh
+docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/ingestion_crash_smoke.py
+```
+
+Real Chroma/LlamaIndex smoke test `tests/integration/vector_upsert_smoke.py` passed in the existing ingestion image `sha256:d30487b2f8897731e553e64590e4c9fd1a045791360c8a4fafb2b8cbc487af29`, with synthetic embeddings, a temporary collection and networking disabled. Repeated writes preserved one vector ID; updating its text remained retrievable through the existing LlamaIndex Chroma adapter. This additional smoke is not yet in clean-install CI and does not validate embedding/model quality. No application database was mounted.
+
+The preceding acknowledgement revision `231f25894ac014756fbafc03349169613fd978a3` passed [GitHub Actions run 34983957973](https://github.com/Jim-lan/log-pilot/actions/runs/34983957973). New replay changes require their own remote result. Markdown recovery, legacy vector reconciliation, queue bounds and multi-writer operation remain unproven.

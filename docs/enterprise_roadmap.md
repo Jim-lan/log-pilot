@@ -3,7 +3,7 @@
 Date: 2026-09-10  
 Status: Step 1.3 initial safeguards implemented and frontend Nginx smoke checked. Phase 2.1 evaluation integrity repairs implemented; Phase 2.2 has a versioned SQL corpus and request provenance; retrieval/citation dimensions are implemented; live measurements, multi-turn evaluation and remaining release gates are open.
 
-Next implementation step: **4.2 transactional ingestion replay, alongside remaining R1/R2 and isolation gates**, alongside remaining 0.2 coverage and deployment checks. See [evaluation contract](evaluation_contract.md).
+Next implementation step: **remaining ingestion recovery gates (Markdown, queue bounds and provenance), alongside R1/R2 and isolation gates**, alongside remaining 0.2 coverage and deployment checks. See [evaluation contract](evaluation_contract.md).
 
 Evidence and run instructions: [isolated test baseline](testing_baseline.md).
 
@@ -213,7 +213,7 @@ Track implementation with: step ID, status, revision/change link, test evidence,
 | 4 | 1.2 — bounded correction and fallback | Implemented for `/query`: independent retries, request deadlines, provider budgets/timeouts and typed failures; operational load testing remains |
 | 5 | 1.3 — safe rendering and explicit egress | Initial safeguards implemented: sanitized Markdown, literal evidence/alerts, opt-in search, supported-pattern outbound redaction and loopback binding; comprehensive egress governance remains |
 | 6 | 2.1–2.2 — evaluation integrity and quality baseline | 2.1 core contract implemented; 2.2 SQL corpus and per-case model/template provenance implemented; retrieval/citation dimensions implemented; multi-turn evaluation and live measurements pending |
-| 7 | Phases 3–6 — permissions, data reliability, storage and operations | 3.2 initial SQL allowlist/engine limits implemented; 4.1 acknowledgement ledger/quarantine implemented; transactional replay, identity, process/tenant isolation and operational gates remain |
+| 7 | Phases 3–6 — permissions, data reliability, storage and operations | 3.2 initial SQL allowlist/engine limits implemented; 4.1 acknowledgement ledger/quarantine implemented; 4.2 explicit log replay/outbox/stable upserts verified; Markdown replay, identity, process/tenant isolation and operational gates remain |
 | 8 | Phase 7 — measured enhancements | Deferred until pilot gates pass |
 
 Do not attach calendar promises before the baseline is measured. Advance by acceptance evidence, with one step reviewed and verified before the next dependent step.
