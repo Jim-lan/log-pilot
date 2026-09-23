@@ -230,4 +230,8 @@ docker compose -f compose.test.yml run --rm --no-deps vector
 
 A child process writes, repeats and updates a stable node, verifies LlamaIndex retrieval, then exits without Python cleanup. Two fresh child processes reopen the persistent collection and replay the operations, asserting that one updated node survives. This tests acknowledged vector persistence and replay across process exit; it does not simulate disk/power loss or prove the complete ingestion transaction protocol. GitHub Actions has a separate vector job so a fresh runner exercises dependency installation independently of a cached application image.
 
-Local R01 verification passed with the complete dependency lock: clean build and `pip check`, all three real-vector child-process passes and final restart/replay assertion. The 98 backend contracts also pass locally and in Docker after the separately committed deterministic-clock repair (`943634c`). Remote vector-job verification is pending the R01 push.
+Local R01 verification passed with the complete dependency lock: clean build and `pip check`, all three real-vector child-process passes and final restart/replay assertion. The 98 backend contracts also pass locally and in Docker after the separately committed deterministic-clock repair (`943634c`). Remote verification passed: [run 35873358011](https://github.com/Jim-lan/log-pilot/actions/runs/35873358011) for `5b366f7`, all backend/browser/vector jobs successful. This also verifies the timing repair.
+
+## R02 source identity contracts (2026-09-23)
+
+101 backend tests pass locally and in the isolated Docker profile. Three new contracts distinguish retry from different source/version identities, reject ambiguous source keys, and validate exact Unicode/CRLF byte spans. The identity helper has no storage/provider side effects and is not yet integrated into the worker; see [ADR 0001](decisions/0001-document-identity.md).

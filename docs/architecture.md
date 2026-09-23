@@ -86,3 +86,5 @@ Sentry polls every 10 seconds. It compares the last minute's ERROR/CRITICAL/FATA
 ## Boundaries still to establish
 
 No authenticated users, tenant authorization, isolated conversations or production deployment qualification exist yet. Embedded storage ownership, document provenance, retention, operational telemetry and backup/restore gates remain open. Kafka, cloud object ingestion, a migration coordinator and automatic fine-tuning are not active components. Older exploratory designs are [historical references](design_history/README.md).
+
+Document recovery is being extended through [ADR 0001](decisions/0001-document-identity.md). Its identity/span helper is currently independent of the runtime ingestion path; integration must retain a journaled plan and card payloads before performing stable-ID vector writes.

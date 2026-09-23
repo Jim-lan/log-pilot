@@ -8,7 +8,7 @@ Already implemented: bounded query orchestration, initial rendering/redaction co
 
 Recorded baseline evidence is 98 backend tests, six browser contracts and transaction-crash checks. The separate real-vector smoke used an existing image. These are historical results for the baseline, not new tests run on 2026-09-23. Full-stack readiness and live-model quality remain unproven.
 
-**Recommended next implementation: R01, a reproducible clean-install vector recovery test in CI.** It establishes the real storage/adapter boundary before changing document indexing. Then complete R02–R04 together as separately reviewable design, persistence and fault-testing changes. Keep existing log replay behavior protected throughout.
+**R01 is verified. R02 design/contracts are verified locally. Next: R03 durable Markdown replay, followed by R04 fault qualification.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
 
 The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
@@ -30,8 +30,8 @@ Groups are execution priorities, not instructions to postpone all security desig
 
 | Done | ID | Task | Completion evidence / dependency |
 |---|---|---|---|
-| [ ] | R01 | Add clean-install Chroma/LlamaIndex upsert/recovery smoke to CI | Implemented and verified locally with a complete dependency lock and abrupt process restart/replay; remote CI verification pending |
-| [ ] | R02 | Design document identity, source namespace, immutable version, source spans and update/delete semantics | ADR and fixtures connect synthesized cards to original evidence; distinguish identical content from different sources |
+| [x] | R01 | Add clean-install Chroma/LlamaIndex upsert/recovery smoke to CI | Verified locally and in [CI run 35873358011](https://github.com/Jim-lan/log-pilot/actions/runs/35873358011), commit `5b366f7`; locked clean image and abrupt process restart/replay |
+| [x] | R02 | Design document identity, source namespace, immutable version, source spans and update/delete semantics | [ADR 0001](decisions/0001-document-identity.md) and identity/span contracts verified locally and in Docker (101 tests); runtime integration is R03 |
 | [ ] | R03 | Implement durable Markdown indexing journal and idempotent replay | Depends R02; interrupted discovery/synthesis/indexing resumes or fails visibly; completed replay creates no logical duplicates |
 | [ ] | R04 | Extend process-crash and outage tests across all document/log acknowledgement boundaries | Depends R01/R03; crash before/after persistence, upsert, acknowledgement and file move; verify no missing accepted records |
 | [ ] | R05 | Bound the watcher/work queue and implement backpressure | Saturation remains bounded; unaccepted inputs remain recoverable; no silent drops |
@@ -118,7 +118,7 @@ Do not assume PostgreSQL, a vector server or distributed infrastructure has alre
 
 ## Tracking and completion rules
 
-There are **49 open tasks**: R 9, Q 7, I 6, S 6, D 8, O 6 and E 7. E tasks are optional enhancements, not fixes required to finish the core hardening work. A row may require several small PRs; these counts are not estimates of days or release readiness.
+There are **49 tracked tasks**: R 9, Q 7, I 6, S 6, D 8, O 6 and E 7. E tasks are optional enhancements, not fixes required to finish the core hardening work. A row may require several small PRs; these counts are not estimates of days or release readiness.
 
 For each task, record owner, status, design/ADR, change/PR reference, exact test revision/results, migration impact and rollback evidence. Mark complete only when its stated evidence exists. Use planned → in progress → verified; record blocked dependencies explicitly. Update the tracker and focused design together.
 

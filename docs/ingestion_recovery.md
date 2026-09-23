@@ -41,3 +41,7 @@ Chroma uses [upsert](https://docs.trychroma.com/docs/collections/update-data) wi
 The learning point is that acknowledging a file is a durability promise. A caught exception plus a success message breaks that promise; retries become safe only when persistence is idempotent across every affected store.
 
 The R01 vector smoke now has its own clean-build test image and CI job; it checks abrupt exit after acknowledged vector writes and reopening/replay in fresh processes. See [test commands and evidence](testing_baseline.md). This adds coverage without changing application ingestion or migrating existing vectors.
+
+## R02 document identity design
+
+[ADR 0001](decisions/0001-document-identity.md) defines namespace/source keys, immutable byte-hashed versions, stable card IDs and verified UTF-8 byte spans. The pure identity helper and synthetic contracts are implemented; the existing worker is not yet integrated. R03 must journal the plan and generated cards before vector writes, preserve source evidence, and gate legacy/changed-version inputs. Log protocol-2 identities remain unchanged.
