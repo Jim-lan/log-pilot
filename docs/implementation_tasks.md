@@ -10,7 +10,7 @@ Recorded baseline evidence is 98 backend tests, six browser contracts and transa
 
 **Recommended next implementation: R01, a reproducible clean-install vector recovery test in CI.** It establishes the real storage/adapter boundary before changing document indexing. Then complete R02–R04 together as separately reviewable design, persistence and fault-testing changes. Keep existing log replay behavior protected throughout.
 
-The previous design-document changes are still uncommitted. Review/check in that documentation checkpoint before starting implementation, when authorized. No application changes, migration, deployment or GitHub update are part of this task-list update.
+The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
 ## Ordered work groups
 
@@ -30,7 +30,7 @@ Groups are execution priorities, not instructions to postpone all security desig
 
 | Done | ID | Task | Completion evidence / dependency |
 |---|---|---|---|
-| [ ] | R01 | Add clean-install Chroma/LlamaIndex upsert/recovery smoke to CI | Fresh pinned test environment; repeated write/update retains one retrievable ID; synthetic embeddings and disposable data |
+| [ ] | R01 | Add clean-install Chroma/LlamaIndex upsert/recovery smoke to CI | Implemented and verified locally with a complete dependency lock and abrupt process restart/replay; remote CI verification pending |
 | [ ] | R02 | Design document identity, source namespace, immutable version, source spans and update/delete semantics | ADR and fixtures connect synthesized cards to original evidence; distinguish identical content from different sources |
 | [ ] | R03 | Implement durable Markdown indexing journal and idempotent replay | Depends R02; interrupted discovery/synthesis/indexing resumes or fails visibly; completed replay creates no logical duplicates |
 | [ ] | R04 | Extend process-crash and outage tests across all document/log acknowledgement boundaries | Depends R01/R03; crash before/after persistence, upsert, acknowledgement and file move; verify no missing accepted records |

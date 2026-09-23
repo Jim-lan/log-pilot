@@ -218,3 +218,16 @@ docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseli
 Real Chroma/LlamaIndex smoke test `tests/integration/vector_upsert_smoke.py` passed in the existing ingestion image `sha256:d30487b2f8897731e553e64590e4c9fd1a045791360c8a4fafb2b8cbc487af29`, with synthetic embeddings, a temporary collection and networking disabled. Repeated writes preserved one vector ID; updating its text remained retrievable through the existing LlamaIndex Chroma adapter. This additional smoke is not yet in clean-install CI and does not validate embedding/model quality. No application database was mounted.
 
 The preceding acknowledgement revision `231f25894ac014756fbafc03349169613fd978a3` passed [GitHub Actions run 34983957973](https://github.com/Jim-lan/log-pilot/actions/runs/34983957973). The replay revision subsequently passed run 35223139147, linked in the current checkpoint above. Markdown recovery, legacy vector reconciliation, queue bounds and multi-writer operation remain unproven.
+
+## R01: clean vector integration environment (2026-09-23)
+
+The standalone test Compose profile now includes `vector`, built separately from application images. It pins the Python base digest and vector adapter dependency versions. It mounts only shared code and integration tests read-only, runs as a non-root user without network/capabilities, and keeps its synthetic collection in temporary storage. No model downloads or application data are needed at test runtime.
+
+```sh
+docker compose -f compose.test.yml build vector
+docker compose -f compose.test.yml run --rm --no-deps vector
+```
+
+A child process writes, repeats and updates a stable node, verifies LlamaIndex retrieval, then exits without Python cleanup. Two fresh child processes reopen the persistent collection and replay the operations, asserting that one updated node survives. This tests acknowledged vector persistence and replay across process exit; it does not simulate disk/power loss or prove the complete ingestion transaction protocol. GitHub Actions has a separate vector job so a fresh runner exercises dependency installation independently of a cached application image.
+
+Local R01 verification passed with the complete dependency lock: clean build and `pip check`, all three real-vector child-process passes and final restart/replay assertion. The 98 backend contracts also pass locally and in Docker after the separately committed deterministic-clock repair (`943634c`). Remote vector-job verification is pending the R01 push.

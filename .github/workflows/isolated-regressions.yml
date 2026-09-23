@@ -46,3 +46,15 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run browser contracts with synthetic intercepted responses
         run: LOGPILOT_CHROME_PATH="$(node -p 'require("playwright").chromium.executablePath()')" npm test
+
+  vector:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build clean vector adapter test environment
+        run: docker compose -f compose.test.yml build vector
+      - name: Verify persistent vector upserts and process restart without network or app data
+        run: docker compose -f compose.test.yml run --rm --no-deps vector
