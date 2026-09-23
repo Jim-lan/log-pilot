@@ -235,3 +235,7 @@ Local R01 verification passed with the complete dependency lock: clean build and
 ## R02 source identity contracts (2026-09-23)
 
 101 backend tests pass locally and in the isolated Docker profile. Three new contracts distinguish retry from different source/version identities, reject ambiguous source keys, and validate exact Unicode/CRLF byte spans. The identity helper has no storage/provider side effects and is not yet integrated into the worker; see [ADR 0001](decisions/0001-document-identity.md).
+
+## R03 journaled Markdown recovery (2026-09-23)
+
+109 backend contracts pass locally and in isolated Docker. Eight new worker/journal contracts cover saved-plan/card reuse, vector outage/lost acknowledgement, synthesis failure, unknown/changed/legacy inputs, version replacement rejection, separate source identity, original-byte preservation, invalid cards, changed inputs and final-move retry. The real Chroma/LlamaIndex smoke also passes for document nodes and provenance across abrupt exit/reopen. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364); R03 remote verification follows its push. Full abrupt boundary injection remains R04.

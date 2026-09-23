@@ -9,7 +9,9 @@ from chromadb.config import Settings
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.vector_stores import VectorStoreQuery
 from shared.log_schema import LogEvent
-from shared.vector_upsert import upsert_pattern
+from shared.vector_upsert import upsert_pattern, upsert_document_card
+from shared.document_identity import document_manifest
+from shared.document_journal import DocumentJournal
 
 class FixtureEmbedding:
     def get_text_embedding(self, text):
@@ -34,7 +36,30 @@ def exercise(directory, reopen=False):
     assert result.nodes[0].node_id == first_id
     assert result.nodes[0].get_content() == 'updated pattern'
     assert result.nodes[0].metadata['cluster_id'] == '1'
-    print('PASS: real Chroma upsert retry/update and LlamaIndex retrieval preserve one stable node')
+    journal = DocumentJournal(directory + '/documents.sqlite3')
+    raw = '# Café\r\nRestart the service.\r\n'.encode('utf-8')
+    manifest = document_manifest('fixture', 'runbook.md', raw)
+    version = manifest['version_id']
+    if journal.claim(manifest, raw, 'synthetic-original.md', replay=reopen):
+        journal.save_topics(version, ['Recovery'])
+        journal.save_card(version, 0, 'Restart the service.')
+    payload, done = journal.card(version, 0)
+    cards = client.get_or_create_collection('fixture-documents')
+    if reopen:
+        assert cards.count() == 1
+    for _ in range(2):
+        assert upsert_document_card(cards, FixtureEmbedding(), payload) == payload['node_id']
+    if not done:
+        journal.complete_card(version, 0)
+        journal.finish(version)
+    assert cards.count() == 1
+    result = ChromaVectorStore(chroma_collection=cards).query(
+        VectorStoreQuery(query_embedding=[0.1, 0.2, 0.3], similarity_top_k=1))
+    assert result.nodes[0].node_id == payload['node_id']
+    assert result.nodes[0].get_content() == payload['text']
+    assert result.nodes[0].metadata['version_id'] == version
+    assert result.nodes[0].metadata['source_sha256'] == manifest['content_sha256']
+    print('PASS: real pattern and journaled document upserts preserve stable nodes and provenance')
 
 if __name__ == '__main__':
     if len(sys.argv) == 3:

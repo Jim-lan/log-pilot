@@ -16,7 +16,7 @@ Main Compose publishes frontend 3000, API 8000, MCP 8001, evaluation 8002 and Ol
 
 The API has wildcard CORS with credentials enabled. There is no user authentication, workspace/tenant authorization or isolated history. MCP, evaluation, history and alerts require the same future access-control design as queries. Do not expose these ports to a shared network as a substitute for that work.
 
-Redaction is not comprehensive DLP. Raw landing/quarantine/processed files, stored context, debug output, embeddings and backups need an explicit sensitive-data lifecycle. Cloud inference and opt-in search can send content externally; local inference does not make every dependency local (the frontend also uses external Google Fonts). Citation IDs prove membership in retrieved artifacts, not their authenticity or factual support.
+Redaction is not comprehensive DLP. Raw landing/quarantine/processed files, original Markdown snapshots in the SQLite journal, stored context, debug output, embeddings and backups need an explicit sensitive-data lifecycle. Cloud inference and opt-in search can send content externally; local inference does not make every dependency local (the frontend also uses external Google Fonts). Citation IDs prove membership in retrieved artifacts, not their authenticity or factual support.
 
 The SQL worker is not OS-process isolated. Response byte bounds, connection acquisition bounds, tenant row filtering and complete quotas remain open. Several services share embedded storage; availability under concurrent ownership, lock contention and storage failure is not established. Some legacy endpoints/MCP return exception strings; sanitized query errors are not a system-wide guarantee.
 

@@ -16,3 +16,14 @@ def upsert_pattern(collection, embedding_model, event):
     collection.upsert(ids=[node_id], embeddings=[embedding], documents=[event.body],
                       metadatas=[node_to_metadata_dict(node, remove_text=True, flat_metadata=True)])
     return node_id
+
+
+def upsert_document_card(collection, embedding_model, payload):
+    """Index one already-journaled card without introducing random chunk IDs."""
+    from llama_index.core.schema import TextNode, MetadataMode
+    from llama_index.core.vector_stores.utils import node_to_metadata_dict
+    node = TextNode(id_=payload['node_id'], text=payload['text'], metadata=payload['metadata'])
+    embedding = embedding_model.get_text_embedding(node.get_content(metadata_mode=MetadataMode.EMBED))
+    collection.upsert(ids=[node.node_id], embeddings=[embedding], documents=[payload['text']],
+                      metadatas=[node_to_metadata_dict(node, remove_text=True, flat_metadata=True)])
+    return node.node_id

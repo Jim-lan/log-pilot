@@ -75,7 +75,7 @@ sequenceDiagram
 
 The transaction/outbox flow applies to protocol-2 logs. Event identity combines file fingerprint and physical line number. Replay skips committed records before parsing/mining, then drains pending indexing work. A crash after vector upsert can repeat the same stable-ID upsert. A failed final file move can retry without duplicating completed work. Identical completed content deduplicates even if renamed.
 
-SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; interrupted Markdown and legacy protocol-1 inputs require review. Recover older pending files before processing newer pattern versions. Queue bounds, distributed leases and legacy vector reconciliation are future work. See [full recovery protocol](ingestion_recovery.md).
+SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Recover older pending files before processing newer pattern versions. Queue bounds, distributed leases and legacy vector reconciliation are future work. See [full recovery protocol](ingestion_recovery.md).
 
 ## Evaluation and alerts
 
@@ -87,4 +87,4 @@ Sentry polls every 10 seconds. It compares the last minute's ERROR/CRITICAL/FATA
 
 No authenticated users, tenant authorization, isolated conversations or production deployment qualification exist yet. Embedded storage ownership, document provenance, retention, operational telemetry and backup/restore gates remain open. Kafka, cloud object ingestion, a migration coordinator and automatic fine-tuning are not active components. Older exploratory designs are [historical references](design_history/README.md).
 
-Document recovery is being extended through [ADR 0001](decisions/0001-document-identity.md). Its identity/span helper is currently independent of the runtime ingestion path; integration must retain a journaled plan and card payloads before performing stable-ID vector writes.
+Document recovery is being extended through [ADR 0001](decisions/0001-document-identity.md). New Markdown ingestion now uses its identity/span helper and journals original bytes, the topic plan and immutable card payloads in SQLite before stable-ID vector writes. First-version ingestion and same-version replay are supported; replacement versions and legacy records require review. Whole-document source spans do not prove claim-level support.

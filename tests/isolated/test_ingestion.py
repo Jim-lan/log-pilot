@@ -175,3 +175,145 @@ class IngestionContracts(unittest.TestCase):
         ids = self.worker.db.query('SELECT event_id FROM ingestion_events_v1 ORDER BY event_id')
         self.assertTrue(ids[0][0].endswith(':000000000001'))
         self.assertTrue(ids[1][0].endswith(':000000000003'))
+
+    def markdown_fixture(self):
+        from shared.document_identity import document_manifest
+        from shared.document_journal import DocumentJournal
+        self.source = self.source.with_suffix('.md')
+        self.source.write_bytes(b'# Recovery\nRestart the fixture service.\n')
+        self.destination = self.destination.with_suffix('.md')
+        self.worker.llm_client = Mock()
+        self.worker.llm_client.generate.side_effect = ['["Recovery", "Verification"]', '# Recovery\nRestart it.', '# Verification\nCheck health.']
+        manifest = document_manifest('local-files', self.source.name, self.source.read_bytes())
+        return DocumentJournal(self.worker.ledger.path), manifest
+
+    def test_document_vector_outage_replays_saved_cards_without_regeneration(self):
+        journal, manifest = self.markdown_fixture()
+        vectors = {}
+        def outage(payload):
+            vectors[payload['node_id']] = payload
+            raise RuntimeError('vector response lost')
+        self.worker.kb.upsert_document_card.side_effect = outage
+        with self.assertRaises(RuntimeError):
+            self.worker.process_file(str(self.source), str(self.destination))
+        self.assertEqual(self.worker.llm_client.generate.call_count, 2)
+        self.assertIsNotNone(journal.card(manifest['version_id'], 0))
+        self.assertFalse(self.destination.exists())
+        quarantined = next(Path('data/source/quarantine').glob('*.md'))
+        self.worker.kb.upsert_document_card.side_effect = lambda payload: vectors.update({payload['node_id']: payload})
+        self.worker.process_file(str(quarantined), str(self.destination), replay=True, document_id=manifest['version_id'])
+        self.assertEqual(self.worker.llm_client.generate.call_count, 3)
+        self.assertEqual(len(vectors), 2)
+        self.assertEqual(journal.card(manifest['version_id'], 0)[0]['text'], '# Recovery\nRestart it.')
+        self.assertEqual(journal.card(manifest['version_id'], 1)[1], True)
+        self.assertEqual(self.destination.read_bytes(), b'# Recovery\nRestart the fixture service.\n')
+
+    def test_document_lost_ack_replays_identical_payload_and_completed_retry_only_moves(self):
+        from shared.document_journal import DocumentJournal
+        journal, manifest = self.markdown_fixture()
+        raw = self.source.read_bytes()
+        with patch.object(DocumentJournal, 'complete_card', side_effect=RuntimeError('ack lost')):
+            with self.assertRaises(RuntimeError):
+                self.worker.process_file(str(self.source), str(self.destination))
+        first = self.worker.kb.upsert_document_card.call_args.args[0]
+        self.source.write_bytes(raw)
+        self.worker.process_file(str(self.source), str(self.destination), replay=True)
+        self.assertEqual(first, self.worker.kb.upsert_document_card.call_args_list[1].args[0])
+        self.worker.llm_client.generate.reset_mock()
+        self.worker.kb.upsert_document_card.reset_mock()
+        self.source.write_bytes(raw)
+        self.worker.process_file(str(self.source), str(self.destination.with_name('copy.md')))
+        self.worker.llm_client.generate.assert_not_called()
+        self.worker.kb.upsert_document_card.assert_not_called()
+
+    def test_document_synthesis_failure_keeps_plan_and_first_card(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.llm_client.generate.side_effect = ['["Recovery", "Verification"]', 'saved card', RuntimeError('provider down')]
+        with self.assertRaises(RuntimeError):
+            self.worker.process_file(str(self.source), str(self.destination))
+        self.worker.llm_client.generate.reset_mock(side_effect=True)
+        self.worker.llm_client.generate.return_value = 'second saved card'
+        quarantined = next(Path('data/source/quarantine').glob('*.md'))
+        self.worker.process_file(str(quarantined), str(self.destination), replay=True, document_id=manifest['version_id'])
+        self.worker.llm_client.generate.assert_called_once()
+        self.assertEqual(journal.card(manifest['version_id'], 0)[0]['text'], 'saved card')
+
+    def test_document_replay_rejects_changed_unknown_and_legacy_inputs(self):
+        journal, manifest = self.markdown_fixture()
+        with self.assertRaisesRegex(RuntimeError, 'known document'):
+            self.worker.process_file(str(self.source), str(self.destination), replay=True)
+        journal.claim(manifest, self.source.read_bytes(), self.source)
+        with self.assertRaisesRegex(RuntimeError, 'exact bytes'):
+            journal.manifest_for_replay(manifest['version_id'], b'changed')
+        legacy = hashlib.sha256(b'.md\0' + self.source.read_bytes()).hexdigest()
+        self.worker.ledger.claim(legacy, self.source.name, protocol=1)
+        with self.assertRaisesRegex(RuntimeError, 'Legacy Markdown'):
+            self.worker.process_file(str(self.source), str(self.destination), replay=True)
+        self.worker.llm_client.generate.assert_not_called()
+
+    def test_document_version_replacement_is_rejected_but_different_source_is_distinct(self):
+        journal, manifest = self.markdown_fixture()
+        raw = self.source.read_bytes()
+        self.worker.process_file(str(self.source), str(self.destination))
+        self.source.write_bytes(raw + b'changed')
+        with self.assertRaisesRegex(RuntimeError, 'version replacement'):
+            self.worker.process_file(str(self.source), str(self.destination.with_name('new.md')))
+        other = self.source.with_name('different.md')
+        other.write_bytes(raw)
+        self.worker.llm_client.generate.side_effect = ['["Recovery"]', 'other source card']
+        self.worker.process_file(str(other), str(self.destination.with_name('different.md')))
+        ids = [call.args[0]['node_id'] for call in self.worker.kb.upsert_document_card.call_args_list]
+        self.assertEqual(len(set(ids)), 3)
+
+    def test_document_journal_preserves_original_and_refuses_early_ack_or_overwrites(self):
+        import json
+        journal, manifest = self.markdown_fixture()
+        version = manifest['version_id']
+        raw = self.source.read_bytes()
+        journal.claim(manifest, raw, self.source)
+        journal.save_topics(version, ['Recovery'])
+        with self.assertRaises(RuntimeError):
+            journal.finish(version)
+        journal.save_card(version, 0, 'card')
+        with self.assertRaises(ValueError):
+            journal.save_card(version, 0, 'different')
+        with self.assertRaises(ValueError):
+            journal.save_topics(version, ['Different'])
+        payload, done = journal.card(version, 0)
+        span = json.loads(payload['metadata']['source_spans'])[0]
+        self.assertEqual(span['end_byte'], len(raw))
+        self.assertEqual(payload['metadata']['span_scope'], 'whole_document_input')
+        with journal.connection() as conn:
+            self.assertEqual(conn.execute('SELECT original FROM document_versions_v1').fetchone()[0], raw)
+        with self.assertRaises(RuntimeError):
+            journal.finish(version)
+        journal.complete_card(version, 0)
+        journal.finish(version)
+
+    def test_document_invalid_card_and_changed_source_are_not_acknowledged(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.llm_client.generate.side_effect = ['["Recovery"]', '']
+        with self.assertRaises(ValueError):
+            self.worker.process_file(str(self.source), str(self.destination))
+        self.worker.kb.upsert_document_card.assert_not_called()
+        self.assertFalse(self.destination.exists())
+        quarantined = next(Path('data/source/quarantine').glob('*.md'))
+        self.worker.llm_client.generate.side_effect = ['valid card']
+        self.worker.kb.upsert_document_card.side_effect = lambda payload: quarantined.write_bytes(b'changed')
+        with self.assertRaisesRegex(RuntimeError, 'changed'):
+            self.worker.process_file(str(quarantined), str(self.destination), replay=True, document_id=manifest['version_id'])
+        self.assertFalse(self.destination.exists())
+        with journal.connection() as conn:
+            self.assertEqual(conn.execute('SELECT state FROM document_versions_v1').fetchone()[0], 'failed')
+
+    def test_document_final_move_failure_retries_without_provider_or_vector_writes(self):
+        journal, manifest = self.markdown_fixture()
+        self.destination.write_text('preserve existing file')
+        with self.assertRaises(FileExistsError):
+            self.worker.process_file(str(self.source), str(self.destination))
+        self.worker.llm_client.generate.reset_mock()
+        self.worker.kb.upsert_document_card.reset_mock()
+        self.worker.process_file(str(self.source), str(self.destination.with_name('recovered.md')))
+        self.worker.llm_client.generate.assert_not_called()
+        self.worker.kb.upsert_document_card.assert_not_called()
+        self.assertEqual(self.destination.read_text(), 'preserve existing file')

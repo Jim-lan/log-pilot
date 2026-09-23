@@ -79,7 +79,7 @@ docker compose stop
 
 Publish completed immutable UTF-8 `.log` or `.md` files (maximum 8 MiB) by writing a temporary filename, closing it, then atomically renaming it into `data/source/landing_zone`. Do not append to files after publication. Check processed/quarantine state; a visible file alone is not proof of durable indexing.
 
-Protocol-2 log replay is an explicit maintenance operation with the normal worker stopped, using the same dependencies/configuration/data paths. Follow [ingestion recovery](docs/ingestion_recovery.md) for the exact replay command, failure windows and ordering constraints. Do not blindly replay Markdown, legacy interrupted inputs or newly changed bytes.
+Protocol-2 log replay and journaled Markdown replay are explicit maintenance operations with the normal worker stopped, using the same dependencies/configuration/data paths. Follow [ingestion recovery](docs/ingestion_recovery.md) for the exact replay command, failure windows and ordering constraints. Markdown replay uses its recorded document version ID when the file was renamed/quarantined. Do not blindly replay legacy interrupted inputs or newly changed bytes.
 
 ## Evaluate and change configuration
 

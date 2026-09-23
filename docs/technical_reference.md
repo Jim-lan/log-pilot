@@ -32,7 +32,7 @@ Paths below are relative to repository root, mounted under `/app` in application
 | `data/target/history.duckdb` | Shared default conversation and alerts; no tenant boundary |
 | `data/target/metrics.duckdb` | `evaluation_runs_v1` and `evaluation_cases_v1`; legacy metrics excluded from new summaries |
 | `data/target/vector_store` | Embedded Chroma collection `log_pilot_kb` |
-| `data/state/ingestion.sqlite3` | File fingerprint, state, failure code, time and protocol version |
+| `data/state/ingestion.sqlite3` | File fingerprint/state/protocol plus document versions, raw originals, topic plans and card indexing journal |
 | `data/state/ingestion.lock` | Local cooperating worker/replay exclusion |
 | `data/state/drain3_state.bin` | Pattern miner state |
 | `data/source/landing_zone`, `processed`, `quarantine` | Immutable input, completed input and failed/reviewable input |

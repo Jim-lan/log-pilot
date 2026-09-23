@@ -100,6 +100,10 @@ class KnowledgeStore:
         for event in logs:
             upsert_pattern(self.collection, Settings.embed_model, event)
 
+    def upsert_document_card(self, payload):
+        from shared.vector_upsert import upsert_document_card
+        return upsert_document_card(self.collection, Settings.embed_model, payload)
+
     def delete_older_than(self, timestamp: float):
         """
         Deletes logs older than the given timestamp.
