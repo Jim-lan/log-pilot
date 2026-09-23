@@ -8,7 +8,7 @@ Already implemented: bounded query orchestration, initial rendering/redaction co
 
 Recorded baseline evidence is 98 backend tests, six browser contracts and transaction-crash checks. The separate real-vector smoke used an existing image. These are historical results for the baseline, not new tests run on 2026-09-23. Full-stack readiness and live-model quality remain unproven.
 
-**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 integration is locally verified; next is R04 fault qualification.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
+**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 fault qualification passes locally; next is R05 bounded intake.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
 
 The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
@@ -32,8 +32,8 @@ Groups are execution priorities, not instructions to postpone all security desig
 |---|---|---|---|
 | [x] | R01 | Add clean-install Chroma/LlamaIndex upsert/recovery smoke to CI | Verified locally and in [CI run 35873358011](https://github.com/Jim-lan/log-pilot/actions/runs/35873358011), commit `5b366f7`; locked clean image and abrupt process restart/replay |
 | [x] | R02 | Design document identity, source namespace, immutable version, source spans and update/delete semantics | [ADR 0001](decisions/0001-document-identity.md) and identity/span contracts verified locally and in Docker (101 tests); runtime integration is R03 |
-| [x] | R03 | Implement durable Markdown indexing journal and idempotent replay | Implemented for new documents; 109 backend checks and real vector restart smoke pass locally; raw snapshots and plans/cards persist before upsert; remote CI pending |
-| [ ] | R04 | Extend process-crash and outage tests across all document/log acknowledgement boundaries | Depends R01/R03; crash before/after persistence, upsert, acknowledgement and file move; verify no missing accepted records |
+| [x] | R03 | Implement durable Markdown indexing journal and idempotent replay | Implemented for new documents; 109 backend checks and real vector restart smoke pass locally; raw snapshots and plans/cards persist before upsert; [CI run 35874484501](https://github.com/Jim-lan/log-pilot/actions/runs/35874484501) passed for `3387b65` |
+| [x] | R04 | Extend process-crash and outage tests across all document/log acknowledgement boundaries | Verified locally: 16 document boundaries with real vectors, 14 log boundaries with durable vector double, each followed by two replays; remote CI pending |
 | [ ] | R05 | Bound the watcher/work queue and implement backpressure | Saturation remains bounded; unaccepted inputs remain recoverable; no silent drops |
 | [ ] | R06 | Add bounded retry/backoff and quarantine inspection/replay workflow | Explicit terminal/retryable states, redacted diagnostics; permanent failures do not loop forever or block unrelated work |
 | [ ] | R07 | Enforce pending-work ordering and exercise shutdown/restart recovery | Old pending pattern versions cannot overwrite newer ones; ownership lock and graceful shutdown tested |

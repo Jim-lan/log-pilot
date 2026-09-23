@@ -29,6 +29,9 @@ jobs:
       - name: Verify abrupt ingestion crash boundaries
         run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/ingestion_crash_smoke.py
 
+      - name: Verify abrupt log worker boundaries
+        run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/log_worker_crash_smoke.py
+
   browser:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -58,3 +61,5 @@ jobs:
         run: docker compose -f compose.test.yml build vector
       - name: Verify persistent vector upserts and process restart without network or app data
         run: docker compose -f compose.test.yml run --rm --no-deps vector
+      - name: Verify abrupt document ingestion boundaries
+        run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/document_crash_smoke.py

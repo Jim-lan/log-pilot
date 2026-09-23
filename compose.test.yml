@@ -42,4 +42,5 @@ services:
     volumes:
       - ./shared:/workspace/shared:ro
       - ./tests/integration:/workspace/tests/integration:ro
+      - ./services/ingestion-worker/src:/workspace/services/ingestion-worker/src:ro
     entrypoint: ["python", "-B", "/workspace/tests/integration/vector_upsert_smoke.py"]

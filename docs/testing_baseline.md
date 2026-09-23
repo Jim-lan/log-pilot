@@ -239,3 +239,20 @@ Local R01 verification passed with the complete dependency lock: clean build and
 ## R03 journaled Markdown recovery (2026-09-23)
 
 109 backend contracts pass locally and in isolated Docker. Eight new worker/journal contracts cover saved-plan/card reuse, vector outage/lost acknowledgement, synthesis failure, unknown/changed/legacy inputs, version replacement rejection, separate source identity, original-byte preservation, invalid cards, changed inputs and final-move retry. The real Chroma/LlamaIndex smoke also passes for document nodes and provenance across abrupt exit/reopen. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364); R03 remote verification follows its push. Full abrupt boundary injection remains R04.
+
+## R04 abrupt worker boundary qualification (2026-09-23)
+
+Two additional isolated integration programs exercise the actual worker's file-processing methods in fresh child processes, terminate with `os._exit` before/after operations, then replay twice:
+
+```sh
+docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/log_worker_crash_smoke.py
+docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/document_crash_smoke.py
+```
+
+The log test covers 14 boundaries: claim, transactional batch persistence, vector upsert, index-task acknowledgement, persisted/indexed ledger states and final move. It uses real DuckDB/SQLite and a durable SQLite vector test double; real Chroma pattern upsert compatibility is covered by the separate vector smoke. It asserts one row/event/vector and zero pending index jobs after recovery. The existing before/after DuckDB COMMIT process test remains in CI.
+
+The document test covers 16 boundaries: claim, topic plan, card persistence, real Chroma upsert, card acknowledgement, indexed state, move and location update. It uses real SQLite/Chroma/LlamaIndex with a scripted provider and substitutes only unrelated startup dependencies. It verifies exact original bytes, two stable cards, complete acknowledgements, source hashes and provider call counts: only uncommitted generation may repeat. A second replay makes no provider calls. Before a claim commits there is no receipt, so restart uses ordinary ingestion; explicit replay still refuses unknown work.
+
+These tests run without network or application data in CI. They validate process-crash recovery, not power-loss durability, disk failure, distributed workers or a live model. The vector test profile additionally mounts ingestion source read-only so the actual document worker path can be imported without starting services.
+
+Local result: all 16 document and 14 log worker crash cases passed, including the exact provider-call assertions. R03 passed [CI run 35874484501](https://github.com/Jim-lan/log-pilot/actions/runs/35874484501). R04 remote verification follows its push.
