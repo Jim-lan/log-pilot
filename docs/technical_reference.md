@@ -1,212 +1,74 @@
-# 🛠️ LogPilot V2: Technical Reference
+# LogPilot technical reference
 
-This document serves as the comprehensive technical guide for developers working on LogPilot. It consolidates the system architecture, component details, script catalog, and functional checklists.
+Baseline: `4895c91` (2026-09-17). See [system design](system_design.md) for capability status and future changes, and [run guide](../HOW_TO_RUN.md) for commands.
 
----
+## Code map
 
-## 1. Microservices Architecture
+| Path | Responsibility |
+|---|---|
+| `services/pilot_orchestrator/src/api.py` | Query admission, API contracts, history, alerts and metrics |
+| `services/pilot_orchestrator/src/` | LangGraph routing, state and bounded repair |
+| `services/ingestion-worker/src/main.py` | File worker and explicit replay CLI |
+| `services/sentry/src/main.py` | Error-rate alert polling |
+| `services/mcp_server/src/main.py` | MCP tools and resources |
+| `services/evaluation_service/src/main.py` | Evaluation HTTP service |
+| `services/frontend/src/` | Static browser application |
+| `shared/db/duckdb_client.py` | Analytics persistence and restricted execution |
+| `shared/sql_policy.py` | SQL parser/schema/function policy |
+| `shared/vector_upsert.py` | Stable-ID Chroma upsert through compatible LlamaIndex nodes |
+| `shared/evaluation.py`, `shared/evaluation_runner.py` | Versioned evaluation storage/scoring and batch execution |
+| `shared/privacy.py`, `shared/utils/pii_masker.py` | Provider-boundary redaction and ingestion masking |
+| `config/llm_config.yaml`, `prompts/` | Model routing configuration and prompt templates |
 
-### 1.1 Process Flow
-The system operates in two distinct phases:
-1.  **Bootstrap (History)**: Batch processing of historical logs.
-2.  **Steady State (Live)**: Real-time stream processing.
+Main runtime uses Python/FastAPI, LangGraph, LlamaIndex, DuckDB, SQLite, embedded Chroma, Drain3, Ollama and vanilla JavaScript/Nginx. Ragas is an optional supplementary evaluation judge. Auxiliary/legacy directories are not evidence of active Compose services.
 
-```mermaid
-graph TD
-    subgraph "Phase 1: Bootstrap Job (History)"
-        Archive[S3 / Cold Storage] --> |Read Files| BulkJob[Step 1: Bulk Loader Job]
-        
-        BulkJob --> |Extract Templates| Miner[Drain3 Miner]
-        Miner --> |Generate Parquet| Staging[Staged Files]
-        
-        Staging --> |Fast Import| SQL_DB[(DuckDB/Postgres)]
-        Miner --> |Vectorize Templates| Vector_DB[(ChromaDB)]
-        
-        BulkJob -.-> |"Done! Last Timestamp: T1"| Coordinator[Migration Coordinator]
-    end
+## Persistent data contracts
 
-    subgraph "Phase 2: Steady State Service (Live)"
-        Coordinator --> |"Start Consumers from T1"| IngestSvc[Step 2: Ingestion Service]
-        
-        LiveSource[Live Apps] --> |Stream| Kafka[(Kafka Buffer)]
-        Kafka --> |Read from T1| IngestSvc
-        
-        IngestSvc --> |Insert| SQL_DB
-        IngestSvc --> |Vectorize| Vector_DB
-    end
-```
+Paths below are relative to repository root, mounted under `/app` in application containers.
 
-### 1.2 Component Breakdown
+| Path | Contents and contract |
+|---|---|
+| `data/target/logs.duckdb` | `logs`, optional loaded `system_catalog`, `ingestion_events_v1`, `ingestion_outbox_v1` |
+| `data/target/history.duckdb` | Shared default conversation and alerts; no tenant boundary |
+| `data/target/metrics.duckdb` | `evaluation_runs_v1` and `evaluation_cases_v1`; legacy metrics excluded from new summaries |
+| `data/target/vector_store` | Embedded Chroma collection `log_pilot_kb` |
+| `data/state/ingestion.sqlite3` | File fingerprint, state, failure code, time and protocol version |
+| `data/state/ingestion.lock` | Local cooperating worker/replay exclusion |
+| `data/state/drain3_state.bin` | Pattern miner state |
+| `data/source/landing_zone`, `processed`, `quarantine` | Immutable input, completed input and failed/reviewable input |
 
-#### A. Data Plane (Ingestion)
-| Service | Type | Responsibility |
-|---------|------|----------------|
-| **Bulk Loader** | Batch Job | Reads historical files (JSON/Syslog/Standard), mines templates, loads DuckDB. |
-| **Ingestion Worker** | Service | Consumes Kafka stream, masks PII, inserts into DB/Vector Store. |
-| **Schema Registry** | Service | Stores regex rules discovered by the Agent. |
- 
- ### 1.4 LLM Configuration
- The system uses a centralized configuration file `config/llm_config.yaml` to manage LLM providers.
- 
- #### Structure
- ```yaml
- llm:
-   default_provider: "openai" # or "local"
-   providers:
-     openai:
-       api_key_env: "OPENAI_API_KEY"
-       models:
-         fast: "gpt-4o-mini"
-         reasoning: "gpt-4o"
-     local:
-       api_base: "http://localhost:11434/v1"
-       default_model: "gemma4:e4b"
- ```
- *   **`default_provider`**: Controls which provider is active system-wide.
- *   **`providers`**: Defines connection details for each provider.
- *   **`models`**: Maps abstract roles (`fast`, `reasoning`) to concrete model names.
- 
- ### 1.5 Model Selection Guide
- Choose the right model based on your available hardware and performance needs.
- 
- | Category | Model | Params | Min RAM | Best For | Notes |
- | :--- | :--- | :--- | :--- | :--- | :--- |
- | **Consumer** | `gemma4:e4b` | 4B | 4GB | **General Purpose** | Recommended default for Apple Silicon. |
- | **Consumer** | `mistral` | 7B | 8GB | Reasoning | Strong logic, efficient. |
- | **Consumer** | `phi3` | 3.8B | 4GB | Speed / Simple Tasks | Ultra-lightweight. |
- | **Server** | `gemma4:26b` | 26B | 14GB | **Complex Reasoning** | Requires heavy hardware. |
- | **Server** | `mixtral:8x7b` | 47B | 26GB | Context / RAG | Mixture-of-Experts. Good efficiency. |
- | **Server** | `qwen2.5:72b` | 72B | 48GB | Coding / Math | Top-tier for technical tasks. |
- 
- ### 1.6 Deep Dive: Log Parsing Logic (`LogParser`)
-The `LogParser` acts as a **Normalization Layer**, converting raw strings into a structured dictionary.
+`logs` exposes timestamp, severity, service_name, trace_id, body, environment, app_id, department, host, region and context (JSON text). `system_catalog` exposes system_name, department, owner_email and criticality when loaded from `data/system_catalog.csv`. The restricted SQL surface excludes ingestion bookkeeping tables.
 
-**1. Strategy Pattern (The "Waterfall")**
-It attempts to parse a log line using the following order:
-1.  **JSON**: Checks if line starts with `{`. If valid JSON, extracts fields.
-2.  **Regex Patterns**: Tries known formats (Standard, Syslog, Nginx).
-3.  **Fallback**: If no match, treats the entire line as `body` with `severity=UNKNOWN`.
+Log event IDs are content fingerprint plus physical-line ordinal. Outbox records carry event ID, file ID, payload and completion state. These schemas are additive; do not delete legacy data or rewrite IDs as a routine upgrade. See [recovery details](ingestion_recovery.md).
 
-**2. Metadata Extraction**
-Regardless of the input format, the parser normalizes data into these **Golden Fields**:
-*   **`timestamp`**: Converted to **UTC** datetime.
-*   **`severity`**: `INFO`, `ERROR`, `WARN` (Inferred if missing).
-*   **`service_name`**: Extracted from log content (e.g., `auth-service`, `nginx`).
-*   **`body`**: The core message used for **Template Mining**.
-*   **`context`**: A dictionary containing all other dynamic fields (e.g., `ip`, `status`, `latency`).
+## Request settings
 
-#### B. Control Plane (Intelligence)
-| Service | Tech | Responsibility |
-|---------|------|----------------|
-| **Pilot Orchestrator** | LangGraph + Jinja2 | Central brain. Routes queries, generates SQL via LLM, retrieves knowledge. Uses a **State Machine** for robust flow control. |
-| **Knowledge Base** | LlamaIndex | Manages ChromaDB for semantic search (RAG) with Metadata Filtering. |
-| **Schema Discovery** | LLM | Learns new log formats and generates regex rules. |
-| **Evaluator** | Scikit-Learn | Benchmarks agent performance against golden datasets. |
-| **API Gateway** | FastAPI | REST interface (`POST /query`) for external clients. |
+The main Compose file forwards these orchestrator settings:
 
----
+| Environment variable | Default |
+|---|---:|
+| `LOGPILOT_REQUEST_TIMEOUT_SECONDS` | 120 |
+| `LOGPILOT_LLM_TIMEOUT_SECONDS` | 30 |
+| `LOGPILOT_SEARCH_TIMEOUT_SECONDS` | 10 |
+| `LOGPILOT_MAX_LLM_CALLS` | 16 |
+| `LOGPILOT_MAX_SEARCH_CALLS` | 1 |
+| `LOGPILOT_QUERY_WORKERS` | 4 |
+| `LOGPILOT_ALLOW_WEB_SEARCH` | false |
 
-## 2. Script Catalog & Directory Structure
+Do not raise limits without measuring capacity. Restricted SQL defaults to 1,000 returned rows, five seconds (capped by remaining request budget), 256 MB engine memory and one engine thread; excess rows produce failure rather than silent truncation. SQL text is limited to 20,000 characters. See [policy](sql_execution_policy.md) for exact scope and internal override caps.
 
-### 📂 Services
-| Path | Key Script | Function |
-|------|------------|----------|
-| `services/pilot-orchestrator/` | `src/graph.py` | Defines the LangGraph state machine. |
-| `services/knowledge_base/` | `src/store.py` | Manages ChromaDB vector index. |
-| `services/api_gateway/` | `src/main.py` | FastAPI entry point. |
-| `services/schema_discovery/` | `src/generator.py` | LLM-based regex generation. |
-| `services/evaluator/` | `src/runner.py` | Runs evaluation benchmarks. |
-| `services/ingestion-worker/` | `src/main.py` | Real-time ingestion loop. |
-| `services/bulk-loader/` | `src/log_loader.py` | Bulk loader with multi-format support (`--landing_zone`). |
+The evaluation service reads `PILOT_API_URL`, `METRICS_DB_PATH` and `EVALUATION_DATASET_PATH`; the default dataset is `/app/tests/evaluation/golden_dataset.json`. Optional judge configuration uses `LLM_BASE_URL` and `EVALUATION_JUDGE_MODEL`. API metrics also read `METRICS_DB_PATH`. A process-supported variable is not automatically forwarded by Compose; configure the relevant service explicitly. There is no documented `LOGS_DB_PATH` environment contract.
 
-### 📦 Shared Libraries (`shared/`)
-| File | Class | Purpose |
-|------|-------|---------|
-| `llm/client.py` | `LLMClient` | Unified interface for OpenAI/Gemini/Local LLMs. |
-| `db/duckdb_client.py` | `DuckDBConnector` | Handles DuckDB connections and batch loading. |
-| `utils/pii_masker.py` | `PIIMasker` | Redacts Email, IP, SSN using regex. |
-| `utils/log_parser.py` | `LogParser` | Robust parser for Standard, JSON, Syslog, Nginx. |
-| `log_schema.py` | `LogEvent` | Pydantic model for the Golden Standard Schema. |
+## Model configuration
 
-### 📂 Data Directory Structure
-| Path | Purpose |
-|------|---------|
-| `data/source/` | **Input**: Raw logs (`landing_zone`), reference data (`system_catalog.csv`). |
-| `data/target/` | **Output**: Structured DB (`logs.duckdb`), Vector Store (`vector_store`). |
-| `data/state/` | **Internal**: Persistence files (`drain3_state.bin`). |
-| `prompts/` | **Templates**: Jinja2 templates for LLM prompts (`sql_generator.j2`, `synthesize_answer.j2`). |
+The registry loads `config/llm_config.yaml`. The selected local provider currently names `http://llm-service:11434/v1` and model identifier `gemma4:e4b`; this records configuration, not verified model availability or a hardware recommendation. Main Compose also embeds that pull identifier in its startup command, so model changes must keep both consistent.
 
-### 📜 Utility Scripts (`scripts/`)
-| Script | Usage | Description |
-|--------|-------|-------------|
-| `reset_demo.py` | `python3 scripts/reset_demo.py --count N` | **Reset**: Cleans `data/target` & `data/state`, generates fresh logs in `data/source`. |
-| `generate_logs.py` | `python3 scripts/generate_logs.py --format json` | **Generate**: Creates mock logs in various formats. |
-| `compare_models.py` | `python3 scripts/compare_models.py` | **Benchmark**: Compares Local vs. Cloud LLM performance. |
-| `e2e_test.sh` | `./scripts/e2e_test.sh` | **Test**: Runs full end-to-end validation. |
+For registry routing, `models.fast` or `models.reasoning` overrides `default_model`, then the environment fallback applies. Local endpoint fallback uses `LLM_BASE_URL`; API credentials come from the environment variable named by `api_key_env`. The chat client uses an OpenAI-compatible API; listing a provider in YAML does not establish native protocol compatibility. Registry temperature is 0.1; legacy fallback is 0.2. Verify the selected path before comparing runs.
 
----
+Request provenance captures template source hashes and requested/returned model identity and provider fingerprint where available. It excludes credentials and rendered prompt content. Provider-reported identity is not independently attested. Simulated shadow output is disabled; `SHADOW_MODEL` is not proof of an active independent comparison.
 
-## 3. Functional Review Checklist
+## Development verification
 
-### 📥 Ingestion Layer
-- [x] **PII Masking**: Redacts Emails, IPs, Credit Cards.
-- [x] **Template Mining**: Extracts constant templates via Drain3.
-- [x] **Log Parsing**: Structured extraction of Timestamp, Severity, Service.
-    - [x] **Multi-Format Support**: Standard, JSON, Syslog, Nginx.
+Use [isolated tests](testing_baseline.md), not application data. The test image pins its dependencies; application images/dependencies are not all pinned. Backend tests exercise real graph/database paths with scripted provider responses. Browser tests use synthetic intercepted responses. These establish selected contracts, not model quality or full deployment readiness.
 
-### 🧠 Knowledge Base
-- [x] **Ingestion**: Converts Logs -> LlamaIndex Documents.
-- [x] **Retrieval**: Semantic search via ChromaDB.
-- [x] **Optimization**: Embeds raw log context for "Why" questions.
-
-### 🚁 Pilot Orchestrator
-- [x] **Intent Classification**: Routes to SQL (Data) or RAG (Knowledge).
-- [x] **SQL Generation**: LLM-based Text-to-SQL for DuckDB using Jinja2 templates.
-- [x] **RAG Synthesis**: Combines retrieved context into natural answers.
-
-### 📊 Evaluator
-- [x] **Metrics**: Measures Regex Match, SQL Accuracy, RAG Relevance.
-- [x] **Datasets**: Golden datasets for benchmarking.
-
-### 📚 System Catalog & Advanced
-- [x] **Unified Data Layer**: Maps Services -> Departments (Many-to-Many).
-- [x] **Local LLM**: Supports `provider="local"` (M4 Chip).
- 
- ## 4. Deployment (Docker)
- The system is fully containerized for easy deployment.
- 
- ### 4.1 Quick Start
- ```bash
- # Start all services (LLM, Ingestion, Pilot)
- docker-compose up --build
- ```
- *   **`llm-service`**: Starts Ollama and pulls `gemma4:e4b` automatically.
- *   **`ingestion-worker`**: Begins processing logs from `data/source`.
- *   **`pilot-orchestrator`**: Starts the agent API.
- 
- ### 4.2 Configuration
- To use the internal Docker LLM, update `config/llm_config.yaml`:
- ```yaml
- llm:
-   default_provider: "local"
-   providers:
-     local:
-       api_base: "http://llm-service:11434/v1" # Docker service name
- ```
- 
- ## 5. Testing Strategy
- The system uses a comprehensive testing pyramid.
- 
- ### 5.1 Unit & Integration Tests
- *   **Shared Libs**: `shared/tests/` (LLM Client, DB Connector).
- *   **Knowledge Base**: `services/knowledge_base/tests/` (Store, Filtering).
- *   **Pilot Orchestrator**: `services/pilot_orchestrator/tests/` (Nodes, Prompts, API).
- 
- ### 5.2 End-to-End (E2E) Tests
- *   **Location**: `tests/e2e/test_full_flow.py`
- *   **Scope**: Simulates a full user query via the API (`POST /query`).
- *   **Method**: Mocks the LLM and DB to ensure deterministic verification of the orchestration logic.
- 
- ### 5.3 Benchmarking
- *   **Script**: `scripts/compare_models.py`
- *   **Purpose**: Compares accuracy of different LLM models (Cloud vs. Local) on standard tasks like schema discovery.
+Current recorded evidence at the baseline is 98 backend tests and six browser contracts, plus transaction crash checks and a separate existing-image vector smoke. Keep historical counts attached to their revisions. The [evaluation contract](evaluation_contract.md) defines how to report new measurements without mixing incompatible scores.

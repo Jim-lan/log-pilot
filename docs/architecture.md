@@ -1,490 +1,88 @@
-# Detailed Architecture 🏗️
+# LogPilot architecture
 
-For the proposed evolution from the current prototype to a dependable internal assistant, see the [enterprise AI learning and reliability roadmap](enterprise_roadmap.md). It defines the implementation order, target trust/storage boundaries, regression gates, and migration safeguards. The target design is not yet implemented; existing diagrams and future options below do not establish enterprise readiness.
+Current implementation baseline: `4895c91`, 2026-09-17. This is a local prototype with selected reliability controls. Proposed enterprise boundaries and feature designs are in [system design](system_design.md); release gates are in the [roadmap](enterprise_roadmap.md).
 
-The browser treats API/model content as untrusted: plain evidence is escaped, Markdown is sanitized by locally pinned DOMPurify, and alert actions use event listeners. The shared LLM and search adapters apply supported-pattern redaction at dispatch. Published Compose ports bind to loopback. See [rendering and privacy design](rendering_and_privacy.md) for trust boundaries and limitations.
+## Runtime components
 
-Evaluation now shares a [versioned storage/read contract](evaluation_contract.md) across the runner and dashboard. Runs persist pending cases before execution, retain failures, and use stateless query requests. Model judges are supplementary; simulated shadow output is disabled. Retrieved KB artifacts retain identifiers and content hashes; citation IDs are checked before model judging. The browser exposes these artifacts and evaluation scores retrieval/citations separately. SQL execution preserves structured rows alongside display text, and request-local metadata records model configuration and template hashes for evaluation.
+The main Compose file defines eight services. Chroma is embedded persistent storage, not a separate vector-server container.
 
-Model/user SQL now passes through a [restricted analytics executor](sql_execution_policy.md) before both EXPLAIN and execution. This adds operation/column/function allowlists and engine limits; tenant scope and OS process isolation remain future gates.
-
-## 1. Component Diagram
-
-Development verification uses a separate [isolated baseline](testing_baseline.md): selected source is mounted read-only into a network-disabled test container, and real DuckDB tests use disposable storage. This test service is separate from the application components below and does not start them.
-
-The first application repair preserves dictionary-based conversation history during API response serialization and routes MCP database operations through the connector's transient query interface. HTTP contract tests use a scripted graph and real temporary DuckDB; MCP handler tests stub registration and forwarding. Full graph execution and MCP transport coverage remain separate work. See [API contracts](api_reference.md).
-
-The LogPilot system consists of 6 main containerized services:
-
-```mermaid
-graph TD
-    User[User] <--> Frontend["Frontend (Nginx)"]
-    Frontend <--> |REST API| Pilot["Pilot Orchestrator (FastAPI)"]
-    
-    subgraph "Data Layer"
-        Pilot <--> |Read-Only| LogsDB[(logs.duckdb)]
-        Pilot <--> |Read-Write| HistoryDB[(history.duckdb)]
-        Pilot <--> |Read-Only| VectorDB[(ChromaDB)]
-    end
-    
-    subgraph "Ingestion Layer"
-        Generator[Log Generator] --> |Generates| LandingZone[Landing Zone Folder]
-        LandingZone --> |Watch| Worker[Ingestion Worker]
-        Worker --> |Write| LogsDB
-        Worker --> |Embed| VectorDB
-    end
-    
-    subgraph "Intelligence Layer"
-        Pilot <--> |HTTP| LLM["LLM Service (Ollama)"]
-    end
-
-    subgraph "Evaluation Layer"
-        Eval[Evaluation Service] <--> |Batch| Pilot
-        Eval <--> |Judge| LLM
-        Eval --> |Store| MetricsDB[(metrics.duckdb)]
-    end
-
-    subgraph "Monitoring Layer"
-        Sentry[Sentry Service] --> |Monitor| LogsDB
-        Sentry --> |Alert| HistoryDB
-    end
-```
-
-## 2. Sequence Diagrams
-
-### A. User Query Flow (Agentic RAG)
+| Service | Responsibility | Host binding |
+|---|---|---|
+| `frontend` | Nginx serves vanilla JavaScript/HTML/CSS | `127.0.0.1:3000` |
+| `pilot-orchestrator` | FastAPI, LangGraph SQL/RAG routing, conversation and evidence | `127.0.0.1:8000` |
+| `llm-service` | Ollama; startup attempts to pull the configured model identifier | `127.0.0.1:11434` |
+| `ingestion-worker` | File watching, parsing/redaction, Drain3 patterns, durable log/index work | None |
+| `sentry-service` | Error-rate polling and persisted alerts | None |
+| `mcp-server` | FastMCP SSE tools/resources | `127.0.0.1:8001` |
+| `evaluation-service` | Batch contracts, optional Ragas judge, durable evaluation records | `127.0.0.1:8002` |
+| `log-generator` | Demo log generation/catalog copy, then stays running | None |
 
 ```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as Pilot API
-    participant G as Graph (LangGraph)
-    participant LLM as Ollama
-    participant DB as DuckDB
-
-    U->>API: "How do I fix error 503?"
-    API->>G: invoke(query)
-    
-    G->>LLM: Rewrite Query (Context)
-    LLM-->>G: "How do I fix error 503 in auth-service?"
-    
-    G->>LLM: Classify Intent
-    LLM-->>G: "rag"
-    
-    loop Context Verification
-        G->>DB: Retrieve Logs/Docs
-        G->>LLM: Verify Context Relevance
-        alt Context Invalid
-            G->>G: Rewrite Query / Retry
-        else Context Valid
-            G->>G: Proceed
-        end
-    end
-    
-    loop Answer Validation
-        G->>LLM: Synthesize Answer
-        G->>LLM: Validate Answer vs Intent
-        alt Answer Invalid (Lazy/Hallucination)
-            G->>G: Retry with Feedback
-        else Answer Valid
-            G->>G: Proceed
-        end
-    end
-    
-    G-->>API: Final Answer
-    API-->>U: Display Answer
+flowchart TD
+    UI[Frontend] --> API[Orchestrator API]
+    MCP[MCP server] --> API
+    MCP --> SQL[Restricted analytics executor]
+    API --> G[Bounded LangGraph]
+    G --> SQL
+    SQL --> LOG[(logs.duckdb)]
+    G --> KB[Embedded retrieval adapter]
+    KB --> V[(Chroma persistent index)]
+    G --> LLM[Configured chat endpoint]
+    API --> H[(history.duckdb)]
+    GEN[Demo generator] --> F[Immutable landing files]
+    F --> W[Ingestion worker]
+    W --> LED[(SQLite acknowledgement ledger)]
+    W --> LOG
+    W --> V
+    S[Sentry] --> LOG
+    S --> H
+    E[Evaluation service] --> API
+    E --> MET[(metrics.duckdb)]
+    API --> MET
 ```
 
-### B. Ingestion Flow
+Arrows describe logical access, not isolation guarantees. Several processes mount the same data directory. Database constructors still have schema/catalog side effects; storage ownership and concurrent access remain unresolved.
+
+## Query flow and failure boundaries
+
+1. `/query` admits work to a four-slot executor per API process and creates a request budget. `persist_history:false` skips normal history reads and writes; otherwise the shared default conversation supplies recent context.
+2. The graph rewrites/routes the question to SQL, retrieval, web fallback or clarification. SQL repair, context retry and answer retry have independent bounds (3, 2 and 2).
+3. Model SQL passes the shared parser/schema/function policy and restricted DuckDB execution. An execution failure cannot be synthesized into a successful answer. Retrieval produces artifact IDs and content hashes; unknown citation IDs fail validation before a model judge.
+4. Provider boundaries apply best-effort redaction, timeouts and logical call limits. Search is disabled unless explicitly enabled. Rejected local retrieval is not retained as evidence for a web answer.
+5. The graph returns answer, evidence, structured rows, outcome and request provenance, or abstains/fails. The API checks the budget before history persistence. The returned trace is a message transcript, not a complete event audit.
+
+Default HTTP budget is 120 seconds, provider limits 30 seconds for LLM and 10 seconds for search, with 16 LLM calls and one search. A timed-out synchronous operation retains its worker slot until it exits; timeout does not kill a thread or guarantee remote cancellation. History writes already started are not rolled back atomically. See [budgets](request_budgets.md), [SQL policy](sql_execution_policy.md) and [API contracts](api_reference.md).
+
+## Ingestion and recovery flow
+
+Inputs are completed immutable UTF-8 `.log`/`.md` files, at most 8 MiB. Producers should write a temporary file and atomically rename it into the landing directory. Append/tail ingestion is not supported by this adapter.
 
 ```mermaid
 sequenceDiagram
-    participant File as Log File
-    participant Watcher as File Watcher
-    participant PII as PII Masker
-    participant DB as DuckDB
-    participant Chroma as ChromaDB
-
-    File->>Watcher: New Line Appended
-    Watcher->>PII: Send Raw Line
-    PII->>PII: Mask Emails/IPs
-    PII->>DB: Insert into 'logs' table
-    
-    opt If Runbook/Doc
-        PII->>Chroma: Embed & Store
-    end
+    participant F as Source file
+    participant W as Worker
+    participant L as SQLite ledger
+    participant D as DuckDB
+    participant V as Chroma
+    F->>W: Completed immutable bytes
+    W->>L: Claim content fingerprint
+    W->>D: Commit log rows, event IDs and index outbox together
+    W->>V: Upsert pending patterns using stable IDs
+    W->>D: Mark successful indexing tasks done
+    W->>L: Mark indexed after all work and input verification
+    W->>F: Move to processed directory
 ```
 
-### C. Proactive Alert Flow (Sentry)
+The transaction/outbox flow applies to protocol-2 logs. Event identity combines file fingerprint and physical line number. Replay skips committed records before parsing/mining, then drains pending indexing work. A crash after vector upsert can repeat the same stable-ID upsert. A failed final file move can retry without duplicating completed work. Identical completed content deduplicates even if renamed.
 
-```mermaid
-sequenceDiagram
-    participant S as Sentry Service
-    participant Logs as LogsDB
-    participant Hist as HistoryDB
-    participant UI as Frontend
+SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; interrupted Markdown and legacy protocol-1 inputs require review. Recover older pending files before processing newer pattern versions. Queue bounds, distributed leases and legacy vector reconciliation are future work. See [full recovery protocol](ingestion_recovery.md).
 
-    loop Every Minute
-        S->>Logs: Check Error Rate (Current vs Baseline)
-        
-        alt Spike Detected
-            S->>S: Analyze Severity
-            S->>Hist: Insert Alert Record
-            
-            loop UI Polling
-                UI->>Hist: Check for new Alerts
-                Hist-->>UI: Return Alert Data
-                UI->>UI: Show Notification Badge
-            end
-        end
-    end
-```
+## Evaluation and alerts
 
+Evaluation persists the complete case roster before execution and records passed, failed, error or unscored cases. Exact rows/answers and separate retrieval/citation dimensions replace keyword-only success claims. Failed requests remain in the denominator; latency is measured by the client. Metrics use a real UTC 24-hour window and distinguish unavailable from zero. Dataset hashes and per-request template/model provenance support comparison. Interrupted background runs can remain pending; durable runner resumption is not implemented.
 
-## 3. Detailed Request Workflow (The Brain) 🧠
+Sentry polls every 10 seconds. It compares the last minute's ERROR/CRITICAL/FATAL count with the preceding five-minute average, using ratio 1.15 and more than five current errors; zero baseline becomes 0.5. A global 60-second cooldown limits alerts. This is a global heuristic, not a learned per-service anomaly model.
 
-September 2026 correction: SQL, context and answer repairs use independent counters. SQL permits three repairs; context and answer paths each permit two retries after the first attempt. Retrieval feedback reaches query rewriting even without chat history, and answer feedback reaches the next synthesis prompt. Judge output accepts only JSON boolean `true`; malformed answer judgments fail closed. Exhausted answer attempts end at `finish_unverified` with an explicit abstention. A graph recursion limit of 64 is a final execution-step safeguard, not a wall-clock deadline.
+## Boundaries still to establish
 
-After context exhaustion, web search is available only with `LOGPILOT_ALLOW_WEB_SEARCH=true`; otherwise the graph abstains without a search call. Enabled fallback changes the evidence source to web and failed/unavailable search ends without synthesis. The control is opt-in permission, not a complete outbound-data redaction policy. See the budget update below for deadlines and bounded workers; complete execution-event tracing remains planned.
-
-September 11 budget update: the `/query` boundary now uses a monotonic request budget and bounded synchronous workers behind an asynchronous HTTP deadline. Provider adapters cap timeouts by the remaining deadline, disable SDK generation retries, and raise typed failures. Guards before/after graph nodes stop swallowed failures from turning into successful answers. See [request budgets](request_budgets.md) for defaults, saturation behavior and the limits of cooperative cancellation. Complete execution-event tracing remains planned.
-
-LogPilot uses **LangGraph** to orchestrate a team of specialized agents. The flow is not linear; it loops and self-corrects based on validation feedback.
-
-### A. The Cognitive Flow
-```mermaid
-stateDiagram-v2
-    state "User Sends Query" as Start
-    state "Send Final Answer" as End
-
-    Start --> Rewrite
-    Rewrite --> Classify
-    
-    state Classify_Decision <<choice>>
-    Classify --> Classify_Decision
-    
-    Classify_Decision --> SQL_Gen: Intent = SQL
-    Classify_Decision --> RAG_Retrieve: Intent = RAG
-    Classify_Decision --> Synthesize: Intent = Ambiguous
-
-    state "SQL Loop" as SQL_Loop {
-        SQL_Gen --> Validate_SQL
-        Validate_SQL --> Execute_SQL: Valid
-        Validate_SQL --> Fix_SQL: Invalid
-        Fix_SQL --> Validate_SQL
-    }
-    
-    state "RAG Loop" as RAG_Loop {
-        RAG_Retrieve --> Verify_Context
-        Verify_Context --> Synthesize: Valid
-        Verify_Context --> Rewrite: Invalid (Feedback)
-    }
-
-    Execute_SQL --> Synthesize
-    
-    Synthesize --> Validate_Answer
-    Validate_Answer --> End: Valid
-    Validate_Answer --> Synthesize: Invalid (Retry)
-```
-
-### B. Agent Inventory
-The system is composed of **10 distinct Nodes (Agents)**, each with a specific responsibility. "LLM" indicates a creative AI step, while "Code" indicates deterministic logic.
-
-| Agent Name | Role | Type | Responsibility |
-| :--- | :--- | :--- | :--- |
-| **1. Query Rewriter** | `rewrite_query` | 🤖 LLM | Transforms raw user input (e.g., "what about errors?") into a standalone, context-aware query using chat history. |
-| **2. Intent Router** | `classify_intent` | 🤖 LLM (CoT) | **Chain of Thought**: Analyzes if query needs *Data* (SQL) or *Knowledge* (RAG) before deciding. Prevents "404=Duration" hallucinations. |
-| **3. SQL Expert** | `generate_sql` | 🤖 LLM | Translates natural language into dialect-specific SQL (DuckDB). Enforces syntax rules. |
-| **4. SQL Critic** | `validate_sql` | ⚙️ Code | Deterministic validation. Checks for syntax (`EXPLAIN`) and **Schema Columns** (injects valid columns on error). |
-| **5. Repair Agent** | `fix_sql` | 🤖 LLM | Receives error logs from the Critic and attempts to fix the SQL syntax. |
-| **6. Tool Executor** | `execute_sql` | ⚙️ Code | Runs the valid SQL against `logs.duckdb` and captures the result (or runtime error). |
-| **7. RAG Retriever** | `retrieve_context` | ⚙️ Code | Queries `ChromaDB` for patterns, then fetches matching full logs from DuckDB. |
-| **8. Context Critic** | `verify_context` | 🤖 LLM | **Strict Verification**: Enforces that if a specific Error Code is queried, the retrieved context *must* contain it. |
-| **9. Answer Synthesize** | `synthesize_answer` | 🤖 LLM | Combines the User Query + Data/Context into a helpful, human-readable response. |
-| **10. QA Critic** | `validate_answer` | 🤖 LLM | Final check. Ensures the answer is not "lazy" (e.g., "I don't know") if data was actually found. |
-
-## 4. Service Details
-
-### Pilot Orchestrator
--   **Framework**: FastAPI + LangGraph.
--   **Role**: Manages the cognitive architecture (Rewrite -> Plan -> Execute -> Verify).
--   **State Management**: Uses `langgraph` StateGraph to pass context between nodes.
--   **Agentic Features**: Self-correction loops for Context and Answer verification.
-
-### Log Generator (Demo Data Source)
--   **Role**: Creates a realistic 12-month historical dataset on startup.
--   **Function**: Simulates 4 services (Payment, Auth, DB, Frontend) with random anomalies.
--   **Output**: Writes logs to `data/source/landing_zone`, then exits.
-
-### Ingestion Worker
--   **Role**: Real-time log processing.
--   **Mechanism**:
-    -   **File Watcher**: Uses `watchdog` to listen for new files in `landing_zone`.
-    -   **Processing**: Completed immutable files are tracked by a durable acknowledgement ledger. Only successful files move to `processed/`; failures are quarantined. Protocol-2 logs use transactional event IDs and an indexing outbox, with explicit duplicate-safe replay and stable vector upserts; legacy/Markdown partial files still require recovery review. See [ingestion recovery](ingestion_recovery.md).
--   **PII Masking**: Regex-based masking for emails, IP addresses, and SSNs before storage.
-
-### Evaluation Service (New)
--   **Role**: Offline performance measurement.
--   **Stack**: FastAPI + Ragas.
--   **Function**: Runs configured cases statelessly against Pilot, retaining failures and actual evidence in v1 tables. Deterministic expected results determine batch pass rates; the optional single-interaction LLM judge is separate.
-
-### Sentry Service (New) 🛡️
--   **Role**: Proactive background monitoring.
--   **Mechanism**:
-    -   **Anomaly Detection**: Compares current log error rates against a rolling baseline.
-    -   **Alerting**: Writes alerts to `history.duckdb` for the Frontend to consume.
-    -   **Independence**: Runs as a standalone process/thread, ensuring monitoring continues even if the UI is closed.
-
-### Database Layer
--   **DuckDB**: Chosen for high-performance OLAP queries on local files.
--   **ChromaDB**: Vector store for RAG (Retrieval Augmented Generation).
-
-## 5. Agentic RAG Logic & Fallback Strategy 🧠
-
-The **RAG (Retrieval Augmented Generation)** pipeline is designed for **qualitative** questions—when you need to know "Why", "How", or "Who", rather than "How many".
-
-### A. The Trigger Logic
-The **Intent Router** selects the `rag` path when the query implies causality, identity, or procedure.
-*   **Keywords**: "Why", "How to", "Who owns", "Runbook".
-*   **Examples**:
-    *   *"Why is the payment service failing?"* (RAG 🟢)
-    *   *"Count errors in the last hour."* (SQL 🔴)
-
-### B. The Logic Pipeline (Hybrid Search)
-If RAG is selected, we execute a specialized 3-step process:
-
-1.  **Semantic Pattern Match (ChromaDB)**:
-    *   We embed the query to find abstract **Log Patterns** (e.g., `Payment gateway timed out after <*> ms`).
-    *   We do *not* search raw logs directly, which ensures we find the *type* of error even if the specific timestamp/user ID is different.
-
-2.  **Structured Data Fetch (DuckDB)**:
-    *   We extract the `template_id` from the matched pattern.
-    *   We query **DuckDB** for the *actual* recent logs that match that ID to get real timestamps and values.
-
-3.  **Context Verification (The Critic)**:
-    *   An LLM Critic reads the fetched logs.
-    *   **Logic**: "Does this log actually answer the user's question?"
-    *   **Strict Rule**: If the user asks for "Error 502", the system *must* have found 502.
-    *   **Window Retrieval**: If a match is found, we fetch the surrounding **+/- 30s** of logs to provide causal context (e.g., Timeout -> Error) to the LLM.
-
-### C. The Fallback (Web Search) 🌍
-If the RAG pipeline fails (e.g., no patterns found, or Critic rejects them), the system triggers a **Web Search**:
-1.  **Condition**: User asks a general question ("What is error 503?") OR internal logs are irrelevant.
-2.  **Action**: The `perform_web_search` node queries DuckDuckGo.
-3.  **Result**: The system answers using external documentation instead of internal logs.
-
-### D. Decision Flowchart
-```mermaid
-graph TD
-    Q[User Query] --> Router{Intent?}
-    Router -- "Count/Start/List" --> SQL[SQL Agent]
-    Router -- "Why/How/Who" --> RAG[RAG Agent]
-    
-    subgraph RAG Logic
-        RAG --> Chroma[1. Pattern Match]
-        Chroma --> DuckDB[2. Fetch Logs]
-        DuckDB --> Critic{Relevant?}
-        Critic -- Yes --> Answer[Final Answer]
-        Critic -- No --> Web[3. Web Fallback]
-    end
-```
-
-## 6. Smart Runbook Ingestion (The Reader Agent) 🧠📘
-
-While `drain3` handles structured logs, **Technical Runbooks** (Markdown/PDF) require a different approach. We employ an **AI Reader Agent** to de-fragment and ingest this static knowledge.
-
-### A. The Problem: "Fragmented Knowledge"
-A runbook often mentions "Error 503" in multiple places:
-1.  **Table of Contents**: Lists it.
-2.  **Symptoms Section**: Describes what it looks like.
-3.  **Fix Section**: Describes how to solve it.
-
-Standard **Chunking** (splitting text by 500 characters) fails here. It creates 3 separate, incomplete vectors. If you search "How to fix 503", you might get the symptoms card but not the fix card.
-
-### B. The Solution: "Smart Synthesis"
-The **Ingestion Worker** uses a 2-Pass LLM Strategy:
-
-1.  **Pass 1: Discovery (The Scanner)**
-    *   The Agent scans the document to identify **Key Topics** (e.g., `["Error 503", "Auth Token Expired"]`).
-    *   **New**: It specifically looks for topics inside **Tables** and **Headers** to ensure no error code is missed (e.g., `| 502 | Bad Gateway |`).
-    *   It ignores generic text.
-
-2.  **Pass 2: Synthesis (The Researcher)**
-    *   For *each* topic, the Agent re-reads the *entire* document.
-    *   It extracts all relevant clauses (Symptoms + Cause + Fix) from scattered sections.
-    *   It synthesizes a **Single Knowledge Card**.
-
-### C. The Result: "High-Quality Vectors"
-The Vector DB stores the **Synthesized Card**, not the raw text.
-*   **Query**: "How to fix 503?"
-*   **Retrieved Vector**: A complete mini-guide containing the definition AND the fix.
-*   **Outcome**: The RAG Agent answers correctly with full context.
-
-## 7. Storage Optimization Strategy
-
-The current architecture prioritizes **simplicity and context** for the LLM by storing full log bodies. However, for high-volume production environments, a **Log Normalization** strategy is designed and feasible.
-
-### Option A: Full Log Storage (Current)
--   **Schema**: `timestamp`, `service`, `severity`, `body` (full text), `template_id`.
--   **Pros**: Zero reconstruction cost, easy debugging, full-text search.
--   **Cons**: Higher storage footprint (redundant text).
--   **Best For**: AI Agents (needs exact context), <1TB scale.
-
-### Option B: Normalized Storage (Future Optimization)
--   **Schema**: `timestamp`, `service`, `severity`, `template_id`, `parameters` (JSON list).
--   **Mechanism**:
-    1.  `LogTemplateMiner` extracts template (e.g., "User <*> failed") and parameters (e.g., `["bob"]`).
-    2.  Store only the parameters in DuckDB.
-    3.  Reconstruct log message dynamically for display or LLM context.
--   **Pros**: Minimal storage (up to 90% reduction for repetitive logs), efficient analytics on parameters.
--   **Cons**: Reconstruction overhead, complexity in search (cannot grep raw text).
--   **Feasibility**: Verified via `tests/check_drain3.py` that `drain3` supports parameter extraction.
-
-## 8. Vector DB Usage Scenarios
-
-The Vector DB (ChromaDB) is the "Semantic Brain" of LogPilot. It is used when the user's question is **vague, qualitative, or pattern-based**.
-
-### Example 1: Semantic Discovery ("What's wrong?")
-*   **User Query**: *"Are there any authentication issues?"*
-*   **Why Vector DB?**: The word "issues" is subjective. SQL can't query `WHERE body LIKE '%issue%'` effectively.
-*   **The Flow**:
-    1.  **Embed**: Convert query to vector.
-    2.  **Search**: Find patterns near "authentication" and "error/fail".
-    3.  **Match**: ChromaDB returns pattern `User <*> failed to login`.
-    4.  **Retrieve**: System uses the pattern's `template_id` to fetch recent logs from DuckDB.
-    5.  **Answer**: "Yes, I found a recurring pattern of login failures..."
-
-### Example 2: Pattern Matching ("Find logs like this")
-*   **User Query**: *"Show me logs similar to the database timeout."*
-*   **Why Vector DB?**: "Similar to" is a vector operation.
-*   **The Flow**:
-    1.  **Search**: ChromaDB finds the `Database connection timed out after <*> ms` pattern.
-    2.  **Retrieve**: Uses `template_id` to get specific instances.
-
-### Example 3: When is it NOT used? (Pure SQL)
-*   **User Query**: *"Count the number of errors in the last hour."*
-*   **Why NOT Vector DB?**: This is a precise, quantitative question.
-*   **The Flow**:
-    1.  **Intent Classifier**: Detects "SQL" intent.
-    2.  **Generate SQL**: `SELECT count(*) FROM logs WHERE severity='ERROR' AND timestamp > now() - INTERVAL 1 HOUR`.
-    3.  **Execute**: Runs directly on DuckDB. Vector DB is bypassed completely.
-
-## 9. Production Data Architecture: Stateless on S3
-
-In our current **Demo/MVP** environment, we ingest logs into a local DuckDB file (`logs.duckdb`). In a **Real-World Production** environment, we recommend a **Stateless Architecture** that queries data directly where it lives (e.g., S3), avoiding data duplication.
-
-### A. Current Approach (Local Storage)
-*   **Mechanism**: Ingestion Worker reads logs -> Inserts into local `logs.duckdb` file.
-*   **Pros**: Extremely fast for small/medium datasets, simple setup, no network latency.
-*   **Cons**: Data duplication (logs exist in file & DB), limited by local disk, stateful (harder to scale horizontally).
-
-### B. Production Approach (Stateless on S3)
-*   **Concept**: Treat S3 as the database. DuckDB acts as a **stateless compute engine** that queries Parquet files directly on S3.
-*   **Mechanism**:
-    1.  **Log Storage**: Logs are shipped to S3 in Parquet format (e.g., via Kinesis Firehose or FluentBit).
-    2.  **Compute**: LogPilot spins up a DuckDB instance (in Lambda or Container) only when a query is needed.
-    3.  **Query**: `SELECT * FROM 's3://my-log-bucket/date=2024-01-01/*.parquet'`.
-*   **Pros**:
-    *   **Zero Data Movement**: No need to "ingest" or move data into a separate DB.
-    *   **Infinite Scale**: S3 handles the storage; DuckDB handles the compute.
-    *   **Cost Effective**: Pay only for S3 storage and query compute time.
-
-### How to Achieve This
-To transition LogPilot to this architecture:
-
-1.  **Install Extensions**:
-    ```sql
-    INSTALL httpfs;
-    LOAD httpfs;
-    INSTALL aws;
-    LOAD aws;
-    ```
-
-2.  **Configure Credentials**:
-    ```python
-    con.execute("CALL load_aws_credentials()")
-    ```
-
-3.  **Query Directly**:
-    ```python
-    # Instead of querying a local table 'logs'
-    sql = "SELECT count(*) FROM read_parquet('s3://company-logs/service-a/*.parquet')"
-    con.execute(sql)
-    ```
-
-This allows LogPilot to become a **Zero-ETL** agent, providing intelligence on top of your existing Data Lake.
-
-## 10. Cloud-Native Adaptation: AWS CloudWatch ☁️
-
-For environments where logs are stored in **AWS CloudWatch Logs** (e.g., AWS Glue jobs), we can adapt LogPilot to query them directly without ingestion, acting as a smart UI over the CloudWatch API.
-
-### Architecture Changes
-To support the "Live CloudWatch Log Access" pattern, we swap specific components while keeping the core cognitive architecture:
-
-| Component | Current (DuckDB) | Cloud-Native (CloudWatch) |
-| :--- | :--- | :--- |
-| **Intent Router** | `classify_intent` (Same) | `classify_intent` (Same) |
-| **Generator** | `SQLGenerator` (DuckDB SQL) | **`InsightsGenerator`** (CloudWatch Syntax) |
-| **Executor** | `DuckDBConnector` | **`CloudWatchConnector`** (Boto3) |
-| **Vector DB** | Ingests all patterns | **Pattern Sampler** (Ingests patterns from samples) |
-
-### Implementation Strategy
-
-#### 1. Insights Generator (The "Translator")
-We create a new prompt in `PromptFactory` to translate natural language into CloudWatch Insights syntax.
-
-**Prompt Template**:
-```text
-You are an AWS CloudWatch Expert.
-Translate the user question: "{query}"
-Into CloudWatch Logs Insights syntax.
-
-Example:
-Q: "Show me the last 20 errors"
-A: fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20
-```
-
-#### 2. CloudWatch Connector (The "Executor")
-We implement a connector using the **AWS SDK (Boto3)** to execute the generated query. This connector is responsible for:
-1.  **Initiating Queries**: Sending the `start_query` request to the CloudWatch Logs API.
-2.  **Polling**: Waiting for the asynchronous query execution to complete.
-3.  **Result Parsing**: Converting the JSON response from CloudWatch into a structured format for the LLM.
-
-#### 3. Smart RAG Fallback
-If the user asks a qualitative question ("Why did the job fail?"), we use a **Hybrid Flow**:
-1.  **Retrieve**: Fetch recent error logs via CloudWatch Insights (`filter @message like /ERROR/`).
-2.  **Pattern**: Run `LogTemplateMiner` on the *retrieved results* in-memory.
-3.  **Augment**: Feed the unique patterns + sample errors into the LLM to synthesize an answer.
-
-This approach achieves **Zero Data Duplication** while leveraging LogPilot's agentic capabilities.
-
-## 11. Design Considerations & Trade-offs ⚖️
-
-This section summarizes the key architectural decisions to help stakeholders understand "Why" we built it this way.
-
-### A. Why DuckDB + ChromaDB? (The Hybrid Engine)
-*   **The Problem**: Vector DBs are great for "vague" questions but terrible for "precise math" (e.g., "Count errors"). SQL DBs are the opposite.
-*   **The Solution**: We use **Both**.
-    *   **DuckDB**: Handles the "Hard Math" (Counting, Aggregation, Filtering).
-    *   **ChromaDB**: Handles the "Soft Logic" (Pattern matching, Similarity).
-*   **Business Value**: You get the accuracy of a SQL report with the flexibility of ChatGPT.
-
-### B. Why "1 Vector Per Pattern"?
-*   **The Problem**: Storing every single log line as a vector is expensive and slow (100M logs = 100M vectors).
-*   **The Solution**: We only store **Unique Patterns** (e.g., 1 vector for "User <*> failed").
-*   **Business Value**:
-    *   **99% Cost Reduction**: A system with 100M logs might only have 500 unique patterns.
-    *   **Faster Answers**: Searching 500 vectors is instant.
-
-### C. Why "Zero-ETL" for Production? (S3/CloudWatch)
-*   **The Problem**: Moving data from S3/CloudWatch to another DB costs money (egress) and time (latency).
-*   **The Solution**: Bring the compute to the data.
-    *   **Stateless DuckDB**: Queries S3 Parquet files directly.
-    *   **CloudWatch Connector**: Queries AWS Logs directly.
-*   **Business Value**:
-    *   **Real-Time**: No waiting for ingestion pipelines.
-    *   **Cost Savings**: No duplicate storage costs.
-    *   **Simplicity**: Fewer moving parts to maintain.
-
-## 12. Future Roadmap & Risks 🔮
-For a detailed breakdown of architectural risks (e.g., Latency, Context Limits) and planned enhancements (S3, CloudWatch Support), please refer to the **[Project Backlog](backlog.md)**.
+No authenticated users, tenant authorization, isolated conversations or production deployment qualification exist yet. Embedded storage ownership, document provenance, retention, operational telemetry and backup/restore gates remain open. Kafka, cloud object ingestion, a migration coordinator and automatic fine-tuning are not active components. Older exploratory designs are [historical references](design_history/README.md).

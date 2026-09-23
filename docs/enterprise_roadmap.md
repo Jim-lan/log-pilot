@@ -1,9 +1,12 @@
 # LogPilot: reliability and enterprise AI learning roadmap
 
-Date: 2026-09-10  
-Status: Step 1.3 initial safeguards implemented and frontend Nginx smoke checked. Phase 2.1 evaluation integrity repairs implemented; Phase 2.2 has a versioned SQL corpus and request provenance; retrieval/citation dimensions are implemented; live measurements, multi-turn evaluation and remaining release gates are open.
+Updated: 2026-09-17. Implementation baseline: `4895c91`.
 
-Next implementation step: **remaining ingestion recovery gates (Markdown, queue bounds and provenance), alongside R1/R2 and isolation gates**, alongside remaining 0.2 coverage and deployment checks. See [evaluation contract](evaluation_contract.md).
+Status: bounded orchestration, rendering/redaction safeguards, versioned evaluation and provenance, retrieval/citation checks, restricted SQL, truthful file acknowledgement and transactional protocol-2 log replay are implemented. Recorded verification: 98 backend tests, six browser contracts and transaction-crash checks; the existing-image vector smoke is additional evidence. No overall enterprise-readiness stage is declared complete by these counts.
+
+The [consolidated system design](system_design.md) lists implemented capabilities, proposed features, acceptance evidence and rollback boundaries. The [architecture](architecture.md) describes current runtime behavior; future diagrams are explicitly labeled.
+
+Next planned work: Markdown recovery/provenance, bounded ingestion queues and clean-install recovery coverage, followed by remaining R1/R2 quality gates and identity/storage/deployment isolation work. Implementation is paused at the user's requested checkpoint; this documentation update does not start those changes.
 
 Evidence and run instructions: [isolated test baseline](testing_baseline.md).
 
@@ -15,7 +18,7 @@ The current project is a prototype with useful architectural foundations. The Se
 
 The review combined source inspection and isolated execution of selected function bodies with stubbed dependencies. It reproduced history serialization and retry defects, a missing graph destination, and a masking gap. It did not run the full Docker stack, a penetration test, or a load test. Full application verification is a deliverable of this roadmap.
 
-This document defines the implementation order. The [backlog](backlog.md) remains an idea inventory. The [architecture](architecture.md) describes existing concepts and future options; the target below is proposed, not deployed.
+This document defines the implementation order. The [backlog](backlog.md) remains an idea inventory. The [architecture](architecture.md) describes the current implementation; the target below is proposed, not deployed.
 
 ## 2. Principles that protect the good features
 
@@ -203,7 +206,9 @@ The user can choose to write a test, implement a bounded part, or explain a desi
 
 Track implementation with: step ID, status, revision/change link, test evidence, demo outcome, rollback method, documentation updated and learning notes. A phase is complete only when its gate passes; a merged change alone is insufficient.
 
-## 9. Initial execution queue
+## 9. Implementation checkpoint and actionable queue
+
+Use the [implementation task tracker](implementation_tasks.md) for remaining work and the recommended next change. The table below summarizes earlier roadmap checkpoints; historical test counts are not the current suite totals.
 
 | Order | Step | Status |
 |---|---|---|

@@ -1,111 +1,74 @@
-# API Reference 📡
+# LogPilot API reference
 
-## Base URL
-`http://localhost:8000`
+Implementation baseline `4895c91`, 2026-09-17. Local API: `http://localhost:8000`; evaluation: `http://localhost:8002`; MCP: port 8001. These interfaces currently lack authentication and tenant isolation. They are not public deployment contracts.
 
-## Endpoints
+## Query
 
-### 1. Run Query
-Executes the Pilot Agent for a given natural language query.
+`POST /query` accepts:
 
--   **URL**: `/query`
--   **Method**: `POST`
--   **Content-Type**: `application/json`
-
-#### Request Body
 ```json
-{
-  "query": "Show me the last 5 errors in auth-service"
-}
+{"query":"How many ERROR logs are present?","persist_history":false}
 ```
 
-| Field | Type | Description | Required |
-| :--- | :--- | :--- | :--- |
-| `query` | string | The natural language question to ask the agent. | Yes |
+`query` is required text. `persist_history` defaults to `true`; `false` skips normal conversation history reads and writes. Default history belongs to a shared session, not an authenticated user.
 
-#### Response (200 OK)
-```json
-{
-  "answer": "Here are the last 5 errors...",
-  "sql": "SELECT * FROM logs ...",
-  "sql_result": "[('ERROR', ...)]",
-  "context": "Runbook: How to fix auth errors...",
-  "intent": "sql"
-}
-```
+| Response field | Contract |
+|---|---|
+| `answer` | Answer or abstention text |
+| `intent` | Graph route classification |
+| `sql` | Generated SQL or null |
+| `sql_result` | Legacy result text or null |
+| `sql_rows` | Structured arrays of values or null; `[]` means a successful empty result |
+| `context` | Selected retrieval/web evidence or null |
+| `sources` | Retrieved artifact records with ID, content hash, kind, title and provenance; may be empty |
+| `metadata` | Rewritten query, latency, judge feedback, outcome, retry counts, provider call counts and provenance |
+| `trace` | Serialized message transcript, possibly null; not a complete execution-event audit |
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `answer` | string | The final natural language response. |
-| `sql` | string | The generated SQL query (if intent was SQL). |
-| `sql_result` | string | The raw result from the database (stringified). |
-| `context` | string | Retrieved context from RAG (if intent was RAG). |
-| `intent` | string | Classified intent (`sql`, `rag`, `ambiguous`). |
-| `metadata` | object | Rewritten query, elapsed latency, and validation feedback when available. |
-| `trace` | array | Serialized messages supplied by the graph; supports stored history dictionaries and message objects, preserving tool calls when present. |
+Provenance includes template source hashes and per-call requested/returned model identifiers, temperature and available provider fingerprint. It does not include credentials or rendered prompt content. A validated outcome denotes completion of the configured validation process, not independently proven correctness.
 
-Conversation compatibility: follow-up requests can serialize existing dictionary-based history without an HTTP 500. The last ten prior messages are sent to the graph. The API still uses the shared `default` session; user isolation remains planned. The current trace is a message transcript, not a complete execution-event audit trail.
+The HTTP deadline defaults to 120 seconds with four active workers per API process. Synchronous work may continue after HTTP timeout while retaining its worker slot. See [budget semantics](request_budgets.md).
 
-Graph validation now uses independent retry counters (three SQL repairs; two context and two answer retries). `metadata.retry_counts` reports `sql`, `context` and `answer`. `metadata.outcome` may be `validated`, `insufficient_evidence` or `dependency_error`; `validated` means the configured judge accepted the answer, not that factual correctness is guaranteed. These are additive fields. Transport/request exceptions still use HTTP error responses.
+| Status | Typed execution code |
+|---|---|
+| 422 | `sql_execution_failed` |
+| 429 | `call_budget_exceeded` |
+| 502 | `dependency_error` |
+| 503 | `query_capacity_exhausted` |
+| 504 | `deadline_exceeded` or `provider_timeout` |
 
-When the answer judge repeatedly rejects or cannot parse its response, the returned answer explicitly abstains. An enabled RAG-to-web fallback returns `intent: "web_search"` and the web evidence in `context`, rather than the rejected RAG context. External search is disabled unless the operator sets `LOGPILOT_ALLOW_WEB_SEARCH=true`; this flag permits sending the rewritten question to the external search provider. Search absence/outage does not become supporting evidence for synthesis. Authentication and comprehensive egress redaction are still pending.
+FastAPI request validation also uses 422 with its own validation-detail shape. Unexpected errors can still return 500 with exception text; do not assume all error paths are sanitized. Consumers must handle failed requests without interpreting them as empty successful results.
 
-Update: `/query` now enforces an overall HTTP deadline, per-provider timeouts and call budgets, and bounded worker capacity. See [request budgets](request_budgets.md) for operator defaults, cancellation limitations and structured 429/502/503/504 error contracts. Successful responses include `metadata.provider_calls`. Authentication and comprehensive egress redaction remain pending.
+## Other API routes
 
----
+| Method and route | Behavior |
+|---|---|
+| `GET /health` | Checks model status; not comprehensive readiness |
+| `GET /history` | Shared default conversation as role/content/timestamp records |
+| `GET /alerts` | Unread persisted alerts |
+| `POST /alerts/{alert_id}/read` | Marks alert read; returns `{"status":"ok"}` |
+| `GET /metrics` | Versioned evaluation summary; unavailable storage produces unavailable/null measurements |
 
-### 2. Get Chat History
-Retrieves the chat history for the default session.
+Metrics use a UTC 24-hour window for recent measurements, case-weighted outcomes and a limited recent-run history. Older incompatible metrics are excluded. Consult [evaluation schema and scoring](evaluation_contract.md), rather than inferring accuracy from a single percentage.
 
--   **URL**: `/history`
--   **Method**: `GET`
+## Evaluation service
 
-#### Response (200 OK)
-```json
-[
-  {
-    "role": "user",
-    "content": "Hello",
-    "timestamp": "2023-10-27 10:00:00"
-  },
-  {
-    "role": "ai",
-    "content": "Hi there! How can I help?",
-    "timestamp": "2023-10-27 10:00:05"
-  }
-]
-```
+| Method and route | Request and result |
+|---|---|
+| `GET /health` | Status, schema version and Ragas `on_demand` |
+| `POST /evaluate/batch` | Optional `dataset_path` and `limit`; returns started status, run ID and schema version |
+| `POST /evaluate` | Required `query`, `rewritten_query`, `rag_context`, `final_answer`; supplementary Ragas scores, or 503 if unavailable |
 
----
+Batch `dataset_path`, if supplied, must equal the server-configured path. `limit` must be positive and at most 1000. Invalid/unavailable datasets return 400; request validation returns 422. The selected dataset must be a nonempty list with unique string case IDs and string questions.
 
-### 3. Health Check
-Checks the status of the API and the LLM connection.
+The complete case roster is persisted before background execution. Each case calls the orchestrator with `persist_history:false`. Started does not mean completed or passed; interrupted workers can leave pending cases. The optional Ragas judge does not determine deterministic batch pass rates. Arbitrary client filesystem paths are not accepted.
 
--   **URL**: `/health`
--   **Method**: `GET`
+## MCP surface
 
-#### Response (200 OK)
-```json
-{
-  "status": "ok",
-  "llm": {
-    "status": "connected",
-    "model": "gemma4:e4b"
-  }
-}
-```
+| Tool/resource | Current behavior |
+|---|---|
+| `query_logs(sql_query)` | Shared restricted analytics SQL executor; returns text |
+| `ask_log_pilot(question)` | Forwards to `/query`, returns answer text, 60-second proxy timeout |
+| `logs://recent` | Restricted query for the latest 50 logs |
+| `logs://schema` | Fixed trusted `DESCRIBE logs` query |
 
-## MCP database operations
-
-`query_logs`, `logs://recent` and `logs://schema` use the connector's transient `query()` method with a read-only logs connection. They preserve their string result/error contracts. `ask_log_pilot` forwards to the API with a 60-second HTTP timeout. This compatibility repair does not add authorization, SQL sandboxing or new transport guarantees.
-
-
-## Evaluation integrity v1
-
-`POST /query` adds optional `persist_history` (default true). False creates a stateless request that cannot read or append ordinary chat history. `GET /metrics` now reads the versioned evaluation tables, returns null for unavailable metrics, uses a true UTC 24-hour window and exposes run status. See [full evaluation contracts and migration limits](evaluation_contract.md).
-
-`QueryResponse.sql_rows` adds JSON rows alongside the unchanged readable `sql_result`. Metadata adds request-local `provenance.model_calls` and `provenance.templates`; template hashes identify template source, not private rendered prompts. Empty arrays represent successful empty results; null represents no structured result.
-
-`QueryResponse.sources` adds retrieved KB artifact IDs, content hashes, kind and title. `[source:ID]` answer markers are checked against supplied local artifacts before model validation; fabricated IDs trigger bounded repair and abstention. See [retrieval/citation limits](evaluation_contract.md).
-
-SQL execution rejection/failure returns HTTP 422 with `detail.code=sql_execution_failed`; it does not synthesize a success from missing results. Model SQL validation and execution, MCP `query_logs`, and recent-log reads use the [restricted analytics policy](sql_execution_policy.md). MCP retains its string error response contract.
+The proxy currently uses default history persistence and has a shorter timeout than the API deadline. Handler errors are returned as text, not the API typed error contract. In-process handler tests do not establish SSE transport readiness. Source/evidence-rich MCP responses and scoped identity are future designs.

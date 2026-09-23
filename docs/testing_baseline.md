@@ -4,6 +4,12 @@ Date: 2026-09-10. Starting revision: `12265199f4844ab8e9b5b52cb84c1b33092bf58d`.
 
 This is an expanding baseline for the [enterprise roadmap](enterprise_roadmap.md). Step 0.1 established storage isolation; Step 0.2 now adds HTTP and MCP handler contracts protecting the first Step 1.1 repairs. It is not the full feature suite and is not an end-to-end or enterprise-readiness certification.
 
+## Current checkpoint (2026-09-17)
+
+At `4895c91`, 98 backend tests and six browser contracts passed. [GitHub Actions run 35223139147](https://github.com/Jim-lan/log-pilot/actions/runs/35223139147) passed both jobs, including the abrupt transaction-crash checks in the backend job. The real Chroma/LlamaIndex smoke described below remains an existing-image check, not clean-install CI.
+
+The sections below are an incremental verification history. Counts and statements about stubbed imports or missing coverage describe their checkpoint, not necessarily the latest suite. Current tests exercise real graph, ingestion methods and database paths with scripted external dependencies. They do not establish live-model quality, full-stack deployment readiness or enterprise qualification.
+
 ## Run locally
 
 From the project folder, create a separate environment once:
@@ -211,4 +217,4 @@ docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseli
 
 Real Chroma/LlamaIndex smoke test `tests/integration/vector_upsert_smoke.py` passed in the existing ingestion image `sha256:d30487b2f8897731e553e64590e4c9fd1a045791360c8a4fafb2b8cbc487af29`, with synthetic embeddings, a temporary collection and networking disabled. Repeated writes preserved one vector ID; updating its text remained retrievable through the existing LlamaIndex Chroma adapter. This additional smoke is not yet in clean-install CI and does not validate embedding/model quality. No application database was mounted.
 
-The preceding acknowledgement revision `231f25894ac014756fbafc03349169613fd978a3` passed [GitHub Actions run 34983957973](https://github.com/Jim-lan/log-pilot/actions/runs/34983957973). New replay changes require their own remote result. Markdown recovery, legacy vector reconciliation, queue bounds and multi-writer operation remain unproven.
+The preceding acknowledgement revision `231f25894ac014756fbafc03349169613fd978a3` passed [GitHub Actions run 34983957973](https://github.com/Jim-lan/log-pilot/actions/runs/34983957973). The replay revision subsequently passed run 35223139147, linked in the current checkpoint above. Markdown recovery, legacy vector reconciliation, queue bounds and multi-writer operation remain unproven.
