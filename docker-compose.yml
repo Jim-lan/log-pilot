@@ -41,6 +41,7 @@ services:
       - ./config:/app/config
     environment:
       - INGESTION_SOURCE=FILE
+      - LOGPILOT_INGEST_QUEUE_SIZE=${LOGPILOT_INGEST_QUEUE_SIZE:-256}
       - PYTHONUNBUFFERED=1
     depends_on:
       llm-service:

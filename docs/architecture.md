@@ -11,7 +11,7 @@ The main Compose file defines eight services. Chroma is embedded persistent stor
 | `frontend` | Nginx serves vanilla JavaScript/HTML/CSS | `127.0.0.1:3000` |
 | `pilot-orchestrator` | FastAPI, LangGraph SQL/RAG routing, conversation and evidence | `127.0.0.1:8000` |
 | `llm-service` | Ollama; startup attempts to pull the configured model identifier | `127.0.0.1:11434` |
-| `ingestion-worker` | File watching, parsing/redaction, Drain3 patterns, durable log/index work | None |
+| `ingestion-worker` | Bounded directory polling, parsing/redaction, Drain3 patterns, durable log/index work | None |
 | `sentry-service` | Error-rate polling and persisted alerts | None |
 | `mcp-server` | FastMCP SSE tools/resources | `127.0.0.1:8001` |
 | `evaluation-service` | Batch contracts, optional Ragas judge, durable evaluation records | `127.0.0.1:8002` |
@@ -75,7 +75,7 @@ sequenceDiagram
 
 The transaction/outbox flow applies to protocol-2 logs. Event identity combines file fingerprint and physical line number. Replay skips committed records before parsing/mining, then drains pending indexing work. A crash after vector upsert can repeat the same stable-ID upsert. A failed final file move can retry without duplicating completed work. Identical completed content deduplicates even if renamed.
 
-SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Recover older pending files before processing newer pattern versions. Queue bounds, distributed leases and legacy vector reconciliation are future work. See [full recovery protocol](ingestion_recovery.md).
+SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Recover older pending files before processing newer pattern versions. Pending path memory is bounded through directory polling; distributed leases and legacy vector reconciliation remain future work. See [full recovery protocol](ingestion_recovery.md).
 
 ## Evaluation and alerts
 

@@ -72,3 +72,5 @@ Request provenance captures template source hashes and requested/returned model 
 Use [isolated tests](testing_baseline.md), not application data. The test image pins its dependencies; application images/dependencies are not all pinned. Backend tests exercise real graph/database paths with scripted provider responses. Browser tests use synthetic intercepted responses. These establish selected contracts, not model quality or full deployment readiness.
 
 Current recorded evidence at the baseline is 98 backend tests and six browser contracts, plus transaction crash checks and a separate existing-image vector smoke. Keep historical counts attached to their revisions. The [evaluation contract](evaluation_contract.md) defines how to report new measurements without mixing incompatible scores.
+
+Ingestion admission uses `LOGPILOT_INGEST_QUEUE_SIZE` (default 256, 1–10,000), forwarded by main Compose to `ingestion-worker`. Directory polling bounds pending paths; overflow stays in the landing directory. This is separate from the API query-worker limit.

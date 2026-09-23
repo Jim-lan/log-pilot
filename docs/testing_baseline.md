@@ -255,4 +255,8 @@ The document test covers 16 boundaries: claim, topic plan, card persistence, rea
 
 These tests run without network or application data in CI. They validate process-crash recovery, not power-loss durability, disk failure, distributed workers or a live model. The vector test profile additionally mounts ingestion source read-only so the actual document worker path can be imported without starting services.
 
-Local result: all 16 document and 14 log worker crash cases passed, including the exact provider-call assertions. R03 passed [CI run 35874484501](https://github.com/Jim-lan/log-pilot/actions/runs/35874484501). R04 remote verification follows its push.
+Local result: all 16 document and 14 log worker crash cases passed, including the exact provider-call assertions. R03 passed [CI run 35874484501](https://github.com/Jim-lan/log-pilot/actions/runs/35874484501). R04 passed [CI run 35875070257](https://github.com/Jim-lan/log-pilot/actions/runs/35875070257) for `3c32a70`.
+
+## R05 bounded directory intake (2026-09-23)
+
+113 backend contracts pass locally and in isolated Docker. Four new contracts exercise queue saturation/eventual drain, atomic handoff and empty files, collision preservation, restart and vanished paths, configuration limits and idle shutdown. The adapter replaces both application and watcher-event accumulation with bounded directory polling. The data directory remains the durable backlog; disk quotas/operational saturation remain later gates.

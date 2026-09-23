@@ -23,98 +23,8 @@ from shared.utils.template_miner import LogTemplateMiner
 from shared.utils.log_parser import LogParser
 from janitor import Janitor
 
-# --- File Watcher Imports ---
-import glob
 import shutil
-from queue import Queue
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
-class LogFileHandler(FileSystemEventHandler):
-    def __init__(self, queue, allowed_extensions=(".log", ".md")):
-        self.queue = queue
-        self.allowed_extensions = allowed_extensions
-
-    def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith(self.allowed_extensions):
-            print(f"👀 Detected new file: {event.src_path}")
-            self.queue.put(event.src_path)
-
-    def on_moved(self, event):
-        if not event.is_directory and event.dest_path.endswith(self.allowed_extensions):
-            print(f"👀 Detected moved file: {event.dest_path}")
-            self.queue.put(event.dest_path)
-
-class FileWatcherConsumer:
-    """Consumes logs from files in a directory using Watchdog."""
-    def __init__(self, source_dir="data/source/landing_zone", processed_dir="data/source/processed"):
-        self.source_dir = source_dir
-        self.processed_dir = processed_dir
-        self.file_queue = Queue()
-        
-        # Ensure directories exist
-        os.makedirs(source_dir, exist_ok=True)
-        os.makedirs(processed_dir, exist_ok=True)
-        
-        # 1. Scan existing files
-        print(f"📂 Scanning {source_dir} for existing files...")
-        existing_files = []
-        for ext in ["*.log", "*.md"]:
-            existing_files.extend(glob.glob(os.path.join(source_dir, ext)))
-            
-        for f in sorted(existing_files):
-            print(f"   -> Found existing: {f}")
-            self.file_queue.put(f)
-            
-        # 2. Start Watchdog
-        self.observer = Observer()
-        handler = LogFileHandler(self.file_queue)
-        self.observer.schedule(handler, source_dir, recursive=False)
-        self.observer.start()
-        print(f"👀 Watching for new logs/docs in {source_dir}...")
-
-    def __iter__(self):
-        while True:
-            if self.file_queue.empty():
-                time.sleep(1) # Wait for files
-                continue
-                
-            filepath = self.file_queue.get()
-            filename = os.path.basename(filepath)
-            processed_path = os.path.join(self.processed_dir, filename)
-            
-            # Handle duplicates/collisions in processed folder
-            if os.path.exists(processed_path):
-                base, ext = os.path.splitext(filename)
-                ts = int(time.time())
-                processed_path = os.path.join(self.processed_dir, f"{base}_{ts}{ext}")
-
-            print(f"📖 Processing file: {filepath}")
-            
-            # Verify file stability (wait for write to finish)
-            if not self._wait_for_file_stability(filepath):
-                print(f"⚠️ Skipping unstable file: {filepath}")
-                continue
-                
-            yield filepath, processed_path
-
-    def _wait_for_file_stability(self, filepath: str, timeout: int = 5) -> bool:
-        """Waits for file size to stop changing."""
-        start_time = time.time()
-        last_size = -1
-        
-        while time.time() - start_time < timeout:
-            if not os.path.exists(filepath):
-                return False
-                
-            current_size = os.path.getsize(filepath)
-            if current_size == last_size and current_size > 0:
-                return True
-                
-            last_size = current_size
-            time.sleep(0.5) 
-            
-        return False
+from shared.file_intake import FileWatcherConsumer
 
 class LogIngestor:
     def __init__(self, watch=True):
@@ -346,8 +256,7 @@ class LogIngestor:
             # Do not retry partially persisted buffers implicitly on shutdown.
             self.db.close()
         finally:
-            self.consumer.observer.stop()
-            self.consumer.observer.join()
+            self.consumer.close()
             
     def process_raw_log(self, raw_log):
         try:
