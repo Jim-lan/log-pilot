@@ -50,3 +50,7 @@ New checks cover monotonic expiry, remaining-time caps, cancellation, separate r
 The design lesson is that retry limits, transport timeouts, overall deadlines and capacity limits solve different problems. All four are required to prevent stalled dependencies from consuming unlimited work. This increment exercises those controls without claiming that threads or remote computations can be forcibly cancelled.
 
 Rollback: restore the prior code/config together from the local checkpoint; no schema migration is required. Reverting restores the previous unbounded HTTP wait, so it should not be used as an operational workaround for a slow provider. Exact execution results are in [testing_baseline.md](testing_baseline.md).
+
+## Deterministic provider regression timing (2026-09-23)
+
+CI run 35872914196 exposed a test setup race: SDK initialization consumed the fixture's five-second wall-clock request budget before the mocked timeout. Provider tests now inject a controlled monotonic clock and assert an exact three-second remaining timeout after advancing it by two seconds. Real SDK transport and single-attempt assertions remain in place. Application deadline behavior is unchanged.

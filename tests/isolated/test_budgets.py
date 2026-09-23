@@ -74,7 +74,9 @@ class BudgetContracts(unittest.TestCase):
 class ProviderContracts(unittest.TestCase):
     def setUp(self):
         from shared.execution import RequestBudget
-        self.budget = RequestBudget(timeout=5, max_llm_calls=2)
+        # SDK initialization time must not consume the simulated request budget.
+        self.clock = [100.0]
+        self.budget = RequestBudget(timeout=5, max_llm_calls=2, clock=lambda: self.clock[0])
         registry = ModuleType("services.pilot_orchestrator.src.model_registry")
         registry.registry = SimpleNamespace(get=lambda kind: SimpleNamespace(
             model_name="fixture", api_base="https://fixture.invalid/v1", api_key_env=None, temperature=0))
@@ -111,12 +113,13 @@ class ProviderContracts(unittest.TestCase):
             return httpx.Response(200, json={"id": "fixture", "object": "chat.completion", "created": 0,
                 "model": "fixture", "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "fixture answer"}}]})
         self.sdk(response)
+        self.clock[0] += 2
         with use_budget(self.budget):
             self.assertEqual(self.client.generate("question password=hunter2 learner@example.com"), "fixture answer")
         self.assertEqual(len(seen), 1)
         self.assertNotIn(b"hunter2", seen[0].content)
         self.assertNotIn(b"learner@example.com", seen[0].content)
-        self.assertTrue(all(0 < t <= 5 for t in seen[0].extensions["timeout"].values()))
+        self.assertTrue(all(t == 3 for t in seen[0].extensions["timeout"].values()))
         self.assertEqual(self.budget.calls["llm"], 1)
         provenance = self.budget.provenance['model_calls']
         self.assertEqual(len(provenance), 1)
