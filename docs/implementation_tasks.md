@@ -8,7 +8,7 @@ Already implemented: bounded query orchestration, initial rendering/redaction co
 
 Recorded baseline evidence is 98 backend tests, six browser contracts and transaction-crash checks. The separate real-vector smoke used an existing image. These are historical results for the baseline, not new tests run on 2026-09-23. Full-stack readiness and live-model quality remain unproven.
 
-**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 fault qualification passes locally. R05 bounded intake is locally verified; next is R06 retry/quarantine policy.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
+**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 passed CI and R05 bounded intake is locally verified. R07 ordering is being completed before dependent R06 automatic retry so older pattern jobs cannot be overtaken.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
 
 The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
@@ -34,9 +34,9 @@ Groups are execution priorities, not instructions to postpone all security desig
 | [x] | R02 | Design document identity, source namespace, immutable version, source spans and update/delete semantics | [ADR 0001](decisions/0001-document-identity.md) and identity/span contracts verified locally and in Docker (101 tests); runtime integration is R03 |
 | [x] | R03 | Implement durable Markdown indexing journal and idempotent replay | Implemented for new documents; 109 backend checks and real vector restart smoke pass locally; raw snapshots and plans/cards persist before upsert; [CI run 35874484501](https://github.com/Jim-lan/log-pilot/actions/runs/35874484501) passed for `3387b65` |
 | [x] | R04 | Extend process-crash and outage tests across all document/log acknowledgement boundaries | Verified locally and in [CI run 35875070257](https://github.com/Jim-lan/log-pilot/actions/runs/35875070257): 16 document and 14 log boundaries, each followed by two replays |
-| [x] | R05 | Bound the watcher/work queue and implement backpressure | Bounded polling replaces both event queues; 113 backend tests pass locally and in Docker, including saturation/restart/shutdown; remote CI pending |
+| [x] | R05 | Bound the watcher/work queue and implement backpressure | Bounded polling replaces both event queues; 113 backend tests pass locally and in Docker, including saturation/restart/shutdown; [CI run 35875520605](https://github.com/Jim-lan/log-pilot/actions/runs/35875520605) passed for R05 `39dde8d` |
 | [ ] | R06 | Add bounded retry/backoff and quarantine inspection/replay workflow | Explicit terminal/retryable states, redacted diagnostics; permanent failures do not loop forever or block unrelated work |
-| [ ] | R07 | Enforce pending-work ordering and exercise shutdown/restart recovery | Old pending pattern versions cannot overwrite newer ones; ownership lock and graceful shutdown tested |
+| [x] | R07 | Enforce pending-work ordering and exercise shutdown/restart recovery | Ledger/outbox order guards verified with 116 backend tests and all 14 log crash cases; single-owner CLI lock retained; R05 covers idle shutdown |
 | [ ] | R08 | Provide legacy ledger/vector reconciliation on copied data | Inventory protocol-1/random-ID artifacts; dry-run mapping and reconciliation before any deletion; preserve rollback evidence |
 | [ ] | R09 | Repair timestamp/retention semantics for active patterns | Boundary tests retain still-active templates despite old first occurrence; destructive cleanup stays disabled until O03/O04 |
 

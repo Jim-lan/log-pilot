@@ -31,6 +31,9 @@ class LogIngestor:
         print("DEBUG: Initializing LogIngestor...")
         
         print("DATA SOURCE: 📁 File Processor (Real-Time Watcher)")
+        self.ledger = IngestionLedger()
+        if watch:
+            self.ledger.require_recovered()
         self.consumer = FileWatcherConsumer() if watch else None
             
         self.miner = LogTemplateMiner(persistence_file="data/state/drain3_state.bin")
@@ -38,11 +41,12 @@ class LogIngestor:
         self.kb = KnowledgeStore() # ChromaDB (might download models)
         print("DEBUG: KnowledgeStore initialized.")
         self.db = DuckDBConnector() # Acquire DB lock ONLY after heavy init
+        if watch:
+            self.db.require_indexing_order()
         self.pii_masker = PIIMasker()
         self.parser = LogParser()
         self.janitor = Janitor(self.kb) # Initialize Janitor
-        self.llm_client = LLMClient() 
-        self.ledger = IngestionLedger()
+        self.llm_client = LLMClient()
         self.batch_size = 5
         self.batch_buffer = []
         self.log_event_buffer = [] # Buffer for LogEvent objects
@@ -199,6 +203,7 @@ class LogIngestor:
         if document_id is not None:
             raise ValueError('Document ID is only valid for Markdown replay')
         fingerprint = hashlib.sha256(source.suffix.encode() + b"\0" + raw).hexdigest()
+        self.db.require_indexing_order(fingerprint)
         claimed = self.ledger.claim(fingerprint, source.name, protocol=2, replay=replay)
         self.file_fingerprint = fingerprint
         if claimed:

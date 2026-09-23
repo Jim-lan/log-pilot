@@ -3,6 +3,10 @@ import sqlite3
 from pathlib import Path
 
 
+class RecoveryRequired(RuntimeError):
+    """New log work must not overtake an incomplete durable claim."""
+
+
 class IngestionLedger:
     def __init__(self, path='data/state/ingestion.sqlite3'):
         self.path = str(path)
@@ -18,15 +22,20 @@ class IngestionLedger:
         with sqlite3.connect(self.path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             row = conn.execute('SELECT state,protocol FROM files WHERE fingerprint=?', (fingerprint,)).fetchone()
+            oldest = conn.execute("SELECT fingerprint FROM files WHERE state != 'indexed' ORDER BY rowid LIMIT 1").fetchone()
             if row:
                 if row[0] == 'indexed':
                     return False
                 if replay and protocol == 2 and row[1] == 2:
+                    if oldest and oldest[0] != fingerprint:
+                        raise RecoveryRequired('Recover the oldest incomplete log claim first: ' + oldest[0])
                     conn.execute("UPDATE files SET state='processing',failure_code=NULL WHERE fingerprint=?", (fingerprint,))
                     return True
                 raise RuntimeError('Prior incomplete ingestion requires recovery review')
             if replay:
                 raise RuntimeError('Replay requires an existing claim for these exact file bytes')
+            if oldest:
+                raise RecoveryRequired('Pending ingestion requires recovery before new log files: ' + oldest[0])
             conn.execute("INSERT INTO files(fingerprint,name,state,protocol) VALUES (?,?,'pending',?)", (fingerprint, name, protocol))
             conn.execute("UPDATE files SET state='processing' WHERE fingerprint=?", (fingerprint,))
             return True
@@ -47,3 +56,9 @@ class IngestionLedger:
     def status(self, fingerprint):
         with sqlite3.connect(self.path) as conn:
             return conn.execute('SELECT state,failure_code FROM files WHERE fingerprint=?', (fingerprint,)).fetchone()
+
+    def require_recovered(self):
+        with sqlite3.connect(self.path) as conn:
+            row = conn.execute("SELECT fingerprint FROM files WHERE state != 'indexed' ORDER BY rowid LIMIT 1").fetchone()
+        if row:
+            raise RecoveryRequired('Pending ingestion requires explicit recovery: ' + row[0])

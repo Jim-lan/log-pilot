@@ -261,6 +261,20 @@ class DuckDBConnector:
                                  [event_id, record['_file_id'], json.dumps(record['_pattern'], default=str)])
             conn.execute('COMMIT')
 
+    def require_indexing_order(self, file_id=None):
+        """Do not let a newer file overtake unfinished pattern upserts."""
+        from shared.ingestion_ledger import RecoveryRequired
+        with self._get_connection() as conn:
+            exists = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name='ingestion_outbox_v1'").fetchone()
+            if not exists:
+                return
+            if file_id is None:
+                pending = conn.execute('SELECT file_id FROM ingestion_outbox_v1 WHERE NOT done LIMIT 1').fetchone()
+            else:
+                pending = conn.execute('SELECT file_id FROM ingestion_outbox_v1 WHERE NOT done AND file_id != ? LIMIT 1', [file_id]).fetchone()
+            if pending:
+                raise RecoveryRequired('Pending pattern indexing requires recovery: ' + pending[0])
+
     def pending_ingestion_patterns(self, file_id):
         with self._get_connection() as conn:
             return conn.execute('SELECT event_id,payload FROM ingestion_outbox_v1 WHERE file_id=? AND NOT done ORDER BY event_id', [file_id]).fetchall()

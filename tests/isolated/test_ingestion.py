@@ -317,3 +317,52 @@ class IngestionContracts(unittest.TestCase):
         self.worker.llm_client.generate.assert_not_called()
         self.worker.kb.upsert_document_card.assert_not_called()
         self.assertEqual(self.destination.read_text(), 'preserve existing file')
+
+    def test_pending_log_blocks_newer_pattern_until_recovered(self):
+        from shared.ingestion_ledger import RecoveryRequired
+        raw = self.source.read_bytes()
+        self.worker.parse_log.return_value.context = {'template_id': '1', 'template_str': 'old pattern'}
+        self.worker.kb.upsert_logs.side_effect = RuntimeError('outage')
+        with self.assertRaises(RuntimeError):
+            self.worker.process_file(str(self.source), str(self.destination))
+        newer = self.source.with_name('newer.log')
+        newer.write_text('newer event\n')
+        with self.assertRaises(RecoveryRequired):
+            self.worker.process_file(str(newer), str(self.destination.with_name('newer.log')))
+        self.assertTrue(newer.exists())
+        self.assertEqual(self.worker.db.query('SELECT count(*) FROM logs'), [(1,)])
+        with self.assertRaises(RecoveryRequired):
+            self.worker.ledger.require_recovered()
+        self.source.write_bytes(raw)
+        self.worker.kb.upsert_logs.side_effect = None
+        self.worker.process_file(str(self.source), str(self.destination), replay=True)
+        self.worker.ledger.require_recovered()
+        self.worker.db.require_indexing_order()
+        self.worker.parse_log.return_value.context['template_str'] = 'new pattern'
+        self.worker.process_file(str(newer), str(self.destination.with_name('newer.log')))
+        self.assertEqual(self.worker.db.query('SELECT count(*) FROM logs'), [(2,)])
+        self.assertEqual(self.worker.kb.upsert_logs.call_args.args[0][0].body, 'new pattern')
+
+    def test_incomplete_claim_without_outbox_blocks_new_claim_and_oldest_replay_wins(self):
+        from shared.ingestion_ledger import RecoveryRequired
+        import sqlite3
+        self.worker.ledger.claim('older', 'older.log', protocol=2)
+        with self.assertRaises(RecoveryRequired):
+            self.worker.ledger.claim('newer', 'newer.log', protocol=2)
+        # Simulate historical claims created before the ordering guard existed.
+        with sqlite3.connect(self.worker.ledger.path) as conn:
+            conn.execute("INSERT INTO files(fingerprint,name,state,protocol) VALUES ('newer','newer.log','failed',2)")
+        with self.assertRaises(RecoveryRequired):
+            self.worker.ledger.claim('newer', 'newer.log', protocol=2, replay=True)
+        self.assertTrue(self.worker.ledger.claim('older', 'older.log', protocol=2, replay=True))
+
+    def test_orphaned_pending_outbox_blocks_startup_and_other_file(self):
+        from shared.ingestion_ledger import RecoveryRequired
+        record = self.worker.parse_log.return_value.model_dump()
+        self.worker.db.persist_ingestion_batch([{**record, '_event_id': 'orphan:1', '_file_id': 'orphan',
+            '_pattern': {'body': 'old pattern'}}])
+        with self.assertRaises(RecoveryRequired):
+            self.worker.db.require_indexing_order()
+        with self.assertRaises(RecoveryRequired):
+            self.worker.process_file(str(self.source), str(self.destination))
+        self.assertTrue(self.source.exists())

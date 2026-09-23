@@ -260,3 +260,7 @@ Local result: all 16 document and 14 log worker crash cases passed, including th
 ## R05 bounded directory intake (2026-09-23)
 
 113 backend contracts pass locally and in isolated Docker. Four new contracts exercise queue saturation/eventual drain, atomic handoff and empty files, collision preservation, restart and vanished paths, configuration limits and idle shutdown. The adapter replaces both application and watcher-event accumulation with bounded directory polling. The data directory remains the durable backlog; disk quotas/operational saturation remain later gates.
+
+## R07 recovery ordering (2026-09-23)
+
+116 backend tests pass locally and in isolated Docker. All 14 abrupt log-worker boundary cases still recover under the new guards. New tests reject newer work while earlier claims/pattern upserts remain, require oldest-claim replay and expose orphaned pending outbox work. R05 passed [CI run 35875520605](https://github.com/Jim-lan/log-pilot/actions/runs/35875520605). R07 precedes R06 because automatic retry depends on enforced ordering.
