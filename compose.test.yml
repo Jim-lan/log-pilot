@@ -21,6 +21,7 @@ services:
       - ./services/evaluation_service/src:/workspace/services/evaluation_service/src:ro
       - ./services/ingestion-worker/src:/workspace/services/ingestion-worker/src:ro
       - ./services/mcp_server/src:/workspace/services/mcp_server/src:ro
+      - ./services/sentry/src:/workspace/services/sentry/src:ro
       - ./scripts/run_isolated_tests.py:/workspace/scripts/run_isolated_tests.py:ro
       - ./tests/test_parser_formats.py:/workspace/tests/test_parser_formats.py:ro
       - ./tests/integration:/workspace/tests/integration:ro

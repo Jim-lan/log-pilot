@@ -73,6 +73,8 @@ sequenceDiagram
     W->>F: Move to processed directory
 ```
 
+Drain3 owns the serialization format for template snapshots. Explicit saves must use its native snapshot API so reload restores the complete mining tree, template identities and counts. A restart contract uses real pinned Drain3 in disposable storage. This is not a cross-store transaction or a power-loss durability guarantee.
+
 The transaction/outbox flow applies to protocol-2 logs. Event identity combines file fingerprint and physical line number. Replay skips committed records before parsing/mining, then drains pending indexing work. A crash after vector upsert can repeat the same stable-ID upsert. A failed final file move can retry without duplicating completed work. Identical completed content deduplicates even if renamed.
 
 SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Ledger/outbox guards now enforce recovery of older pending log work before admitting newer pattern versions; ordinary startup refuses unresolved log recovery. Pending path memory is bounded through directory polling; distributed leases and legacy vector reconciliation remain future work. See [full recovery protocol](ingestion_recovery.md).
@@ -81,7 +83,7 @@ SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay lock
 
 Evaluation persists the complete case roster before execution and records passed, failed, error or unscored cases. Exact rows/answers and separate retrieval/citation dimensions replace keyword-only success claims. Failed requests remain in the denominator; latency is measured by the client. Metrics use a real UTC 24-hour window and distinguish unavailable from zero. Dataset hashes and per-request template/model provenance support comparison. Interrupted background runs can remain pending; durable runner resumption is not implemented.
 
-Sentry polls every 10 seconds. It compares the last minute's ERROR/CRITICAL/FATAL count with the preceding five-minute average, using ratio 1.15 and more than five current errors; zero baseline becomes 0.5. A global 60-second cooldown limits alerts. This is a global heuristic, not a learned per-service anomaly model.
+Sentry polls every 10 seconds. Both query windows share one UTC observation time: current `(now−1 minute, now]` and baseline `(now−6 minutes, now−1 minute]`; future timestamps are excluded. It compares the last minute's ERROR/CRITICAL/FATAL count with the preceding five-minute average, using ratio 1.15 and more than five current errors; zero baseline becomes 0.5. A global 60-second cooldown limits alerts. This is a global heuristic, not a learned per-service anomaly model.
 
 ## Boundaries still to establish
 

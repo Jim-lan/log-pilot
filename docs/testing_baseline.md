@@ -275,4 +275,11 @@ Local result: all 16 document and 14 log worker crash cases passed, including th
 
 ## R09 conservative retention checkpoint (2026-09-24)
 
-134 backend contracts pass locally and in Docker. Six new contracts cover monotonic first/last activity, recent replay, exact cutoff equality, explicit UTC normalization, unknown/invalid legacy metadata and bounded non-deleting reports. Real Chroma/LlamaIndex checks pass for updated activity metadata and restart/replay; a separate retention smoke verifies active/unknown-age records remain and the production deletion entry point raises. R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 remote verification follows its push.
+134 backend contracts pass locally and in Docker. Six new contracts cover monotonic first/last activity, recent replay, exact cutoff equality, explicit UTC normalization, unknown/invalid legacy metadata and bounded non-deleting reports. Real Chroma/LlamaIndex checks pass for updated activity metadata and restart/replay; a separate retention smoke verifies active/unknown-age records remain and the production deletion entry point raises. R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 passed [CI run 36001628001](https://github.com/Jim-lan/log-pilot/actions/runs/36001628001) for `e42756d`.
+
+
+## Q01 feature coverage checkpoint (2026-09-24)
+
+The [coverage map](feature_contract_coverage.md) assigns protected features to maintained checks and explicit remaining tasks, and triages historical scripts without running them against application data. The clean rebuilt backend image passes **138 tests, zero failures/errors/skips**. Sentry fixtures use real temporary DuckDB and a controlled UTC clock to verify quiet/future events, strict ratio/window boundaries, minimum counts, cooldown and dismissal. Real Drain3 0.9.11 verifies template generalization and repeated save/reload identity/count preservation. The new miner test first failed against the old explicit serializer, then passed with the native snapshot repair. No existing application snapshots were read or changed.
+
+Commands: `docker compose -f compose.test.yml build baseline`, then `docker compose -f compose.test.yml run --rm --no-deps baseline`. Install the updated `tests/isolated/requirements.txt` before running the local virtual-environment suite. Remote CI verification follows this checkpoint commit.

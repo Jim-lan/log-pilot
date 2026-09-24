@@ -2,17 +2,17 @@ import sys
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 # Add project root to path to reuse shared modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from shared.db.duckdb_client import DuckDBConnector
-from shared.llm.client import LLMClient
 
 class SentryService:
-    def __init__(self):
+    def __init__(self, clock=time.time):
+        self.clock = clock
         self.db = DuckDBConnector()
         # Initialize alerts schema just in case
         self.db._init_alerts_schema()
@@ -33,45 +33,29 @@ class SentryService:
             time.sleep(self.check_interval)
 
     def check_anomalies(self):
-        conn = self.db._get_connection()
-        
-        # 1. Get error count for last window (e.g., last 1 minute for demo)
-        now_query = """
-            SELECT COUNT(*) 
-            FROM logs 
-            WHERE 
-                timestamp > (NOW() - INTERVAL 1 MINUTE)
-                AND severity IN ('ERROR', 'CRITICAL', 'FATAL')
-        """
-        current_errors = conn.execute(now_query).fetchone()[0]
-        
-        # 2. Get baseline (previous 5 minutes avg)
-        baseline_query = """
-            SELECT COUNT(*) / 5.0
-            FROM logs 
-            WHERE 
-                timestamp > (NOW() - INTERVAL 6 MINUTE)
-                AND timestamp <= (NOW() - INTERVAL 1 MINUTE)
-                AND severity IN ('ERROR', 'CRITICAL', 'FATAL')
-        """
-        avg_errors = conn.execute(baseline_query).fetchone()[0]
-        conn.close()
-        
-        # Avoid division by zero
+        now = self.clock()
+        as_of = datetime.fromtimestamp(now, timezone.utc).replace(tzinfo=None)
+        # One explicit UTC observation time bounds both windows and excludes future events.
+        with self.db._get_connection() as conn:
+            current_errors = conn.execute("""
+                SELECT COUNT(*) FROM logs
+                WHERE timestamp > (? - INTERVAL 1 MINUTE) AND timestamp <= ?
+                  AND severity IN ('ERROR', 'CRITICAL', 'FATAL')
+            """, [as_of, as_of]).fetchone()[0]
+            avg_errors = conn.execute("""
+                SELECT COUNT(*) / 5.0 FROM logs
+                WHERE timestamp > (? - INTERVAL 6 MINUTE)
+                  AND timestamp <= (? - INTERVAL 1 MINUTE)
+                  AND severity IN ('ERROR', 'CRITICAL', 'FATAL')
+            """, [as_of, as_of]).fetchone()[0]
         if avg_errors == 0:
-            avg_errors = 0.5 # Minimum baseline
-            
+            avg_errors = 0.5
         ratio = current_errors / avg_errors
-        
-        print(f"🔍 Scan: Current={current_errors} | Avg={avg_errors:.2f} | Ratio={ratio:.2f}")
-        
+        print(f"Scan: Current={current_errors} | Avg={avg_errors:.2f} | Ratio={ratio:.2f}")
         if ratio > self.threshold_ratio and current_errors > 5:
-            # Check cooldown
-            if time.time() - self.last_alert_time > self.alert_cooldown:
+            if now - self.last_alert_time > self.alert_cooldown:
                 self.trigger_alert(current_errors, avg_errors)
-                self.last_alert_time = time.time()
-            else:
-                print(f"⏳ Cooldown active. Skipping alert.")
+                self.last_alert_time = now
 
     def trigger_alert(self, current, avg):
         print("🚨 ANOMALY DETECTED! Triggering Alert...")
@@ -88,7 +72,7 @@ class SentryService:
         conn.execute("""
             INSERT INTO alerts (id, timestamp, severity, service, message, analysis, is_read)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (alert_id, datetime.now(), 'critical', service, message, analysis, False))
+        """, (alert_id, datetime.fromtimestamp(self.clock(), timezone.utc).replace(tzinfo=None), 'critical', service, message, analysis, False))
         conn.close()
         
         print(f"✅ Alert {alert_id} saved.")

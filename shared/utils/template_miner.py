@@ -37,8 +37,5 @@ class LogTemplateMiner:
         return len(self.miner.drain.clusters)
 
     def save_state(self):
-        """Saves the current state to disk."""
-        import pickle
-        # Convert clusters to list if it's a view, then pickle
-        state = pickle.dumps(list(self.miner.drain.clusters))
-        self.persistence.save_state(state)
+        """Persist the complete tree using Drain3's matching save/load format."""
+        self.miner.save_state("explicit snapshot")

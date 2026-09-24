@@ -26,6 +26,7 @@ The frontend uses vanilla JavaScript with Nginx; the backend uses Python/FastAPI
 | [API reference](docs/api_reference.md) | Query, history, alerts, evaluation and MCP contracts |
 | [Security/deployment](docs/security_deployment.md) | Existing safeguards and shared-pilot gates |
 | [Enterprise roadmap](docs/enterprise_roadmap.md) | Detailed phased implementation and learning plan |
+| [Feature coverage](docs/feature_contract_coverage.md) | Protected contracts, legacy test disposition and remaining verification gates |
 | [Verification history](docs/testing_baseline.md) | Reproducible commands and revision-specific evidence |
 
 Focused designs: [request budgets](docs/request_budgets.md), [SQL policy](docs/sql_execution_policy.md), [rendering/privacy](docs/rendering_and_privacy.md), [evaluation](docs/evaluation_contract.md), [ingestion recovery](docs/ingestion_recovery.md).

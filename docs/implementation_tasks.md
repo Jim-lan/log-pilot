@@ -8,7 +8,7 @@ Already implemented: bounded query orchestration, initial rendering/redaction co
 
 Recorded baseline evidence is 98 backend tests, six browser contracts and transaction-crash checks. The separate real-vector smoke used an existing image. These are historical results for the baseline, not new tests run on 2026-09-23. Full-stack readiness and live-model quality remain unproven.
 
-**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 passed CI and R05 bounded intake passed CI. R07 ordering passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 passed [CI run 36000418863](https://github.com/Jim-lan/log-pilot/actions/runs/36000418863). R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 retention semantics pass local verification; next is Q01 feature-contract coverage review.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
+**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 passed CI and R05 bounded intake passed CI. R07 ordering passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 passed [CI run 36000418863](https://github.com/Jim-lan/log-pilot/actions/runs/36000418863). R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 passed [CI run 36001628001](https://github.com/Jim-lan/log-pilot/actions/runs/36001628001). Q01 passes 138 isolated Docker contracts; next is Q02 isolated multi-turn evaluation.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
 
 The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
@@ -46,7 +46,7 @@ R02 changes the ingestion design; it must preserve compatibility with already ac
 
 | Done | ID | Task | Completion evidence / dependency |
 |---|---|---|---|
-| [ ] | Q01 | Close core feature coverage gaps and triage legacy test harnesses | Map each protected feature to a passing test or explicit open task; preserve SQL, RAG, history, alert and failure behavior |
+| [x] | Q01 | Close core feature coverage gaps and triage legacy test harnesses | Map each protected feature to a passing test or explicit open task; preserve SQL, RAG, history, alert and failure behavior |
 | [ ] | Q02 | Add isolated multi-turn evaluation conversations | Evaluation turns share only their own context; follow-up/history cases pass without touching ordinary user history |
 | [ ] | Q03 | Expand held-out fixtures with expected rows, source facts and adversarial/unknown cases | Wrong answers, empty results, fabricated evidence and dependency errors are distinguishable; dataset split/version recorded |
 | [ ] | Q04 | Define and test citation coverage, support and web evidence attribution | Depends R02/Q03; valid-ID-but-unsupported claims fail the relevant score; missing citations and web sources handled explicitly |

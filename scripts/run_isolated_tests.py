@@ -13,7 +13,7 @@ from importlib.metadata import version
 ROOT = Path(__file__).resolve().parents[1]
 TEST_FILES = ("tests/test_parser_formats.py", "tests/isolated/test_environment.py",
               "tests/isolated/test_api_mcp.py", "tests/isolated/test_graph.py",
-              "tests/isolated/test_budgets.py", "tests/isolated/test_privacy.py", "tests/isolated/test_evaluation.py", "tests/isolated/test_sql_policy.py", "tests/isolated/test_ingestion.py", "tests/isolated/test_document_identity.py", "tests/isolated/test_file_intake.py", "tests/isolated/test_reconciliation.py", "tests/isolated/test_pattern_retention.py")
+              "tests/isolated/test_budgets.py", "tests/isolated/test_privacy.py", "tests/isolated/test_evaluation.py", "tests/isolated/test_sql_policy.py", "tests/isolated/test_ingestion.py", "tests/isolated/test_document_identity.py", "tests/isolated/test_file_intake.py", "tests/isolated/test_reconciliation.py", "tests/isolated/test_pattern_retention.py", "tests/isolated/test_sentry.py", "tests/isolated/test_template_miner.py")
 
 
 def install_guards(scratch):
