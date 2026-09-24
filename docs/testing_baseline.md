@@ -272,3 +272,7 @@ Local result: all 16 document and 14 log worker crash cases passed, including th
 ## R08 legacy reconciliation tooling (2026-09-24)
 
 128 backend tests pass locally and in Docker. Pure planner contracts distinguish identical/conflicting legacy text, map stable pattern identities, expose missing/mismatched/unjournaled cards and reject incomplete/oversized inventories. A real Chroma integration test inspects a second disposable copy, verifies original snapshot bytes are unchanged, checks deterministic CLI output and refuses output overwrite/symlink inputs. No real application data was copied, migrated or deleted. The result is a dry-run review artifact, not evidence that historical application records have been reconciled.
+
+## R09 conservative retention checkpoint (2026-09-24)
+
+134 backend contracts pass locally and in Docker. Six new contracts cover monotonic first/last activity, recent replay, exact cutoff equality, explicit UTC normalization, unknown/invalid legacy metadata and bounded non-deleting reports. Real Chroma/LlamaIndex checks pass for updated activity metadata and restart/replay; a separate retention smoke verifies active/unknown-age records remain and the production deletion entry point raises. R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 remote verification follows its push.

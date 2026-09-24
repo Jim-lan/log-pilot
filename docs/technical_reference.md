@@ -78,3 +78,5 @@ Ingestion admission uses `LOGPILOT_INGEST_QUEUE_SIZE` (default 256, 1–10,000),
 `LOGPILOT_INGEST_MAX_RETRIES` defaults to 2 (0–5), forwarded to the ingestion worker. It limits automatic retries of recognized journaled transient failures, with interruptible exponential backoff. `scripts/inspect_ingestion.py` provides bounded read-only recovery metadata without model startup. See [retry policy](ingestion_recovery.md).
 
 Legacy recovery planning uses `scripts/reconcile_ingestion_snapshot.py` against an offline copied snapshot. It opens vector storage only on a temporary second copy and produces a bounded, non-destructive report. It has no apply/delete mode; see [ADR 0002](decisions/0002-legacy-reconciliation.md).
+
+Stable pattern vectors carry versioned UTC activity fields (`first_seen_at_unix`, `last_seen_at_unix`, `last_indexed_at_unix`) and a conservative retention hold. Both latest event and latest indexing must precede a cutoff for dry-run candidacy. `Janitor.run_cleanup` now returns a review report; destructive vector cleanup is disabled pending O03/O04. These fields are vector metadata, not new SQL columns.

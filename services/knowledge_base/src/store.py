@@ -104,22 +104,12 @@ class KnowledgeStore:
         from shared.vector_upsert import upsert_document_card
         return upsert_document_card(self.collection, Settings.embed_model, payload)
 
+    def retention_candidates(self, cutoff):
+        from shared.pattern_retention import retention_report
+        return retention_report(self.collection, cutoff)
+
     def delete_older_than(self, timestamp: float):
-        """
-        Deletes logs older than the given timestamp.
-        Args:
-            timestamp: Unix timestamp (float).
-        """
-        # ChromaDB expects string values for some metadata, but let's assume we stored timestamp as float/int
-        # LogConverter stores timestamp as metadata.
-        # We use the underlying collection to delete.
-        try:
-            # Delete where timestamp < cutoff
-            # Note: ChromaDB 'where' filter syntax
-            self.collection.delete(where={"timestamp": {"$lt": timestamp}})
-            print(f"🧹 Pruned logs older than {timestamp}")
-        except Exception as e:
-            print(f"❌ Error pruning logs: {e}")
+        raise RuntimeError('Destructive retention is disabled until retention and restore gates O03/O04 pass')
 
     def query(self, query_str: str, filters: dict = None) -> str:
         """

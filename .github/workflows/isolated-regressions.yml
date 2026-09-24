@@ -65,3 +65,5 @@ jobs:
         run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/document_crash_smoke.py
       - name: Verify legacy reconciliation preserves the offline snapshot
         run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/reconciliation_smoke.py
+      - name: Verify conservative retention planning and disabled deletion
+        run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/retention_smoke.py

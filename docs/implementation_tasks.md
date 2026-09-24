@@ -8,7 +8,7 @@ Already implemented: bounded query orchestration, initial rendering/redaction co
 
 Recorded baseline evidence is 98 backend tests, six browser contracts and transaction-crash checks. The separate real-vector smoke used an existing image. These are historical results for the baseline, not new tests run on 2026-09-23. Full-stack readiness and live-model quality remain unproven.
 
-**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 passed CI and R05 bounded intake passed CI. R07 ordering passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 passed [CI run 36000418863](https://github.com/Jim-lan/log-pilot/actions/runs/36000418863). R08 dry-run tooling is locally verified; next is R09 retention semantics.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
+**R01 is verified. R02 passed [CI run 35873720364](https://github.com/Jim-lan/log-pilot/actions/runs/35873720364). R03 passed CI. R04 passed CI and R05 bounded intake passed CI. R07 ordering passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 passed [CI run 36000418863](https://github.com/Jim-lan/log-pilot/actions/runs/36000418863). R08 passed [CI run 36001066920](https://github.com/Jim-lan/log-pilot/actions/runs/36001066920). R09 retention semantics pass local verification; next is Q01 feature-contract coverage review.** Each remains a separately reviewable change. Keep existing log replay behavior protected throughout.
 
 The design-document checkpoint was committed and pushed as `f39c4c0`. The user authorized sequential implementation and automatic commit/push on 2026-09-23. Each task still requires its own verification; deployment and destructive migration are separate gates.
 
@@ -38,7 +38,7 @@ Groups are execution priorities, not instructions to postpone all security desig
 | [x] | R06 | Add bounded retry/backoff and quarantine inspection/replay workflow | 124 backend tests pass locally and in Docker; bounded transient retries, quarantine and pending-first read-only inspection; partial logs still require ordered recovery |
 | [x] | R07 | Enforce pending-work ordering and exercise shutdown/restart recovery | Ledger/outbox order guards verified with 116 backend tests and all 14 log crash cases; single-owner CLI lock retained; R05 covers idle shutdown |
 | [x] | R08 | Provide legacy ledger/vector reconciliation on copied data | Dry-run tool verified on copied synthetic legacy/current evidence: 128 backend tests and real Chroma snapshot/CLI preservation; actual historical records still require review before migration |
-| [ ] | R09 | Repair timestamp/retention semantics for active patterns | Boundary tests retain still-active templates despite old first occurrence; destructive cleanup stays disabled until O03/O04 |
+| [x] | R09 | Repair timestamp/retention semantics for active patterns | 134 backend tests and real-vector checks pass locally: monotonic UTC activity, recent replay retention, held legacy ages; cleanup is dry-run only and deletion disabled until O03/O04 |
 
 R02 changes the ingestion design; it must preserve compatibility with already acknowledged protocol-2 files. Append-only tailing and distributed ingestion are separate future adapters/topologies, not implicit promises of these tasks.
 
