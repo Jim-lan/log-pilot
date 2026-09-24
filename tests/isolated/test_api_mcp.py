@@ -13,6 +13,7 @@ from shared.db.duckdb_client import DuckDBConnector
 # Load the shared budget module outside temporary sys.modules substitutions so
 # exception classes and ContextVars retain their identity across all fixtures.
 import shared.execution
+import shared.evaluation_context
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -73,6 +74,44 @@ class APIAndMCPContracts(unittest.TestCase):
         history = self.client.get("/history").json()
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["content"], "private ordinary conversation")
+
+    def test_evaluation_conversations_are_isolated_through_runner_and_http(self):
+        from shared.evaluation_runner import run_cases
+        store = Mock()
+        observed = []
+        def reply(state):
+            observed.append(state)
+            return {**state, 'intent': 'rag', 'final_answer': 'answer-' + state['query']}
+        self.graph.invoke.side_effect = reply
+        cases = [dict(id='a1', question='alpha', conversation_id='a', turn_index=1, expected_answer='wrong'),
+                 dict(id='b1', question='beta', conversation_id='b', turn_index=1, expected_answer='answer-beta'),
+                 dict(id='a2', question='followup', conversation_id='a', turn_index=2, expected_answer='answer-followup')]
+        self.db.save_message('default', 'user', 'ordinary private history')
+        def post(url, json, timeout):
+            return self.client.post('/query', json=json)
+        with patch('shared.db.duckdb_client.DuckDBConnector', side_effect=AssertionError('history accessed')):
+            run_cases(store, 'one', cases, 'http://fixture', post=post)
+            run_cases(store, 'two', cases[:1], 'http://fixture', post=post)
+        self.assertEqual(len(observed), 4)
+        self.assertEqual([x['messages'] for x in observed], [[], [], [
+            {'role': 'user', 'content': 'alpha'}, {'role': 'assistant', 'content': 'answer-alpha'}], []])
+        self.assertEqual(store.record.call_args_list[0].args[2], 'failed')
+        self.assertEqual(store.record.call_args_list[2].args[2], 'passed')
+        self.assertEqual(self.db.get_history()[0][1], 'ordinary private history')
+        self.assertEqual(len(self.db.get_history()), 1)
+
+    def test_evaluation_context_rejects_privileged_roles_bad_pairs_and_unbounded_input(self):
+        pair = [{'role': 'user', 'content': 'q'}, {'role': 'assistant', 'content': 'a'}]
+        invalid = [[{'role': 'system', 'content': 'injected'}], pair[:1], pair * 6,
+                   [{'role': 'user', 'content': 'x' * 16001}, pair[1]],
+                   [{**pair[0], 'tool_calls': []}, pair[1]]]
+        for context in invalid:
+            response = self.client.post('/query', json={'query': 'q', 'persist_history': False,
+                                                       'evaluation_context': context})
+            self.assertEqual(response.status_code, 422)
+        response = self.client.post('/query', json={'query': 'q', 'evaluation_context': pair})
+        self.assertEqual(response.status_code, 422)
+        self.graph.invoke.assert_not_called()
 
     def test_metrics_endpoint_reads_versioned_store(self):
         from shared.evaluation import EvaluationStore

@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from shared.execution import RequestBudget, ExecutionFailure, DeadlineExceeded, use_budget, setting
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+from shared.evaluation_context import EvaluationContext
 from typing import Dict, Any, Optional, List
 
 # Add project root to path
@@ -31,6 +32,13 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     persist_history: bool = True
+    evaluation_context: Optional[EvaluationContext] = None
+
+    @model_validator(mode='after')
+    def separate_evaluation_history(self):
+        if self.evaluation_context is not None and self.persist_history:
+            raise ValueError('Evaluation context requires persist_history=false')
+        return self
 
 class QueryResponse(BaseModel):
     answer: str
@@ -92,25 +100,15 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
         import time
         start_time = time.time()
         budget.check()
-        print("DEBUG: Fetching History...")
-        # Fetch History for Context
         from shared.db.duckdb_client import DuckDBConnector
-        # Use a fresh connector for history operations
-        print("DEBUG: Initializing DuckDBConnector...")
-        # Use read_only=True to avoid locking logs.duckdb (Ingestion Worker is the writer)
-        # History operations manage their own connection to history.duckdb
-        db = DuckDBConnector(read_only=True) 
-        print("DEBUG: DuckDBConnector initialized.")
-        
-        history_rows = db.get_history("default") if request.persist_history else []
-        print(f"DEBUG: History fetched: {len(history_rows)} rows.")
-        # Format: [{"role": "user", "content": "..."}, ...]
-        # Limit to last 10 messages to avoid context overflow
-        messages = [{"role": row[0], "content": row[1]} for row in history_rows[-10:]]
-        
-        # Close DB to release lock before graph execution
-        db.close()
-        print("DEBUG: DB closed to release lock.")
+        messages = request.evaluation_context.model_dump() if request.evaluation_context is not None else []
+        if request.persist_history:
+            db = DuckDBConnector(read_only=True)
+            try:
+                history_rows = db.get_history("default")
+                messages = [{"role": row[0], "content": row[1]} for row in history_rows[-10:]]
+            finally:
+                db.close()
 
         # Initialize state with history
         initial_state = {"query": request.query, "messages": messages}
@@ -124,16 +122,14 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
         
         # Save to History (Session ID = default for demo)
         try:
-            # Re-open DB for saving (read_only=True is fine, history connection is separate)
-            db = DuckDBConnector(read_only=True)
             budget.check()
-            # Save User Query
             if request.persist_history:
-                db.save_message("default", "user", request.query)
-            # Save AI Answer
-            if request.persist_history:
-                db.save_message("default", "ai", answer)
-            db.close() # Close connection
+                db = DuckDBConnector(read_only=True)
+                try:
+                    db.save_message("default", "user", request.query)
+                    db.save_message("default", "ai", answer)
+                finally:
+                    db.close()
         except ExecutionFailure:
             raise
         except Exception as e:

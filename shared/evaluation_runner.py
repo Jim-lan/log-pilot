@@ -3,6 +3,7 @@ import time
 import json
 
 import requests
+from shared.evaluation_context import EvaluationContext, validate_cases
 from shared.evidence import cited_sources, retrieval_metrics
 
 
@@ -46,19 +47,38 @@ def score_case(case, response):
 
 
 def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.monotonic):
-    """Each case is stateless and retains failures and elapsed client latency."""
+    """Context belongs only to this run and the explicitly named conversation."""
+    conversations, blocked = {}, set()
     try:
+        validate_cases(cases)
         for case in cases:
+            conversation = case.get('conversation_id')
+            if conversation is not None and conversation in blocked:
+                store.record(run_id, case['id'], 'error', None, {}, 'prior_turn_failed')
+                continue
             started = clock()
             try:
-                result = post(api_url + '/query', json={'query': case['question'], 'persist_history': False}, timeout=125)
+                payload = {'query': case['question'], 'persist_history': False}
+                if conversation is not None:
+                    payload['evaluation_context'] = EvaluationContext.model_validate(
+                        conversations.get(conversation, [])).model_dump()
+                result = post(api_url + '/query', json=payload, timeout=125)
                 result.raise_for_status()
                 response = result.json()
                 status, reason = score_case(case, response)
                 evidence = {key: response.get(key) for key in ('answer', 'context', 'sources', 'sql', 'sql_result', 'sql_rows', 'intent', 'metadata')}
                 evidence['dimensions'] = score_dimensions(case, response)
+                if conversation is not None:
+                    context = (conversations.get(conversation, []) + [
+                        {'role': 'user', 'content': case['question']},
+                        {'role': 'assistant', 'content': response.get('answer')}])[-10:]
+                    conversations[conversation] = EvaluationContext.model_validate(context).model_dump()
+                    evidence['conversation_id'] = conversation
+                    evidence['turn_index'] = case['turn_index']
             except Exception:
                 status, reason, evidence = 'error', 'request_failed', {}
+                if conversation is not None:
+                    blocked.add(conversation)
             store.record(run_id, case['id'], status, clock() - started, evidence, reason)
         store.finish(run_id)
     except Exception:

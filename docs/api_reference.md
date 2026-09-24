@@ -10,7 +10,7 @@ Implementation baseline `4895c91`, 2026-09-17. Local API: `http://localhost:8000
 {"query":"How many ERROR logs are present?","persist_history":false}
 ```
 
-`query` is required text. `persist_history` defaults to `true`; `false` skips normal conversation history reads and writes. Default history belongs to a shared session, not an authenticated user.
+`query` is required text. `persist_history` defaults to `true`; `false` skips normal conversation history reads and writes. Default history belongs to a shared session, not an authenticated user. Optional `evaluation_context` is an array of complete alternating `user`/`assistant` messages (maximum ten, 16,000 characters each); it requires `persist_history:false`. System/tool roles, incomplete pairs and extra message fields return 422. Stateless evaluation bypasses the API history connector. This supplied context is not an authorization identity.
 
 | Response field | Contract |
 |---|---|
@@ -58,7 +58,7 @@ Metrics use a UTC 24-hour window for recent measurements, case-weighted outcomes
 | `POST /evaluate/batch` | Optional `dataset_path` and `limit`; returns started status, run ID and schema version |
 | `POST /evaluate` | Required `query`, `rewritten_query`, `rag_context`, `final_answer`; supplementary Ragas scores, or 503 if unavailable |
 
-Batch `dataset_path`, if supplied, must equal the server-configured path. `limit` must be positive and at most 1000. Invalid/unavailable datasets return 400; request validation returns 422. The selected dataset must be a nonempty list with unique string case IDs and string questions.
+Batch `dataset_path`, if supplied, must equal the server-configured path. `limit` must be positive and at most 1000. Invalid/unavailable datasets return 400; request validation returns 422. The selected dataset must contain 1–1000 cases with unique nonempty string IDs and nonempty questions. Optional `conversation_id` (1–128 characters) requires an integer `turn_index`, starting at one and advancing contiguously per conversation. Validation precedes prefix limiting. See [multi-turn semantics](evaluation_contract.md#q02-isolated-multi-turn-context-contract-v2).
 
 The complete case roster is persisted before background execution. Each case calls the orchestrator with `persist_history:false`. Started does not mean completed or passed; interrupted workers can leave pending cases. The optional Ragas judge does not determine deterministic batch pass rates. Arbitrary client filesystem paths are not accepted.
 

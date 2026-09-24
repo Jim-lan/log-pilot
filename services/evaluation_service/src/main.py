@@ -10,6 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from shared.evaluation import EvaluationStore
 from shared.evaluation_runner import run_cases
+from shared.evaluation_context import validate_cases
 
 app = FastAPI(title="LogPilot Evaluation Service")
 PILOT_API_URL = os.getenv("PILOT_API_URL", "http://pilot-orchestrator:8000")
@@ -60,21 +61,15 @@ def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="Use the configured evaluation dataset")
     try:
         raw = Path(DATASET_PATH).read_bytes()
-        cases = json.loads(raw)
-        if not isinstance(cases, list) or not cases:
-            raise ValueError()
+        cases = validate_cases(json.loads(raw))
         cases = cases[:req.limit] if req.limit else cases
-        if any(not isinstance(c.get('id'), str) or not isinstance(c.get('question'), str) for c in cases):
-            raise ValueError()
-        if len({c['id'] for c in cases}) != len(cases):
-            raise ValueError()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid or unavailable evaluation dataset")
     run_id = str(uuid.uuid4())
     store = EvaluationStore(METRICS_DB_PATH)
     store.start(run_id, [c['id'] for c in cases], {
         "dataset_sha256": hashlib.sha256(raw).hexdigest(), "limit": req.limit,
-        "contract_version": 1, "scorer": "exact_result_v1",
+        "contract_version": 2, "scorer": "exact_result_v1",
         "model_identity": "unrecorded", "prompt_version": "unrecorded"})
     background_tasks.add_task(run_cases, store, run_id, cases, PILOT_API_URL)
     return {"status": "started", "run_id": run_id, "schema_version": 1}

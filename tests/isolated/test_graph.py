@@ -103,6 +103,16 @@ class GraphContracts(unittest.TestCase):
                 result = self.graph.pilot_graph.invoke({"query": case["question"], "messages": []})
                 self.assertEqual(score_case(case, result)[0], "passed")
 
+    def test_followup_context_reaches_rewrite_and_answer_in_real_graph(self):
+        messages = [{'role': 'user', 'content': 'Count errors for fixture service'},
+                    {'role': 'assistant', 'content': 'One error for fixture service'}]
+        result = self.graph.pilot_graph.invoke({'query': 'Explain that result', 'messages': messages})
+        self.assertEqual(result['final_answer'], 'One error.')
+        for task in ('query_rewriter', 'synthesize_answer'):
+            prompt = next(prompt for name, prompt in self.calls if name == task)
+            self.assertIn('Count errors for fixture service', prompt)
+            self.assertIn('One error for fixture service', prompt)
+
     def test_template_provenance_is_request_local(self):
         from shared.execution import RequestBudget, use_budget
         first, second = RequestBudget(60, 16), RequestBudget(60, 16)

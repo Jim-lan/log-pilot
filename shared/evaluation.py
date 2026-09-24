@@ -32,7 +32,7 @@ class EvaluationStore:
         import math
         if status not in ('passed', 'failed', 'error', 'unscored'):
             raise ValueError('Invalid case status')
-        if not math.isfinite(latency) or latency < 0:
+        if latency is not None and (not math.isfinite(latency) or latency < 0):
             raise ValueError('Invalid latency')
         with duckdb.connect(self.path) as conn:
             conn.execute('BEGIN')

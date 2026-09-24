@@ -45,7 +45,7 @@ Arrows describe logical access, not isolation guarantees. Several processes moun
 
 ## Query flow and failure boundaries
 
-1. `/query` admits work to a four-slot executor per API process and creates a request budget. `persist_history:false` skips normal history reads and writes; otherwise the shared default conversation supplies recent context.
+1. `/query` admits work to a four-slot executor per API process and creates a request budget. `persist_history:false` bypasses API history storage and optionally accepts bounded evaluation context; otherwise the shared default conversation supplies recent context.
 2. The graph rewrites/routes the question to SQL, retrieval, web fallback or clarification. SQL repair, context retry and answer retry have independent bounds (3, 2 and 2).
 3. Model SQL passes the shared parser/schema/function policy and restricted DuckDB execution. An execution failure cannot be synthesized into a successful answer. Retrieval produces artifact IDs and content hashes; unknown citation IDs fail validation before a model judge.
 4. Provider boundaries apply best-effort redaction, timeouts and logical call limits. Search is disabled unless explicitly enabled. Rejected local retrieval is not retained as evidence for a web answer.
@@ -80,6 +80,8 @@ The transaction/outbox flow applies to protocol-2 logs. Event identity combines 
 SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Ledger/outbox guards now enforce recovery of older pending log work before admitting newer pattern versions; ordinary startup refuses unresolved log recovery. Pending path memory is bounded through directory polling; distributed leases and legacy vector reconciliation remain future work. See [full recovery protocol](ingestion_recovery.md).
 
 ## Evaluation and alerts
+
+Evaluation context is held by the runner per run/conversation and sent as bounded prior question/answer pairs; it never uses expected answers or ordinary user history. Failed turns block only dependent turns, retaining errors in the denominator. The context is ephemeral, not an authenticated session.
 
 Evaluation persists the complete case roster before execution and records passed, failed, error or unscored cases. Exact rows/answers and separate retrieval/citation dimensions replace keyword-only success claims. Failed requests remain in the denominator; latency is measured by the client. Metrics use a real UTC 24-hour window and distinguish unavailable from zero. Dataset hashes and per-request template/model provenance support comparison. Interrupted background runs can remain pending; durable runner resumption is not implemented.
 

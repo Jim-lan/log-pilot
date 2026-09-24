@@ -18,7 +18,7 @@ Prefer narrow, reversible changes backed by synthetic regression fixtures. Separ
 | SQL execution | Shared parser policy for model SQL and MCP; approved schema/functions, read-only restricted DuckDB, row/time/memory limits | No tenant row policy, process isolation or response byte bound |
 | Retrieval and runbooks | LlamaIndex/Chroma retrieval, log-template knowledge and Markdown topic synthesis | Original versions/whole-document input spans and durable replay now implemented for new documents; precise support spans and replacement activation remain open |
 | Evidence | Retrieved artifact IDs/content hashes; unknown citation IDs rejected before judge; evidence displayed safely | Valid ID does not prove claim entailment; mandatory citation coverage and web attribution incomplete |
-| Conversation | History serialization repairs and follow-up context; `persist_history:false` supports isolated requests | Shared default session; no user/workspace isolation or multi-turn evaluation |
+| Conversation | History serialization repairs and follow-up context; `persist_history:false` supports isolated requests | Shared default session; no user/workspace isolation; isolated multi-turn evaluation uses bounded runner-owned context |
 | Bounded orchestration | Separate SQL/context/answer retries; deadlines, provider call budgets, four active query slots per API process; typed query failures | Running synchronous work cannot be forcibly stopped; trace is a message transcript |
 | Local-first inference | Configured OpenAI-compatible chat endpoint; Ollama in Compose; external search opt-in | Model availability, hardware sizing and quality must be measured; embeddings have a separate data path |
 | Rendering and egress | Escaped plain fields, allowlisted Markdown, vendored renderer/sanitizer, best-effort PII and credential redaction | No comprehensive DLP, raw-data lifecycle or authenticated deployment |
@@ -26,7 +26,7 @@ Prefer narrow, reversible changes backed by synthetic regression fixtures. Separ
 | Log recovery | Atomic DuckDB rows/event keys/index outbox; deterministic vector upsert; explicit protocol-2 replay skips committed lines | Recover older pending files before newer pattern versions; legacy vectors/Markdown need separate migration; new documents use their own journal |
 | Alerts | Polling Sentry detects elevated global error volume and persists alerts with read acknowledgement | Heuristic global baseline; no per-service learned detector or scoped ownership |
 | MCP | Restricted SQL tool, natural-language query proxy, recent-log and schema resources | No identity/authorization; transport integration coverage remains open |
-| Evaluation | Persisted run roster, exact row/answer contracts, honest denominators, retrieval/citation dimensions, UTC metrics, dataset and request provenance | Scripted fixtures are not live-model quality; durable runner recovery and multi-turn cases remain open |
+| Evaluation | Persisted run roster, exact row/answer contracts, honest denominators, retrieval/citation dimensions, UTC metrics, dataset and request provenance | Scripted fixtures are not live-model quality; durable runner recovery remains open; multi-turn contexts are ephemeral |
 | Verification | Isolated backend Docker profile, browser contracts, pinned test dependencies, CI and abrupt transaction crash checks | Full application deployment, clean-install vector smoke and operational qualification remain open |
 
 ## Decisions and tradeoffs

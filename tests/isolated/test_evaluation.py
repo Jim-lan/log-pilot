@@ -38,6 +38,64 @@ class EvaluationContracts(unittest.TestCase):
             evidence = conn.execute("SELECT evidence FROM evaluation_cases_v1 WHERE case_id='a'").fetchone()[0]
         self.assertIn('actual source evidence', evidence)
 
+    def test_failed_turn_blocks_only_its_conversation_and_keeps_denominator(self):
+        from unittest.mock import Mock
+        from shared.evaluation_runner import run_cases
+        cases = [dict(id='a1', question='fail', conversation_id='a', turn_index=1, expected_answer='ok'),
+                 dict(id='a2', question='followup', conversation_id='a', turn_index=2, expected_answer='ok'),
+                 dict(id='b1', question='independent', conversation_id='b', turn_index=1, expected_answer='ok')]
+        self.store.start('run', [c['id'] for c in cases], {})
+        response = Mock()
+        response.json.return_value = {'answer': 'ok'}
+        post = Mock(side_effect=[RuntimeError('offline'), response])
+        run_cases(self.store, 'run', cases, 'http://fixture', post=post)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_args.kwargs['json']['evaluation_context'], [])
+        self.assertEqual(self.store.summary()['pass_rate_24h'], 33.3)
+        import duckdb
+        with duckdb.connect(self.path, read_only=True) as conn:
+            self.assertEqual(conn.execute("SELECT status, latency, failure_code FROM evaluation_cases_v1 WHERE case_id='a2'").fetchone(),
+                             ('error', None, 'prior_turn_failed'))
+
+    def test_context_rolls_complete_pairs_and_never_uses_expected_answer(self):
+        from unittest.mock import Mock
+        from shared.evaluation_runner import run_cases
+        cases = [dict(id=str(i), question='q' + str(i), conversation_id='a', turn_index=i + 1,
+                      expected_answer='secret expected answer') for i in range(7)]
+        response = Mock()
+        response.json.return_value = {'answer': 'actual answer'}
+        post, store = Mock(return_value=response), Mock()
+        run_cases(store, 'run', cases, 'http://fixture', post=post)
+        context = post.call_args.kwargs['json']['evaluation_context']
+        self.assertEqual(len(context), 10)
+        self.assertEqual(context[0]['content'], 'q1')
+        self.assertEqual(context[-1]['content'], 'actual answer')
+        self.assertNotIn('secret expected answer', str(post.call_args_list))
+
+    def test_oversized_answer_blocks_followup_instead_of_silently_truncating(self):
+        from unittest.mock import Mock
+        from shared.evaluation_runner import run_cases
+        cases = [dict(id=str(i), question='q', conversation_id='c', turn_index=i + 1,
+                      expected_answer='ok') for i in range(2)]
+        response, store = Mock(), Mock()
+        response.json.return_value = {'answer': 'x' * 16001}
+        post = Mock(return_value=response)
+        run_cases(store, 'run', cases, 'http://fixture', post=post)
+        post.assert_called_once()
+        self.assertEqual(store.record.call_args_list[0].args[2], 'error')
+        self.assertEqual(store.record.call_args_list[1].args[-1], 'prior_turn_failed')
+
+    def test_dataset_rejects_broken_turn_sequences_and_duplicate_cases(self):
+        from shared.evaluation_context import validate_cases
+        first = dict(id='a', question='q', conversation_id='c', turn_index=1)
+        invalid = [[{**first, 'turn_index': 2}], [{**first, 'turn_index': True}],
+                   [{**first, 'conversation_id': None}], [first, first],
+                   [dict(id='a', question='q', turn_index=1)],
+                   [first, {**first, 'id': 'b', 'turn_index': 3}]]
+        for cases in invalid:
+            with self.assertRaises(ValueError):
+                validate_cases(cases)
+
     def test_sql_text_and_keywords_alone_do_not_claim_correctness(self):
         from shared.evaluation_runner import score_case
         self.assertEqual(score_case({'expected_keywords': ['good']}, {'answer': 'good'})[0], 'unscored')
