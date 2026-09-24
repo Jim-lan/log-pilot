@@ -26,7 +26,7 @@ Prefer narrow, reversible changes backed by synthetic regression fixtures. Separ
 | Log recovery | Atomic DuckDB rows/event keys/index outbox; deterministic vector upsert; explicit protocol-2 replay skips committed lines | Recover older pending files before newer pattern versions; legacy vectors/Markdown need separate migration; new documents use their own journal |
 | Alerts | Polling Sentry detects elevated global error volume and persists alerts with read acknowledgement | Heuristic global baseline; no per-service learned detector or scoped ownership |
 | MCP | Restricted SQL tool, natural-language query proxy, recent-log and schema resources | No identity/authorization; transport integration coverage remains open |
-| Evaluation | Persisted run roster, exact row/answer contracts, honest denominators, retrieval/citation dimensions, UTC metrics, dataset and request provenance | Scripted fixtures are not live-model quality; durable runner recovery remains open; multi-turn contexts are ephemeral |
+| Evaluation | Persisted run roster, exact row/answer contracts, honest denominators, retrieval/citation dimensions, UTC metrics, versioned dataset/split and request provenance | Scripted fixtures are not live-model quality; durable runner recovery remains open; multi-turn contexts are ephemeral |
 | Verification | Isolated backend Docker profile, browser contracts, pinned test dependencies, CI and abrupt transaction crash checks | Full application deployment, clean-install vector smoke and operational qualification remain open |
 
 ## Decisions and tradeoffs

@@ -48,6 +48,10 @@ def validate_query(sql):
                 if isinstance(source, exp.Table) and source.name.lower() not in SCHEMA:
                     raise SQLPolicyError('Only approved local tables are allowed')
         for function in tree.find_all(exp.Func):
+            # SQLGlot also models boolean connectors as Func subclasses.
+            # Their children are still visited and checked independently.
+            if isinstance(function, (exp.And, exp.Or, exp.Not)):
+                continue
             name = function.name.upper() if isinstance(function, exp.Anonymous) else function.sql_name()
             if name not in FUNCTIONS:
                 raise SQLPolicyError('SQL function is not approved: ' + name)

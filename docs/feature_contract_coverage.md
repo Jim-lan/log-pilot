@@ -6,8 +6,8 @@ Q01 checkpoint, 2026-09-24. This maps the contracts in the [roadmap](enterprise_
 
 | Protected contract | Maintained verification | Remaining work |
 |---|---|---|
-| SQL counts, grouping, time filters, duplicate rows and empty versus failed results | `tests/isolated/test_graph.py`, `quality_cases_v1.json`, `test_sql_policy.py`, `test_evaluation.py`; real LangGraph/DuckDB with scripted generation | Held-out/live-model quality Q03/Q07; tenant/process boundaries I03/D05 |
-| Runbook retrieval, citation IDs, unrelated evidence, fallback and abstention | `test_graph.py`; real vector adapter/replay integration; `test_evaluation.py` retrieval/citation scores | End-to-end relevance with actual embedding/model Q03/Q07; claim support/web attribution Q04 |
+| SQL counts, grouping, time filters, duplicate rows and empty versus failed results | `tests/isolated/test_graph.py`, `quality_cases_v1.json`, `quality_holdout_v2.json`, `test_sql_policy.py`, `test_evaluation.py`; real LangGraph/DuckDB with scripted generation | Live-model quality Q07; tenant/process boundaries I03/D05 |
+| Runbook retrieval, citation IDs, unrelated evidence, fallback and abstention | `test_graph.py`; real vector adapter/replay integration; `test_evaluation.py` retrieval/citation scores | End-to-end relevance with actual embedding/model Q07; claim support/web attribution Q04 |
 | First query, follow-up, serialized history and stateless evaluation | `test_api_mcp.py`, `test_environment.py`; temporary real databases | Isolated multi-turn runner/HTTP/graph contracts now covered; trusted user/workspace isolation I01–I04 |
 | Parsing, redaction, source identity, durable ingestion and replay | `tests/test_parser_formats.py`, `test_privacy.py`, `test_ingestion.py`, `test_document_identity.py`; log/document process-crash programs | Actual legacy-data review after R08 report; distributed ownership S06; source policies I05 |
 | Bounded intake, retries and recovery ordering | `test_file_intake.py`, `test_ingestion.py`; restart/crash integration | Capacity and disk exhaustion O01/O02; producer disk quotas not implied by memory bounds |

@@ -47,3 +47,14 @@ A flat dataset may add `conversation_id` and one-based `turn_index` to cases. Bo
 The runner owns ephemeral context per conversation and per run. It sends actual prior question/answer pairs through `evaluation_context` with `persist_history:false`; no expected answer is supplied to the model. The API accepts only alternating user/assistant pairs, at most ten messages and 16,000 characters per message. Older complete pairs are dropped. Supplying context with ordinary history enabled is rejected. Stateless requests avoid constructing a history connector entirely; graph analytics remain independent of this history contract.
 
 Wrong but successfully returned answers remain in context, so downstream evaluation measures actual error propagation. A request failure or oversized/invalid context blocks later turns only in that conversation; they are recorded as errors without making a request. Other conversations continue. Context is not a trusted identity, does not grant data access, and does not implement tenant isolation. It is discarded after execution; durable recovery remains Q06.
+
+
+## Q03 versioned fixture dataset envelope
+
+Legacy list datasets remain supported and are labeled `legacy_unpartitioned` in run provenance. A version-2 envelope records `dataset_id`, `version`, `split` (`development` or `held_out`) and `cases`; the full raw-file SHA-256 remains the content identity. Optional fixture logs and source facts support offline verification only: batch evaluation does not ingest them or send expected answers/source facts to the query API. Use the matching disposable fixture environment for quality experiments.
+
+The new synthetic held-out regression partition is separate from the original development SQL corpus. It covers explicit time boundaries, duplicated rows, unknown services, known source facts, hostile source instructions and unsupported questions. It is published in this repository and used to test scoring; it is not a secret benchmark, proof of unseen-model performance or a live quality result. Freeze its version for comparisons, record any changes, and reserve an independently reviewed dataset for Q07 model selection.
+
+Cases may require `expected_outcome` in addition to an exact answer/row contract, so an abstention cannot be mistaken for a validated answer. Dependency errors remain error cases, not successful empty results. Wrong-result and fabricated-source mutations must fail; each source-based expected answer has an explicit fixture fact. Semantic entailment beyond exact fixture answers remains Q04.
+
+The new compound-filter fixtures exposed an overly restrictive SQL function check that rejected `AND`. The policy now recognizes boolean operator nodes while continuing to reject forbidden descendant functions/tables; real graph fixtures verify that valid compound queries no longer fall into repair.

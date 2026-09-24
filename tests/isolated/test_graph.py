@@ -103,6 +103,24 @@ class GraphContracts(unittest.TestCase):
                 result = self.graph.pilot_graph.invoke({"query": case["question"], "messages": []})
                 self.assertEqual(score_case(case, result)[0], "passed")
 
+    def test_heldout_sql_fixtures_use_real_graph_and_disposable_rows(self):
+        import json
+        from datetime import datetime
+        from shared.evaluation_runner import score_case
+        fixture = json.loads((Path(__file__).parent / 'quality_holdout_v2.json').read_text())
+        self.db.query('DELETE FROM logs')
+        self.db.insert_batch([{**row, 'timestamp': datetime.fromisoformat(row['timestamp'])} for row in fixture['logs']])
+        for case in fixture['cases']:
+            if 'sql' not in case:
+                continue
+            with self.subTest(case=case['id']):
+                self.responses['sql_generator'] = case['sql']
+                result = self.graph.pilot_graph.invoke({'query': case['question'], 'messages': []})
+                self.assertEqual(score_case(case, result)[0], 'passed')
+                self.assertEqual(score_case(case, {**result, 'sql_rows': None})[0], 'failed')
+                self.assertEqual(score_case(case, {**result, 'sql_rows': [['incorrect']]})[0], 'failed')
+        self.assertEqual(self.db.query('SELECT count(*) FROM logs'), [(4,)])
+
     def test_followup_context_reaches_rewrite_and_answer_in_real_graph(self):
         messages = [{'role': 'user', 'content': 'Count errors for fixture service'},
                     {'role': 'assistant', 'content': 'One error for fixture service'}]

@@ -96,6 +96,39 @@ class EvaluationContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_cases(cases)
 
+    def test_versioned_holdout_sources_and_negative_controls(self):
+        import json
+        from shared.evaluation_dataset import load_dataset
+        from shared.evaluation_runner import score_case
+        value = json.loads((Path(__file__).parent / 'quality_holdout_v2.json').read_text())
+        cases, provenance = load_dataset(value)
+        self.assertEqual(provenance['dataset_split'], 'held_out')
+        self.assertEqual(provenance['dataset_version'], '2.0.0')
+        development = json.loads((Path(__file__).parent / 'quality_cases_v1.json').read_text())
+        self.assertFalse({c['id'] for c in cases} & {c['id'] for c in development['cases']})
+        facts = {f['fact_id']: f for f in value['source_facts']}
+        for case in cases:
+            if 'expected_answer' not in case:
+                continue
+            self.assertEqual({facts[f]['source_id'] for f in case['fact_ids']}, set(case['expected_source_ids']))
+            response = dict(answer=case['expected_answer'], sources=[{'source_id': x} for x in case['expected_source_ids']],
+                            metadata={'outcome': case['expected_outcome']})
+            self.assertEqual(score_case(case, response)[0], 'passed')
+            self.assertEqual(score_case(case, {**response, 'answer': 'Fabricated fact [source:invented]'})[0], 'failed')
+            self.assertEqual(score_case(case, {**response, 'metadata': {'outcome': 'dependency_error'}})[0], 'failed')
+            if case['expected_source_ids']:
+                self.assertEqual(score_case(case, {**response, 'sources': [{'source_id': 'unrelated'}]})[0], 'failed')
+                self.assertEqual(score_case(case, {**response, 'answer': 'Wrong fact [source:' + case['expected_source_ids'][0] + ']'})[0], 'failed')
+
+    def test_dataset_envelope_validation_preserves_legacy_compatibility(self):
+        from shared.evaluation_dataset import load_dataset
+        cases = [dict(id='a', question='q', expected_answer='ok')]
+        self.assertEqual(load_dataset(cases)[1]['dataset_split'], 'legacy_unpartitioned')
+        valid = dict(schema_version=2, dataset_id='fixture', version='1', split='held_out', cases=cases)
+        for field, value in [('schema_version', True), ('version', ''), ('dataset_id', None), ('split', 'unknown')]:
+            with self.assertRaises(ValueError):
+                load_dataset({**valid, field: value})
+
     def test_sql_text_and_keywords_alone_do_not_claim_correctness(self):
         from shared.evaluation_runner import score_case
         self.assertEqual(score_case({'expected_keywords': ['good']}, {'answer': 'good'})[0], 'unscored')
@@ -142,6 +175,18 @@ class EvaluationContracts(unittest.TestCase):
             response = client.post('/evaluate/batch', json={})
             self.assertEqual(response.status_code, 200)
             run.assert_called_once()
+            dataset.write_text(json.dumps(dict(schema_version=2, dataset_id='fixture', version='2.0.0',
+                                               split='held_out', cases=[dict(id='b', question='q', expected_answer='ok')])))
+            envelope_response = client.post('/evaluate/batch', json={})
+            self.assertEqual(envelope_response.status_code, 200)
+            import duckdb
+            with duckdb.connect(self.path, read_only=True) as conn:
+                provenance = json.loads(conn.execute('SELECT provenance FROM evaluation_runs_v1 WHERE run_id=?',
+                                                     [envelope_response.json()['run_id']]).fetchone()[0])
+            self.assertEqual(provenance['dataset_split'], 'held_out')
+            self.assertEqual(provenance['dataset_version'], '2.0.0')
+            import hashlib
+            self.assertEqual(provenance['dataset_sha256'], hashlib.sha256(dataset.read_bytes()).hexdigest())
             self.assertEqual(client.post('/evaluate/batch', json={'dataset_path': '/private/data'}).status_code, 400)
             self.assertEqual(client.post('/evaluate/batch', json={'limit': 0}).status_code, 422)
         self.assertEqual(self.store.summary()['history'][0]['status'], 'running')

@@ -38,6 +38,8 @@ def score_case(case, response):
         return 'unscored', 'missing_deterministic_expectation'
     if 'expected_intent' in case:
         checks.append(response.get('intent') == case['expected_intent'])
+    if 'expected_outcome' in case:
+        checks.append((response.get('metadata') or {}).get('outcome') == case['expected_outcome'])
     dimensions = score_dimensions(case, response)
     checks.append(dimensions['citation_validity'])
     for dimension in ('retrieval', 'citations'):

@@ -16,6 +16,14 @@ class SQLPolicyContracts(unittest.TestCase):
             with self.subTest(sql=sql):
                 self.assertTrue(validate_query(sql))
 
+    def test_boolean_conditions_preserve_policy_on_nested_expressions(self):
+        self.assertTrue(validate_query("SELECT body FROM logs WHERE service_name='cache' AND (severity='ERROR' OR NOT body='ignored')"))
+        for condition in ["severity='ERROR' AND getenv('HOME')='x'",
+                          "severity='ERROR' OR EXISTS(SELECT * FROM secret)",
+                          "NOT EXISTS(SELECT * FROM read_csv('/tmp/private'))"]:
+            with self.subTest(condition=condition), self.assertRaises(SQLPolicyError):
+                validate_query('SELECT body FROM logs WHERE ' + condition)
+
     def test_forbidden_operations_fail_closed(self):
         for sql in ["SELECT * FROM read_csv('/tmp/private')", "SELECT * FROM '/tmp/private.csv'",
                     "SELECT 1; COPY logs TO '/tmp/leak'", "ATTACH '/tmp/private' AS secret",
