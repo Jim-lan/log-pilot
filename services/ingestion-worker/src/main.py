@@ -13,7 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 
 from shared.ingestion_ledger import IngestionLedger
 from shared.document_identity import document_manifest
-from shared.document_journal import DocumentJournal
+from shared.document_journal import DocumentJournal, InvalidDocumentInput
+from shared.ingestion_retry import retryable_ingestion_failure
 from shared.log_schema import LogEvent
 from shared.db.duckdb_client import DuckDBConnector
 from shared.utils.pii_masker import PIIMasker
@@ -47,6 +48,9 @@ class LogIngestor:
         self.parser = LogParser()
         self.janitor = Janitor(self.kb) # Initialize Janitor
         self.llm_client = LLMClient()
+        self.max_ingest_retries = int(os.getenv('LOGPILOT_INGEST_MAX_RETRIES', '2'))
+        if not 0 <= self.max_ingest_retries <= 5:
+            raise ValueError('Ingestion retries must be from 0 to 5')
         self.batch_size = 5
         self.batch_buffer = []
         self.log_event_buffer = [] # Buffer for LogEvent objects
@@ -144,6 +148,7 @@ class LogIngestor:
             manifest = document_manifest('local-files', source.name, raw)
         version = manifest['version_id']
         claimed = journal.claim(manifest, raw, source, replay=replay)
+        self._input_admitted = True
         if claimed:
             try:
                 content = raw.decode('utf-8')
@@ -181,6 +186,8 @@ class LogIngestor:
                 if not destination.exists():
                     shutil.move(str(source), str(destination))
                     journal.locate(version, destination)
+                retry_source = destination if destination.exists() else source
+                self._recovery_input = (str(retry_source), version)
                 raise
         if Path(processed_path).exists():
             raise FileExistsError('Processed destination already exists')
@@ -198,6 +205,7 @@ class LogIngestor:
             raw = stream.read(8 * 1024 * 1024 + 1)
         if len(raw) > 8 * 1024 * 1024:
             raise ValueError("File exceeds the 8 MiB ingestion limit")
+        raw.decode('utf-8')  # Reject invalid text before any durable claim or accepted rows.
         if source.suffix == '.md':
             return self.process_markdown_file(source, processed_path, raw, replay=replay, document_id=document_id)
         if document_id is not None:
@@ -205,6 +213,7 @@ class LogIngestor:
         fingerprint = hashlib.sha256(source.suffix.encode() + b"\0" + raw).hexdigest()
         self.db.require_indexing_order(fingerprint)
         claimed = self.ledger.claim(fingerprint, source.name, protocol=2, replay=replay)
+        self._input_admitted = True
         self.file_fingerprint = fingerprint
         if claimed:
             try:
@@ -232,12 +241,57 @@ class LogIngestor:
                     shutil.move(str(source), str(destination))
                 self.batch_buffer.clear()
                 self.log_event_buffer.clear()
+                retry_source = destination if destination.exists() else source
+                self._recovery_input = (str(retry_source), None)
                 raise
         # If this move fails, indexed status remains durable; retry only moves
         # the identical file and does not run database/vector writes again.
         if Path(processed_path).exists():
             raise FileExistsError("Processed destination already exists")
         shutil.move(str(source), processed_path)
+
+    def process_with_retries(self, filepath, processed_path, *, wait=None):
+        """Retry known journaled transient failures; keep unknown/partial log failures visible."""
+        retries = getattr(self, 'max_ingest_retries', 2)
+        if type(retries) is not int or not 0 <= retries <= 5:
+            raise ValueError('Ingestion retries must be from 0 to 5')
+        if wait is None:
+            wait = self.consumer.stopped.wait if self.consumer is not None else lambda delay: time.sleep(delay)
+        current = filepath
+        replay = False
+        document_id = None
+        for attempt in range(retries + 1):
+            self._recovery_input = None
+            self._input_admitted = False
+            try:
+                self.process_file(current, processed_path, replay=replay, document_id=document_id)
+                return True
+            except Exception as error:
+                receipt = self._recovery_input
+                if receipt and retryable_ingestion_failure(error) and attempt < retries:
+                    delay = min(2 ** attempt, 16)
+                    print('Ingestion retry scheduled after a transient dependency failure.')
+                    if wait(delay):
+                        raise RuntimeError('Ingestion stopped with recovery pending') from None
+                    current, document_id = receipt
+                    replay = True
+                    continue
+                # Invalid input without accepted log work can be rejected independently.
+                # Do not skip partial logs: they share mutable pattern identities.
+                if ((isinstance(error, ValueError) and not self._input_admitted) or
+                        (receipt and Path(filepath).suffix == '.md' and isinstance(error, (InvalidDocumentInput, json.JSONDecodeError)))):
+                    source = Path(current)
+                    if receipt is None:
+                        if source.is_symlink() or not source.is_file() or source.suffix not in ('.log', '.md'):
+                            raise
+                        quarantine = source.parent.parent / 'quarantine'
+                        quarantine.mkdir(parents=True, exist_ok=True)
+                        import uuid
+                        shutil.move(str(source), str(quarantine / (uuid.uuid4().hex + '-' + source.name)))
+                    print('Input rejected and quarantined; no automatic retry. Inspect recovery state.')
+                    return False
+                print('Ingestion stopped; explicit recovery required. No further automatic retries.')
+                raise
 
     def run(self):
         print("🚀 Starting Ingestion Worker (Real-Time Mode)...")
@@ -251,7 +305,7 @@ class LogIngestor:
         try:
             # File Watcher Path (Logs + Markdown)
             for filepath, processed_path in self.consumer:
-                self.process_file(filepath, processed_path)
+                self.process_with_retries(filepath, processed_path)
 
             # Safe cleanup
             self.db.close()
@@ -319,8 +373,12 @@ if __name__ == "__main__":
             fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit('Another ingestion worker/replay owns this local data directory')
-        ingestor = LogIngestor(watch=not bool(args.replay))
-        if args.replay:
-            ingestor.process_file(args.replay, args.processed_file, replay=True, document_id=args.document_id)
-        else:
-            ingestor.run()
+        try:
+            ingestor = LogIngestor(watch=not bool(args.replay))
+            if args.replay:
+                ingestor.process_file(args.replay, args.processed_file, replay=True, document_id=args.document_id)
+            else:
+                ingestor.run()
+        except Exception:
+            # Provider exception text can contain endpoints or credentials.
+            raise SystemExit('Ingestion stopped. Inspect recovery metadata and preserve source files before replay.') from None

@@ -86,3 +86,5 @@ Protocol-2 log replay and journaled Markdown replay are explicit maintenance ope
 The evaluation service uses its configured dataset. POST `/evaluate/batch` with `{}` (or a valid `limit`) starts a persisted background run; it does not mean the run has passed. Requests use stateless query mode. Read API `/metrics` and the persisted run records using the [evaluation contract](docs/evaluation_contract.md); unavailable or unscored values are not zero or success.
 
 Model and request settings are documented in [technical reference](docs/technical_reference.md). Recreate affected containers when applying environment/binding changes. Do not change models, data schemas and deployment topology in one experiment; retain a comparable baseline and a recovery plan.
+
+For failed intake, run `python scripts/inspect_ingestion.py --data-dir data --limit 100` in a prepared backend environment. It reads recovery metadata without model startup or database initialization. Recognized transient ingestion failures receive at most two automatic retries by default; exhausted/unknown failures require explicit recovery. See the recovery guide before replaying.

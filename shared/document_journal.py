@@ -8,6 +8,10 @@ import sqlite3
 from shared.document_identity import document_manifest, document_span, card_identity
 
 
+class InvalidDocumentInput(ValueError):
+    """A permanent discovery/card validation failure, not a journal integrity error."""
+
+
 class DocumentJournal:
     def __init__(self, path='data/state/ingestion.sqlite3'):
         self.path = str(path)
@@ -76,7 +80,7 @@ class DocumentJournal:
         if (not isinstance(topics, list) or not 1 <= len(topics) <= 32 or
                 any(not isinstance(t, str) or not t.strip() or len(t) > 200 for t in topics) or
                 len(set(topics)) != len(topics)):
-            raise ValueError('Invalid or excessive discovered topics')
+            raise InvalidDocumentInput('Invalid or excessive discovered topics')
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
             row = conn.execute('SELECT topics,state FROM document_versions_v1 WHERE version_id=?', (version,)).fetchone()
@@ -95,7 +99,7 @@ class DocumentJournal:
 
     def save_card(self, version, ordinal, text):
         if not isinstance(text, str) or not text.strip() or len(text) > 65536:
-            raise ValueError('Invalid or excessive synthesized card')
+            raise InvalidDocumentInput('Invalid or excessive synthesized card')
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
             row = conn.execute('SELECT manifest,original,topics,state FROM document_versions_v1 WHERE version_id=?', (version,)).fetchone()

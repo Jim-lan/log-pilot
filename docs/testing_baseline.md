@@ -264,3 +264,7 @@ Local result: all 16 document and 14 log worker crash cases passed, including th
 ## R07 recovery ordering (2026-09-23)
 
 116 backend tests pass locally and in isolated Docker. All 14 abrupt log-worker boundary cases still recover under the new guards. New tests reject newer work while earlier claims/pattern upserts remain, require oldest-claim replay and expose orphaned pending outbox work. R05 passed [CI run 35875520605](https://github.com/Jim-lan/log-pilot/actions/runs/35875520605). R07 precedes R06 because automatic retry depends on enforced ordering.
+
+## R06 retry and inspection checkpoint (2026-09-24)
+
+124 backend tests pass locally and in the isolated Docker profile. New contracts verify transient recovery without regenerated cards/duplicate rows, bounded retry exhaustion/backoff, permanent invalid input isolation, interrupted backoff, conservative exception classification, and read-only inspection without raw content. Inspection orders unfinished work first and explicitly reports truncated sections. R07 passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 remote verification follows its push.

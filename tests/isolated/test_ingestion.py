@@ -366,3 +366,94 @@ class IngestionContracts(unittest.TestCase):
         with self.assertRaises(RecoveryRequired):
             self.worker.process_file(str(self.source), str(self.destination))
         self.assertTrue(self.source.exists())
+
+    def test_transient_document_retry_reuses_plan_with_bounded_backoff(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.kb.upsert_document_card.side_effect = [TimeoutError('private endpoint'), None, None]
+        delays = []
+        self.assertTrue(self.worker.process_with_retries(str(self.source), str(self.destination), wait=lambda delay: delays.append(delay)))
+        self.assertEqual(delays, [1])
+        self.assertEqual(self.worker.llm_client.generate.call_count, 3)
+        self.assertEqual(self.worker.kb.upsert_document_card.call_count, 3)
+
+    def test_retry_exhaustion_is_bounded_and_does_not_acknowledge(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.kb.upsert_document_card.side_effect = TimeoutError('private endpoint')
+        delays = []
+        with self.assertRaises(TimeoutError):
+            self.worker.process_with_retries(str(self.source), str(self.destination), wait=lambda delay: delays.append(delay))
+        self.assertEqual(delays, [1, 2])
+        self.assertEqual(self.worker.kb.upsert_document_card.call_count, 3)
+        self.assertEqual(self.worker.llm_client.generate.call_count, 2)
+        self.assertFalse(self.destination.exists())
+
+    def test_permanent_invalid_document_and_utf8_do_not_block_unrelated_input(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.llm_client.generate.side_effect = ['[]']
+        self.assertFalse(self.worker.process_with_retries(str(self.source), str(self.destination), wait=Mock()))
+        bad_log = self.source.with_name('invalid.log')
+        bad_log.write_bytes(b'\xff')
+        self.assertFalse(self.worker.process_with_retries(str(bad_log), str(self.destination.with_name('invalid.log')), wait=Mock()))
+        good_log = self.source.with_name('good.log')
+        good_log.write_text('valid event\n')
+        self.assertTrue(self.worker.process_with_retries(str(good_log), str(self.destination.with_name('good.log')), wait=Mock()))
+        self.assertEqual(self.worker.db.query('SELECT count(*) FROM logs'), [(1,)])
+
+    def test_unknown_failure_and_shutdown_do_not_retry(self):
+        journal, manifest = self.markdown_fixture()
+        self.worker.kb.upsert_document_card.side_effect = RuntimeError('unknown failure')
+        wait = Mock()
+        with self.assertRaises(RuntimeError):
+            self.worker.process_with_retries(str(self.source), str(self.destination), wait=wait)
+        wait.assert_not_called()
+        self.worker.kb.upsert_document_card.assert_called_once()
+        self.source.write_bytes(b'new independent document')
+        # A fresh source exercises interruptible backoff; the previous receipt stays intact.
+        second = self.source.with_name('second.md')
+        second.write_bytes(b'new independent document')
+        self.worker.llm_client.generate.side_effect = ['["Recovery"]', 'card']
+        self.worker.kb.upsert_document_card.side_effect = TimeoutError('dependency down')
+        with self.assertRaisesRegex(RuntimeError, 'stopped with recovery pending'):
+            self.worker.process_with_retries(str(second), str(self.destination.with_name('second.md')), wait=lambda delay: True)
+
+    def test_transient_log_retry_does_not_duplicate_rows_or_overtake_work(self):
+        self.worker.parse_log.return_value.context = {'template_id': '1', 'template_str': 'pattern'}
+        self.worker.kb.upsert_logs.side_effect = [TimeoutError('vector temporarily busy'), None]
+        self.assertTrue(self.worker.process_with_retries(str(self.source), str(self.destination), wait=lambda delay: False))
+        self.assertEqual(self.worker.db.query('SELECT count(*) FROM logs'), [(1,)])
+        self.assertEqual(self.worker.ledger.status(self.fingerprint)[0], 'indexed')
+        self.assertEqual(self.worker.parse_log.call_count, 1)
+
+    def test_recovery_inspection_is_read_only_bounded_and_excludes_content(self):
+        from shared.ingestion_inspection import inspect_ingestion
+        import json
+        missing = Path('does-not-exist')
+        self.assertEqual(inspect_ingestion(missing)['unavailable'], ['ledger_missing', 'analytics_missing'])
+        self.assertFalse(missing.exists())
+        journal, manifest = self.markdown_fixture()
+        journal.claim(manifest, self.source.read_bytes(), self.source)
+        before = Path(self.worker.ledger.path).read_bytes()
+        snapshot = inspect_ingestion('data', limit=1)
+        self.assertEqual(before, Path(self.worker.ledger.path).read_bytes())
+        self.assertEqual(len(snapshot['documents']), 1)
+        self.assertNotIn('Restart the fixture', json.dumps(snapshot))
+        self.assertNotIn('fixture.md', json.dumps(snapshot))
+        self.assertEqual(snapshot['documents'][0]['version_id'], manifest['version_id'])
+
+    def test_retry_classifier_excludes_validation_and_unknown_errors(self):
+        import sqlite3
+        from shared.execution import ProviderTimeout, CallBudgetExceeded
+        from shared.ingestion_retry import retryable_ingestion_failure
+        self.assertTrue(retryable_ingestion_failure(ProviderTimeout()))
+        self.assertTrue(retryable_ingestion_failure(sqlite3.OperationalError('database is locked')))
+        for failure in (ValueError('bad input'), RuntimeError('unknown'), CallBudgetExceeded(), sqlite3.OperationalError('corrupt database')):
+            self.assertFalse(retryable_ingestion_failure(failure))
+
+    def test_inspection_prioritizes_pending_work_and_reports_truncation(self):
+        from shared.ingestion_inspection import inspect_ingestion
+        self.worker.ledger.claim('complete', 'old.log', protocol=2)
+        self.worker.ledger.mark('complete', 'indexed')
+        self.worker.ledger.claim('pending', 'next.log', protocol=2)
+        snapshot = inspect_ingestion('data', limit=1)
+        self.assertEqual(snapshot['log_claims'][0]['fingerprint'], 'pending')
+        self.assertIn('log_claims', snapshot['truncated'])

@@ -84,3 +84,21 @@ Before admitting a new log claim, the SQLite ledger rejects any older incomplete
 This closes the restart window where a newer file could update a pattern and later be overwritten by older replay. Guards fail visibly without moving or claiming the newer input. Legacy multiple incomplete claims or orphaned jobs may require manual reconciliation on copies (R08); the worker does not guess a safe order from hash values or delete jobs. These are single-owner guards under the CLI lock, not distributed leases. The document journal uses immutable version/card IDs and rejects source replacement, so it does not share mutable log-pattern identities.
 
 R07 precedes R06 because automated retry must preserve these invariants. Tests cover newer-file refusal during vector outage, recovery followed by newer pattern acceptance, incomplete claims before any outbox exists, historical out-of-order replay and orphaned indexing jobs. Abrupt log-worker boundary checks remain applicable with the guard enabled.
+
+## R06: bounded retry and recovery inspection
+
+Normal intake retries a known journaled transient failure up to `LOGPILOT_INGEST_MAX_RETRIES` times (default 2, range 0–5) after waits of 1, 2, 4, 8 and 16 seconds as needed. Recognized failures are typed provider timeout/dependency errors, Python timeout/connection errors and SQLite busy/locked errors. Unknown exceptions, validation errors, corrupt storage and exhausted call budgets are not guessed to be transient. Each attempt resumes the exact quarantined bytes through the existing journal/outbox; generated cards and committed log rows are not regenerated. Backoff is interruptible on intake close.
+
+The limit is per admitted file in the current process. Exhaustion stops the worker with durable recovery state; restart does not reset that failure into automatic intake. Explicit replay remains a deliberate single attempt. The R07 order guard prevents retries/new work from overtaking unfinished pattern jobs.
+
+Invalid UTF-8 and other validation failures before admission are quarantined without accepting log rows. Invalid document topic/card output is a terminal rejection for automatic intake and does not prevent an unrelated source from processing. An unknown failure or a partially persisted log stops intake rather than risking shared pattern ordering. This deliberate distinction means some operator-reviewed failures still pause the single log pipeline; R06 does not promise that every malformed partially committed log can be skipped safely.
+
+Inspect a stopped worker's metadata without initializing models or creating missing databases:
+
+```sh
+python scripts/inspect_ingestion.py --data-dir data --limit 100
+```
+
+The bounded JSON report contains file fingerprints, document version IDs, states/failure codes and pending pattern counts. It excludes original bytes, card text, file locations and exception messages. Missing/unreadable stores are explicitly unavailable, not empty successful recovery. Unfinished ledger records sort before completed records, and `truncated` identifies sections exceeding the requested limit. Results are limited per section; this is an inspection tool, not a globally atomic live snapshot or repair command. Existing explicit replay commands above remain the mutation path.
+
+The CLI suppresses uncaught provider exception details at its final failure boundary and prints a recovery instruction. This does not sanitize all pre-existing application logs; the complete diagnostics policy remains I05/D06. Replay receipts are kept only in memory during automatic backoff; durable journals and quarantine files survive process exit and are the basis of subsequent explicit recovery.
