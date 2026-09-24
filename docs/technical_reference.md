@@ -76,3 +76,5 @@ Current recorded evidence at the baseline is 98 backend tests and six browser co
 Ingestion admission uses `LOGPILOT_INGEST_QUEUE_SIZE` (default 256, 1–10,000), forwarded by main Compose to `ingestion-worker`. Directory polling bounds pending paths; overflow stays in the landing directory. This is separate from the API query-worker limit.
 
 `LOGPILOT_INGEST_MAX_RETRIES` defaults to 2 (0–5), forwarded to the ingestion worker. It limits automatic retries of recognized journaled transient failures, with interruptible exponential backoff. `scripts/inspect_ingestion.py` provides bounded read-only recovery metadata without model startup. See [retry policy](ingestion_recovery.md).
+
+Legacy recovery planning uses `scripts/reconcile_ingestion_snapshot.py` against an offline copied snapshot. It opens vector storage only on a temporary second copy and produces a bounded, non-destructive report. It has no apply/delete mode; see [ADR 0002](decisions/0002-legacy-reconciliation.md).

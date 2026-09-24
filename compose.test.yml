@@ -43,4 +43,5 @@ services:
       - ./shared:/workspace/shared:ro
       - ./tests/integration:/workspace/tests/integration:ro
       - ./services/ingestion-worker/src:/workspace/services/ingestion-worker/src:ro
+      - ./scripts/reconcile_ingestion_snapshot.py:/workspace/scripts/reconcile_ingestion_snapshot.py:ro
     entrypoint: ["python", "-B", "/workspace/tests/integration/vector_upsert_smoke.py"]

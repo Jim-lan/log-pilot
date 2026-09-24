@@ -63,3 +63,5 @@ jobs:
         run: docker compose -f compose.test.yml run --rm --no-deps vector
       - name: Verify abrupt document ingestion boundaries
         run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/document_crash_smoke.py
+      - name: Verify legacy reconciliation preserves the offline snapshot
+        run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python vector -B /workspace/tests/integration/reconciliation_smoke.py

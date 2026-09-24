@@ -102,3 +102,19 @@ python scripts/inspect_ingestion.py --data-dir data --limit 100
 The bounded JSON report contains file fingerprints, document version IDs, states/failure codes and pending pattern counts. It excludes original bytes, card text, file locations and exception messages. Missing/unreadable stores are explicitly unavailable, not empty successful recovery. Unfinished ledger records sort before completed records, and `truncated` identifies sections exceeding the requested limit. Results are limited per section; this is an inspection tool, not a globally atomic live snapshot or repair command. Existing explicit replay commands above remain the mutation path.
 
 The CLI suppresses uncaught provider exception details at its final failure boundary and prints a recovery instruction. This does not sanitize all pre-existing application logs; the complete diagnostics policy remains I05/D06. Replay receipts are kept only in memory during automatic backoff; durable journals and quarantine files survive process exit and are the basis of subsequent explicit recovery.
+
+## R08: copied-data legacy reconciliation
+
+[ADR 0002](decisions/0002-legacy-reconciliation.md) defines a non-destructive reconciliation report for old protocol-1 claims and random-ID vectors. Stop writers and prepare a consistent offline data snapshot using the operator's backup procedure; copying live databases is not a verified backup. The tool refuses the repository's application data directory and its ancestors/descendants. It then opens Chroma only on a second disposable working copy, since even a client inspection can initialize internal state.
+
+In an environment with the tested Chroma dependency set:
+
+```sh
+python scripts/reconcile_ingestion_snapshot.py --snapshot-dir /path/to/offline-data-copy --report-file /path/to/new-reconciliation-report.json
+```
+
+Both paths are placeholders. The report must be outside the supplied snapshot and application data, and must not already exist. Snapshot size is capped at 512 MiB / 100,000 files; each record category is capped at 100,000. Missing stores, incomplete inventories, changed source bytes and symlinks fail instead of producing a successful partial report. Larger snapshots need a separately reviewed scalable inspection workflow.
+
+The report preserves a snapshot fingerprint and identifies candidate stable pattern mappings, duplicate versus conflicting text, missing/mismatched/unjournaled document vectors, unknown vectors and legacy claims requiring review. Free-form vector IDs are represented by hashes; an operator can resolve those hashes against the preserved copied inventory. Raw source/card text and source filenames are omitted. Document comparisons establish text equality only, not source authenticity, ownership or semantic support.
+
+This is reconciliation planning, not an apply operation. No vector is deleted, ledger state changed or claim acknowledged. Candidate duplicates can still belong to different sources; conflicting records cannot be assigned a reliable newest version from incomplete metadata. Keep the original copy/report as rollback evidence and resolve ambiguous records before designing an approved migration. R08 tooling is testable with synthetic copies; actual historical records remain unreconciled until a reviewed real snapshot is supplied. No application data was copied or migrated during these tests.

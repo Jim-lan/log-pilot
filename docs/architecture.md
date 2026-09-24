@@ -90,3 +90,5 @@ No authenticated users, tenant authorization, isolated conversations or producti
 Document recovery is being extended through [ADR 0001](decisions/0001-document-identity.md). New Markdown ingestion now uses its identity/span helper and journals original bytes, the topic plan and immutable card payloads in SQLite before stable-ID vector writes. First-version ingestion and same-version replay are supported; replacement versions and legacy records require review. Whole-document source spans do not prove claim-level support.
 
 Normal intake now retries recognized transient journaled failures with a bounded backoff (default two retries). Permanent unadmitted inputs and invalid document output are quarantined; unknown/partially persisted log failures stop the serialized log pipeline. Read-only recovery inspection avoids loading models. See [retry and inspection semantics](ingestion_recovery.md).
+
+Legacy ledger/vector reconciliation now has a copied-snapshot dry-run tool ([ADR 0002](decisions/0002-legacy-reconciliation.md)). It maps evidence and reports conflicts without modifying original stores; no live migration or automatic legacy ownership assignment is implied.

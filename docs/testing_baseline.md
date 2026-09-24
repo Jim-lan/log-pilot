@@ -267,4 +267,8 @@ Local result: all 16 document and 14 log worker crash cases passed, including th
 
 ## R06 retry and inspection checkpoint (2026-09-24)
 
-124 backend tests pass locally and in the isolated Docker profile. New contracts verify transient recovery without regenerated cards/duplicate rows, bounded retry exhaustion/backoff, permanent invalid input isolation, interrupted backoff, conservative exception classification, and read-only inspection without raw content. Inspection orders unfinished work first and explicitly reports truncated sections. R07 passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 remote verification follows its push.
+124 backend tests pass locally and in the isolated Docker profile. New contracts verify transient recovery without regenerated cards/duplicate rows, bounded retry exhaustion/backoff, permanent invalid input isolation, interrupted backoff, conservative exception classification, and read-only inspection without raw content. Inspection orders unfinished work first and explicitly reports truncated sections. R07 passed [CI run 35875984812](https://github.com/Jim-lan/log-pilot/actions/runs/35875984812). R06 passed [CI run 36000418863](https://github.com/Jim-lan/log-pilot/actions/runs/36000418863) for `3559ca9`.
+
+## R08 legacy reconciliation tooling (2026-09-24)
+
+128 backend tests pass locally and in Docker. Pure planner contracts distinguish identical/conflicting legacy text, map stable pattern identities, expose missing/mismatched/unjournaled cards and reject incomplete/oversized inventories. A real Chroma integration test inspects a second disposable copy, verifies original snapshot bytes are unchanged, checks deterministic CLI output and refuses output overwrite/symlink inputs. No real application data was copied, migrated or deleted. The result is a dry-run review artifact, not evidence that historical application records have been reconciled.
