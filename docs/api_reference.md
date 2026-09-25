@@ -20,7 +20,7 @@ Implementation baseline `4895c91`, 2026-09-17. Local API: `http://localhost:8000
 | `sql_result` | Legacy result text or null |
 | `sql_rows` | Structured arrays of values or null; `[]` means a successful empty result |
 | `context` | Selected retrieval/web evidence or null |
-| `sources` | Retrieved artifact records with ID, content hash, kind, title and provenance; may be empty |
+| `sources` | Retrieved artifact records with ID, content hash, kind, title and provenance; web snippets add URL/retrieval time, journaled documents add original identity/span metadata; may be empty |
 | `metadata` | Rewritten query, latency, judge feedback, outcome, retry counts, provider call counts and provenance |
 | `trace` | Serialized message transcript, possibly null; not a complete execution-event audit |
 

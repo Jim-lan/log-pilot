@@ -80,3 +80,12 @@ Ingestion admission uses `LOGPILOT_INGEST_QUEUE_SIZE` (default 256, 1–10,000),
 Legacy recovery planning uses `scripts/reconcile_ingestion_snapshot.py` against an offline copied snapshot. It opens vector storage only on a temporary second copy and produces a bounded, non-destructive report. It has no apply/delete mode; see [ADR 0002](decisions/0002-legacy-reconciliation.md).
 
 Stable pattern vectors carry versioned UTC activity fields (`first_seen_at_unix`, `last_seen_at_unix`, `last_indexed_at_unix`) and a conservative retention hold. Both latest event and latest indexing must precede a cutoff for dry-run candidacy. `Janitor.run_cleanup` now returns a review report; destructive vector cleanup is disabled pending O03/O04. These fields are vector metadata, not new SQL columns.
+
+
+Citation scoring uses reviewed `citation_claims` fixtures with exact line text and
+source ID/content hash support pairs. Evaluation contract v3 records scorer
+`exact_result_citation_v2`; missing annotations produce null support/coverage.
+The search adapter returns `{context, sources}` for attributed snippets, with
+HTTP(S) URL and UTC retrieval timestamp. Original Markdown identity/span fields
+are nested under `document_origin` on retrieved card records. See the
+[evaluation contract](evaluation_contract.md#q04-citation-support-and-web-attribution-contract-v3).

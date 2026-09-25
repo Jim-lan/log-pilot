@@ -69,7 +69,7 @@ def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTa
     store = EvaluationStore(METRICS_DB_PATH)
     store.start(run_id, [c['id'] for c in cases], {
         **dataset_provenance, "dataset_sha256": hashlib.sha256(raw).hexdigest(), "limit": req.limit,
-        "contract_version": 2, "scorer": "exact_result_v1",
+        "contract_version": 3, "scorer": "exact_result_citation_v2",
         "model_identity": "unrecorded", "prompt_version": "unrecorded"})
     background_tasks.add_task(run_cases, store, run_id, cases, PILOT_API_URL)
     return {"status": "started", "run_id": run_id, "schema_version": 1}

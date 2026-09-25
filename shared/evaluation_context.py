@@ -1,4 +1,5 @@
 """Bounded, caller-supplied evaluation context; never a storage/session identity."""
+import re
 from typing import List, Literal
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 
@@ -30,6 +31,26 @@ def validate_cases(cases):
                 or not isinstance(case.get('question'), str) or not case['question']):
             raise ValueError('Invalid or duplicate case')
         seen.add(case['id'])
+        if 'citation_claims' in case:
+            claims = case['citation_claims']
+            if not isinstance(claims, list) or not 1 <= len(claims) <= 100:
+                raise ValueError('Expected nonempty reviewed citation claims')
+            texts = set()
+            for claim in claims:
+                if (not isinstance(claim, dict) or not isinstance(claim.get('text'), str)
+                        or not claim['text'].strip() or claim['text'] != claim['text'].strip()
+                        or len(claim['text']) > 16000 or len(claim['text'].splitlines()) != 1
+                        or '[source:' in claim['text'] or claim['text'] in texts
+                        or not isinstance(claim.get('supports'), list) or not 1 <= len(claim['supports']) <= 100):
+                    raise ValueError('Invalid reviewed citation claim')
+                texts.add(claim['text'])
+                for support in claim['supports']:
+                    if (not isinstance(support, dict)
+                            or not isinstance(support.get('source_id'), str)
+                            or not re.fullmatch(r'[A-Za-z0-9_-]+', support['source_id'])
+                            or not isinstance(support.get('content_sha256'), str)
+                            or not re.fullmatch(r'[0-9a-f]{64}', support['content_sha256'])):
+                        raise ValueError('Invalid reviewed support identity')
         if 'conversation_id' in case or 'turn_index' in case:
             conversation = case.get('conversation_id')
             turn = case.get('turn_index')

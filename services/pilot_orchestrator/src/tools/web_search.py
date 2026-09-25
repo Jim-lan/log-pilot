@@ -1,3 +1,4 @@
+from shared.evidence import web_evidence
 from shared.privacy import redact_outbound
 try:
     from duckduckgo_search import DDGS
@@ -15,9 +16,9 @@ class WebSearchTool:
     def __init__(self):
         pass
         
-    def search(self, query: str, max_results: int = 5) -> str:
+    def search(self, query: str, max_results: int = 5) -> dict:
         """
-        Performs a web search and returns formatted results.
+        Performs a web search and returns attributed snippet evidence.
         """
         def request(timeout):
             if not HAS_DDGS:
@@ -29,15 +30,6 @@ class WebSearchTool:
                 raise ProviderTimeout()
             with DDGS(timeout=transport_timeout) as client:
                 results = list(client.text(redact_outbound(query), max_results=max_results))
-            if not results:
-                return "No web search results found."
-            
-            summary = ""
-            for i, r in enumerate(results):
-                summary += f"{i+1}. {r.get('title', 'No Title')}\n"
-                summary += f"   Source: {r.get('href', 'N/A')}\n"
-                summary += f"   Snippet: {r.get('body', r.get('snippet', ''))}\n\n"
-                
-            return summary.strip()
-            
+            return web_evidence(results)
+
         return invoke_provider("search", request)

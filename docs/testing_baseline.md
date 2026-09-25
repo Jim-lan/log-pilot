@@ -297,3 +297,27 @@ Blocked turns record null latency because no request occurred. Existing single-t
 The isolated Docker baseline passes **149 tests, zero failures/errors/skips**. The new seven-case synthetic held-out regression partition covers interval edges, duplicate rows, empty results, hostile text, documented source facts and unsupported questions. Four added test methods execute SQL through the real graph/DuckDB, verify scoring negative controls and manifest validation, and check boolean SQL operators without admitting forbidden nested operations. The existing batch API test now also verifies persisted dataset version/split and SHA-256. Source-fact cases test exact-answer scoring, not model entailment or embedding relevance.
 
 The first holdout run failed two compound-filter cases: SQLGlot's boolean `AND` node was incorrectly rejected by the function allowlist, allowing repair to change valid query intent. Explicit operator handling fixes these cases while retaining descendant checks. No production data or deployment was touched. Q02 passed backend, browser and vector/recovery jobs in [CI run 36034096352](https://github.com/Jim-lan/log-pilot/actions/runs/36034096352). Q03 CI follows its checkpoint commit.
+
+
+## Q04 citation support and web attribution (2026-09-25)
+
+Owner: Codex. Change based on `41db3a7`; design is the Q04 section in
+[evaluation contract](evaluation_contract.md). The standalone Docker baseline
+passed **161 tests, zero failures/errors/skips** after the final code change:
+
+```sh
+docker compose -f compose.test.yml run --rm --no-deps baseline
+```
+
+New contracts independently exercise supported and unsupported claims with valid
+IDs, missing/partial citations, duplicate/unknown claims, stale content hashes,
+web attribution, rejected-local-to-web fallback, document-origin preservation,
+and durable score recording without sending expected claims to the query API.
+The existing SQL, history, ingestion and recovery contracts remain passing.
+The host virtual environment lacks `drain3`; it could not load the full suite,
+so Docker is the verification environment for this change.
+
+No application data, storage schema or deployment was changed. Rollback reverts
+the scorer/search adapter together; retained run provenance identifies contract
+v3 and `exact_result_citation_v2`. Older evaluation rows remain unchanged.
+These checks establish exact-fixture scoring, not live-model semantic accuracy.

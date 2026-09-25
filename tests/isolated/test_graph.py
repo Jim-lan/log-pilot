@@ -54,7 +54,9 @@ class GraphContracts(unittest.TestCase):
         self.kb.retrieve.return_value = [SimpleNamespace(metadata={"type": "runbook_card", "topic": "fixture"},
                                                         get_content=lambda: "Runbook fixture evidence")]
         self.web = Mock()
-        self.web.search.return_value = "External fixture evidence"
+        from shared.evidence import web_evidence
+        self.web.search.return_value = web_evidence([{'href': 'https://fixture.invalid/runbook',
+            'title': 'Fixture', 'body': 'External fixture evidence'}])
         dependencies = {}
         for name, attr, value in [
             ("shared.llm.client", "LLMClient", lambda: self.llm),
@@ -205,6 +207,24 @@ class GraphContracts(unittest.TestCase):
         self.assertTrue(rewrites)
         self.assertIn("need fixture specifics", rewrites[0])
         self.assertEqual(result["context_retry_count"], 2)
+
+    def test_web_fallback_retains_only_attributed_web_sources(self):
+        self.responses['intent_classifier'] = 'rag'
+        self.responses['verify_context'] = '{"valid":false}'
+        source = self.web.search.return_value['sources'][0]
+        self.responses['synthesize_answer'] = 'External evidence [source:' + source['source_id'] + ']'
+        result = self.invoke()
+        self.assertEqual(result['outcome'], 'validated')
+        self.assertEqual(result['sources'], [source])
+        self.assertIn('[source:' + source['source_id'] + ']', result['web_results'])
+
+    def test_empty_attributed_search_abstains_without_synthesis(self):
+        self.responses['intent_classifier'] = 'web_search'
+        self.web.search.return_value = {'sources': [], 'context': ''}
+        result = self.invoke()
+        self.assertEqual(result['outcome'], 'dependency_error')
+        self.assertEqual(result['sources'], [])
+        self.assertEqual(self.count('synthesize_answer'), 0)
 
     def test_rejected_answers_stop_and_abstain(self):
         self.responses["validate_answer"] = '{"valid":false,"feedback":"cite fixture evidence"}'

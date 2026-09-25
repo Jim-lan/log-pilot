@@ -4,7 +4,7 @@ import json
 
 import requests
 from shared.evaluation_context import EvaluationContext, validate_cases
-from shared.evidence import cited_sources, retrieval_metrics
+from shared.evidence import cited_sources, retrieval_metrics, citation_scores, web_attribution
 
 
 def score_dimensions(case, response):
@@ -17,6 +17,8 @@ def score_dimensions(case, response):
         result['retrieval'] = retrieval_metrics(case['expected_source_ids'], sources)
     if 'expected_citation_ids' in case:
         result['citations'] = retrieval_metrics(case['expected_citation_ids'], citations)
+    result.update(citation_scores(case.get('citation_claims'), response.get('answer', ''), response.get('sources', [])))
+    result['web_attribution'] = web_attribution(response.get('sources', []), citations)
     return result
 
 
@@ -42,6 +44,10 @@ def score_case(case, response):
         checks.append((response.get('metadata') or {}).get('outcome') == case['expected_outcome'])
     dimensions = score_dimensions(case, response)
     checks.append(dimensions['citation_validity'])
+    if 'citation_claims' in case:
+        checks.extend(dimensions[name] == 1 for name in ('citation_coverage', 'citation_support'))
+    if dimensions['web_attribution'] is not None:
+        checks.append(dimensions['web_attribution'] == 1)
     for dimension in ('retrieval', 'citations'):
         if dimension in dimensions:
             checks.append(dimensions[dimension]['precision'] == 1 and dimensions[dimension]['recall'] == 1)

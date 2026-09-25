@@ -604,13 +604,11 @@ def perform_web_search(state: AgentState) -> AgentState:
     
     try:
         results = get_web_tool().search(query)
-        # The current search adapter reports failures as text rather than typed
-        # errors. Do not pass those strings to synthesis as supporting evidence.
-        if not results or results.startswith(("Web Search is unavailable", "No web search results found.",
-                                              "Error performing web search:")):
+        if not isinstance(results, dict) or not results.get('sources') or not results.get('context'):
             state["failure_reason"] = "web_search_unavailable"
             return state
-        state["web_results"] = results
+        state["web_results"] = results['context']
+        state["sources"] = results['sources']
         print("✅ Web Search Completed.")
     except Exception as e:
         print(f"❌ Web Search Failed: {e}")

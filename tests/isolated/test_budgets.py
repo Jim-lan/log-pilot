@@ -167,7 +167,8 @@ class ProviderContracts(unittest.TestCase):
             module = self.load("budget_search", "services/pilot_orchestrator/src/tools/web_search.py")
         with use_budget(self.budget):
             result = module.WebSearchTool().search("fixture password=hunter2 learner@example.com")
-        self.assertIn("evidence", result)
+        self.assertIn("evidence", result["context"])
+        self.assertEqual(result["sources"][0]["url"], "https://fixture.invalid")
         query = handle.return_value.text.call_args.args[0]
         self.assertNotIn("hunter2", query)
         self.assertNotIn("learner@example.com", query)
