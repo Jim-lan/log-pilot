@@ -22,7 +22,7 @@ Implementation baseline `4895c91`, 2026-09-17. Local API: `http://localhost:8000
 | `context` | Selected retrieval/web evidence or null |
 | `sources` | Retrieved artifact records with ID, content hash, kind, title and provenance; web snippets add URL/retrieval time, journaled documents add original identity/span metadata; may be empty |
 | `metadata` | Rewritten query, latency, judge feedback, outcome, retry counts, provider call counts and provenance |
-| `trace` | Serialized message transcript, possibly null; not a complete execution-event audit |
+| `trace` | Trace v2 request/node/provider spans: IDs, attempts, timing, outcome and sanitized failure code; no message transcript |
 
 Provenance includes template source hashes and per-call requested/returned model identifiers, temperature and available provider fingerprint. It does not include credentials or rendered prompt content. A validated outcome denotes completion of the configured validation process, not independently proven correctness.
 
@@ -36,7 +36,7 @@ The HTTP deadline defaults to 120 seconds with four active workers per API proce
 | 503 | `query_capacity_exhausted` |
 | 504 | `deadline_exceeded` or `provider_timeout` |
 
-FastAPI request validation also uses 422 with its own validation-detail shape. Unexpected errors can still return 500 with exception text; do not assume all error paths are sanitized. Consumers must handle failed requests without interpreting them as empty successful results.
+FastAPI request validation also uses 422 with its own validation-detail shape. Unexpected `/query` execution errors return 500 with a sanitized `internal_error`. Query execution errors add request ID, trace version and an event snapshot to `detail`; request-body validation keeps FastAPI’s validation shape. Consumers must handle failed requests without interpreting them as empty successful results.
 
 ## Other API routes
 

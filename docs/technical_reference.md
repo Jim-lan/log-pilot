@@ -89,3 +89,10 @@ The search adapter returns `{context, sources}` for attributed snippets, with
 HTTP(S) URL and UTC retrieval timestamp. Original Markdown identity/span fields
 are nested under `document_origin` on retrieved card records. See the
 [evaluation contract](evaluation_contract.md#q04-citation-support-and-web-attribution-contract-v3).
+
+
+`shared/tracing.py` owns trace schema v2. `RequestBudget` holds its bounded
+request-local span store; graph guards and provider invocation add nested spans.
+`/query` finalizes the root for success, abstention or error and returns a detached
+snapshot. Error responses include it in `detail`; evaluation stores it per case.
+See [execution trace semantics](request_budgets.md#q05-structured-execution-trace).

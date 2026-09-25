@@ -321,3 +321,19 @@ No application data, storage schema or deployment was changed. Rollback reverts
 the scorer/search adapter together; retained run provenance identifies contract
 v3 and `exact_result_citation_v2`. Older evaluation rows remain unchanged.
 These checks establish exact-fixture scoring, not live-model semantic accuracy.
+
+
+## Q05 structured stage events (2026-09-25)
+
+Owner: Codex. Change based on `1d8bc0c`; design is the Q05 section of
+[request budgets](request_budgets.md). Final standalone Docker baseline passed
+**168 tests, zero failures/errors/skips** using
+`docker compose -f compose.test.yml run --rm --no-deps baseline`.
+
+Coverage includes real graph repairs/provider nesting, concurrent request
+isolation, bounded/detached traces, immutable terminal root outcome, blocked
+worker timeout snapshots, API capacity/typed/internal errors and durable
+evaluation failure evidence. Trace content excludes transcripts/tool arguments
+and upstream error messages. No application data or storage schema changed.
+Rollback must restore API trace consumers together; traces identify schema v2.
+Q04 remote CI passed [run 36153021615](https://github.com/Jim-lan/log-pilot/actions/runs/36153021615).

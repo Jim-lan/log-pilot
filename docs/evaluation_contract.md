@@ -82,3 +82,13 @@ page or its authority. Evaluation checks cited web attribution separately.
 Rejected local sources are cleared on fallback. New document cards additionally
 expose their recorded original document/version/span metadata without relabeling
 whole-document derivation as claim support. No storage migration is required.
+
+
+## Q05 execution evidence
+
+Case evidence retains trace v2 request/node/provider events and request IDs.
+Typed query failures also retain the API's bounded trace snapshot and fixed
+failure code; arbitrary upstream error messages are not copied. Chat transcripts
+are no longer returned as execution traces. A timeout can leave running child
+spans in the snapshot; this is not a completed worker or durable job record.
+See [trace contract](request_budgets.md#q05-structured-execution-trace).

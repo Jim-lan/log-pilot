@@ -6,6 +6,7 @@ import math
 import os
 import threading
 import time
+from shared.tracing import RequestTrace
 
 
 class ExecutionFailure(Exception):
@@ -47,6 +48,7 @@ def setting(name, default, cast=float):
 class RequestBudget:
     def __init__(self, timeout, max_llm_calls, max_search_calls=1, clock=time.monotonic):
         self.clock = clock
+        self.trace = RequestTrace(clock)
         self.deadline = clock() + timeout
         self.limits = {"llm": max_llm_calls, "search": max_search_calls}
         self.calls = {"llm": 0, "search": 0}
@@ -117,32 +119,37 @@ def check_budget():
 def guarded_node(fn):
     @wraps(fn)
     def run(*args, **kwargs):
-        check_budget()
-        result = fn(*args, **kwargs)
-        # Legacy node handlers may catch provider exceptions. Sticky failure
-        # prevents the graph treating their fallback text as successful evidence.
-        check_budget()
-        return result
+        budget = current_budget()
+        if budget is None:
+            return fn(*args, **kwargs)
+        with budget.trace.span('node', fn.__name__) as event:
+            check_budget()
+            result = fn(*args, **kwargs)
+            # Caught provider failures must not become successful evidence.
+            check_budget()
+            budget.trace.node_result(event, fn.__name__, result)
+            return result
     return run
 
 
 def invoke_provider(kind, operation):
     budget = current_budget() or RequestBudget.from_env()
-    timeout = budget.begin_call(kind, setting(
-        "LOGPILOT_SEARCH_TIMEOUT_SECONDS" if kind == "search" else "LOGPILOT_LLM_TIMEOUT_SECONDS",
-        10 if kind == "search" else 30))
-    started = budget.clock()
-    try:
-        result = operation(timeout)
-    except ExecutionFailure as failure:
-        budget.fail(failure)
-    except Exception as error:
+    with budget.trace.span('provider', kind):
+        timeout = budget.begin_call(kind, setting(
+            "LOGPILOT_SEARCH_TIMEOUT_SECONDS" if kind == "search" else "LOGPILOT_LLM_TIMEOUT_SECONDS",
+            10 if kind == "search" else 30))
+        started = budget.clock()
+        try:
+            result = operation(timeout)
+        except ExecutionFailure as failure:
+            budget.fail(failure)
+        except Exception as error:
+            budget.check()
+            # Provider SDKs use different timeout exception types; preserve only a
+            # sanitized category, never upstream bodies, URLs or credentials.
+            failure = ProviderTimeout() if isinstance(error, TimeoutError) or "timeout" in type(error).__name__.lower() else ExecutionFailure()
+            budget.fail(failure)
         budget.check()
-        # Provider SDKs use different timeout exception types; preserve only a
-        # sanitized category, never upstream bodies, URLs or credentials.
-        failure = ProviderTimeout() if isinstance(error, TimeoutError) or "timeout" in type(error).__name__.lower() else ExecutionFailure()
-        budget.fail(failure)
-    budget.check()
-    if budget.clock() - started >= timeout:
-        budget.fail(ProviderTimeout())
-    return result
+        if budget.clock() - started >= timeout:
+            budget.fail(ProviderTimeout())
+        return result

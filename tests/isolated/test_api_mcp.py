@@ -63,7 +63,10 @@ class APIAndMCPContracts(unittest.TestCase):
         data = response.json()
         self.assertEqual((data["answer"], data["sql_result"], data["intent"]), ("One error.", "[(1,)]", "sql"))
         self.assertGreaterEqual(data["metadata"]["latency"], 0)
-        self.assertEqual(data["trace"], [])
+        self.assertEqual(data['metadata']['trace_version'], 2)
+        self.assertEqual(data['trace'][0]['kind'], 'request')
+        self.assertEqual(data['trace'][0]['outcome'], 'succeeded')
+        self.assertEqual(data['trace'][0]['request_id'], data['metadata']['request_id'])
 
     def test_evaluation_request_does_not_read_or_write_user_history(self):
         self.db.save_message("default", "user", "private ordinary conversation")
@@ -133,7 +136,8 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertEqual(second.status_code, 200, second.text)
         prior = self.graph.invoke.call_args.args[0]["messages"]
         self.assertEqual([m["content"] for m in prior], ["count errors", "One error."])
-        self.assertEqual(second.json()["trace"][0], {"type": "user", "content": "count errors"})
+        self.assertNotIn('count errors', str(second.json()['trace']))
+        self.assertNotEqual(first.json()['metadata']['request_id'], second.json()['metadata']['request_id'])
         history = self.client.get("/history")
         self.assertEqual(history.status_code, 200)
         self.assertEqual([m["content"] for m in history.json()], ["count errors", "One error.", "list them", "One error."])
@@ -154,18 +158,20 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertEqual(data["metadata"]["outcome"], "validated")
         self.assertEqual(data["metadata"]["retry_counts"], {"sql": 0, "context": 2, "answer": 0})
 
-    def test_message_object_tool_metadata_preserved(self):
+    def test_message_object_content_and_tool_arguments_excluded_from_trace(self):
         message = SimpleNamespace(type="ai", content="tool result", tool_calls=[{"name": "sql", "args": {}}])
         self.graph.invoke.return_value = {"intent": "sql", "final_answer": "Done", "messages": [message]}
         data = self.client.post("/query", json={"query": "count"}).json()
-        self.assertEqual(data["trace"][0]["tool_calls"], message.tool_calls)
+        self.assertNotIn('tool_calls', str(data['trace']))
+        self.assertNotIn('tool result', str(data['trace']))
 
-    def test_dictionary_tool_metadata_preserved(self):
+    def test_dictionary_content_and_tool_arguments_excluded_from_trace(self):
         message = {"type": "ai", "content": "tool result", "tool_calls": [{"name": "sql", "args": {}}]}
         self.graph.invoke.return_value = {"intent": "sql", "final_answer": "Done", "messages": [message]}
         response = self.client.post("/query", json={"query": "count"})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["trace"], [message])
+        self.assertNotIn('tool_calls', str(response.json()['trace']))
+        self.assertNotIn('tool result', str(response.json()['trace']))
 
     def test_only_ten_previous_messages_sent_to_graph(self):
         for i in range(12):
@@ -177,16 +183,24 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertEqual([m["content"] for m in messages], ["message-" + str(i) for i in range(2, 12)])
 
     def test_graph_error_is_not_saved_as_success(self):
-        self.graph.invoke.side_effect = RuntimeError("synthetic graph failure")
+        self.graph.invoke.side_effect = RuntimeError("password=private synthetic graph failure")
         response = self.client.post("/query", json={"query": "count"})
         self.assertEqual(response.status_code, 500)
+        self.assertNotIn('private', response.text)
+        self.assertEqual(response.json()['detail']['trace'][0]['outcome'], 'failed')
+        self.assertEqual(response.json()['detail']['code'], 'internal_error')
         self.assertEqual(self.db.get_history(), [])
 
     def test_request_deadline_returns_before_worker_and_discards_late_result(self):
         import threading
         release = threading.Event()
         self.addCleanup(release.set)
-        self.graph.invoke.side_effect = lambda state: (release.wait(1), self.sql_response(state))[1]
+        from shared.execution import guarded_node
+        @guarded_node
+        def execute_sql(state):
+            release.wait(1)
+            return self.sql_response(state)
+        self.graph.invoke.side_effect = execute_sql
         with patch.dict(os.environ, {"LOGPILOT_REQUEST_TIMEOUT_SECONDS": "0.05"}):
             response = self.client.post("/query", json={"query": "slow query"})
         self.assertEqual(response.status_code, 504, response.text)
@@ -197,6 +211,11 @@ class APIAndMCPContracts(unittest.TestCase):
         for _ in range(free_slots):
             self.api.query_slots.release()
         self.assertEqual(free_slots, self.api.query_workers - 1)
+        trace = response.json()['detail']['trace']
+        self.assertEqual(trace[0]['outcome'], 'failed')
+        self.assertEqual(trace[0]['failure_code'], 'deadline_exceeded')
+        self.assertEqual(trace[1]['outcome'], 'running')
+        self.assertIsNone(trace[1]['duration_ms'])
         release.set()
         self.api.query_executor.shutdown(wait=True)
         self.assertEqual(self.db.get_history(), [])

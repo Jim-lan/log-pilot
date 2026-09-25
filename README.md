@@ -4,7 +4,7 @@ LogPilot is a local-first AI observability prototype for asking questions about 
 
 ## Current capabilities
 
-- Bounded LangGraph orchestration with request deadlines, provider budgets, repair limits and explicit failure/abstention behavior.
+- Bounded LangGraph orchestration with request deadlines, provider budgets, repair limits and explicit failure/abstention behavior and structured execution traces.
 - Restricted DuckDB analytics shared by model-generated SQL and MCP, with structured rows for deterministic evaluation.
 - Embedded Chroma/LlamaIndex retrieval, artifact IDs/content hashes, attributed web snippets and rejection of unknown citation IDs.
 - Immutable-file ingestion with truthful acknowledgement, quarantine, transactional log event/outbox persistence and duplicate-safe protocol-2 log replay.

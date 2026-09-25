@@ -54,3 +54,31 @@ Rollback: restore the prior code/config together from the local checkpoint; no s
 ## Deterministic provider regression timing (2026-09-23)
 
 CI run 35872914196 exposed a test setup race: SDK initialization consumed the fixture's five-second wall-clock request budget before the mocked timeout. Provider tests now inject a controlled monotonic clock and assert an exact three-second remaining timeout after advancing it by two seconds. Real SDK transport and single-attempt assertions remain in place. Application deadline behavior is unchanged.
+
+## Q05 structured execution trace
+
+`/query` now returns trace schema v2: bounded request, node and provider span
+records instead of chat messages. Each record carries a generated request ID,
+unique stage ID, parent stage ID, stage name/kind, one-based attempt number,
+monotonic start offset/duration in milliseconds, outcome and a fixed failure
+code. Validation rejection differs from provider failure and final abstention.
+No prompts, answers, SQL, history, tool arguments, exception strings or hidden
+reasoning are copied into these records. Existing answer/evidence fields remain
+separate. The evaluator retains these events with the case evidence.
+
+A request stores at most 256 spans including its root; metadata reports dropped
+spans. Snapshots are detached from the worker and ordered by stage start. Typed
+failures, unexpected query failures, capacity rejection and HTTP timeout return
+request ID, trace version and events in `detail`. Invalid request bodies still
+use FastAPI validation errors before request execution. At HTTP timeout the root
+is failed but a blocked worker's spans can remain `running` with null duration;
+this is a point-in-time response, not a claim that synchronous work was killed.
+Later worker completion cannot rewrite the returned snapshot or root outcome.
+
+Tracing follows the existing request ContextVar through graph workers and uses
+locked bounded storage. Standalone graph calls still need `use_budget` to obtain
+a shared request trace. Provider attempts denied by a budget are traced but do
+not increment actual provider-call counters. This is an API contract version
+change for trace consumers; the frontend does not consume the old transcript.
+No database migration or deployment is required; roll back API and evaluator
+code together while retaining existing records with their trace version.

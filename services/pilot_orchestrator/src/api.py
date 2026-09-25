@@ -61,35 +61,47 @@ def health_check():
 @app.post("/query", response_model=QueryResponse)
 async def run_query(request: QueryRequest):
     budget = RequestBudget.from_env()
+    def failure_response(status, code, message):
+        budget.trace.finish(budget.trace.root, 'failed', code)
+        return HTTPException(status_code=status, detail={
+            'code': code, 'message': message, **budget.trace.metadata(), 'trace': budget.trace.snapshot()})
+
     if not query_slots.acquire(blocking=False):
-        raise HTTPException(status_code=503, detail={"code": "query_capacity_exhausted",
-                                                     "message": "All query workers are busy. Please retry later."})
+        raise failure_response(503, 'query_capacity_exhausted', 'All query workers are busy. Please retry later.')
 
     def work():
         try:
             with use_budget(budget):
                 return _run_query(request, budget)
         finally:
-            # A timeout does not free capacity until the synchronous work stops.
             query_slots.release()
 
     try:
         future = asyncio.get_running_loop().run_in_executor(query_executor, work)
     except Exception:
         query_slots.release()
-        raise
+        raise failure_response(500, 'internal_error', 'The query could not complete.') from None
     future.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
     try:
-        return await asyncio.wait_for(asyncio.shield(future), timeout=budget.remaining())
+        response = await asyncio.wait_for(asyncio.shield(future), timeout=budget.remaining())
+        outcome = response.metadata.get('outcome')
+        if outcome in ('insufficient_evidence', 'abstained'):
+            budget.trace.finish(budget.trace.root, 'abstained', 'insufficient_evidence')
+        elif outcome == 'dependency_error':
+            budget.trace.finish(budget.trace.root, 'failed', 'dependency_error')
+        else:
+            budget.trace.finish(budget.trace.root)
+        response.trace = budget.trace.snapshot()
+        response.metadata.update(budget.trace.metadata())
+        return response
     except asyncio.TimeoutError:
         budget.cancel()
         failure = DeadlineExceeded()
-        raise HTTPException(status_code=failure.status, detail={"code": failure.code, "message": failure.message})
+        raise failure_response(failure.status, failure.code, failure.message) from None
     except ExecutionFailure as failure:
-        raise HTTPException(status_code=failure.status, detail={"code": failure.code, "message": failure.message})
-    except asyncio.CancelledError:
-        budget.cancel()
-        raise
+        raise failure_response(failure.status, failure.code, failure.message) from None
+    except Exception:
+        raise failure_response(500, 'internal_error', 'The query could not complete.') from None
 
 
 def _run_query(request: QueryRequest, budget: RequestBudget):
@@ -137,26 +149,6 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
         
         latency = time.time() - start_time
         
-        # Extract trace from messages (identifying tool calls/outputs)
-        # LangGraph messages usually have 'type' or are BaseMessage objects
-        # We need to serialize them safely
-        trace = []
-        if "messages" in final_state:
-            for m in final_state["messages"]:
-                # Persisted history uses dictionaries; graph integrations may
-                # return message objects. Preserve both without assuming attrs.
-                if isinstance(m, dict):
-                    msg_dict = {"type": m.get("type", m.get("role", "unknown")),
-                                "content": str(m.get("content", ""))}
-                    tool_calls = m.get("tool_calls")
-                else:
-                    msg_dict = {"type": getattr(m, "type", "unknown"),
-                                "content": str(getattr(m, "content", ""))}
-                    tool_calls = getattr(m, "tool_calls", None)
-                if tool_calls:
-                    msg_dict["tool_calls"] = tool_calls
-                trace.append(msg_dict)
-        
         budget.check()
         return QueryResponse(
             answer=answer,
@@ -166,7 +158,7 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
             context=(final_state.get("web_results") if final_state.get("intent") == "web_search"
                      else final_state.get("rag_context")),
             intent=final_state.get("intent", "unknown"),
-            trace=trace,
+            trace=[],
             sources=final_state.get("sources", []),
             metadata={
                 "rewritten_query": final_state.get("rewritten_query"),

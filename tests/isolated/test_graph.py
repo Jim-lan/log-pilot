@@ -133,6 +133,24 @@ class GraphContracts(unittest.TestCase):
             self.assertIn('Count errors for fixture service', prompt)
             self.assertIn('One error for fixture service', prompt)
 
+    def test_real_graph_stage_trace_tracks_repairs_and_provider_parents(self):
+        from shared.execution import RequestBudget, use_budget
+        budget = RequestBudget(60, 16)
+        self.responses['validate_answer'] = '{"valid":false}'
+        with use_budget(budget):
+            result = self.invoke()
+        self.assertEqual(result['outcome'], 'insufficient_evidence')
+        events = budget.trace.snapshot()
+        by_id = {e['stage_id']: e for e in events}
+        synthesis = [e for e in events if e['stage'] == 'synthesize_answer']
+        self.assertEqual([e['attempt'] for e in synthesis], [1, 2, 3])
+        self.assertEqual(events[-1]['outcome'], 'abstained')
+        for event in events:
+            if event['kind'] == 'provider':
+                self.assertEqual(by_id[event['parent_stage_id']]['kind'], 'node')
+        self.assertNotIn('fixture question', str(events))
+        self.assertNotIn('One error.', str(events))
+
     def test_template_provenance_is_request_local(self):
         from shared.execution import RequestBudget, use_budget
         first, second = RequestBudget(60, 16), RequestBudget(60, 16)
