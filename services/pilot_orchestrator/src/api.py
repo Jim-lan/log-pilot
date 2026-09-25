@@ -64,7 +64,8 @@ async def run_query(request: QueryRequest):
     def failure_response(status, code, message):
         budget.trace.finish(budget.trace.root, 'failed', code)
         return HTTPException(status_code=status, detail={
-            'code': code, 'message': message, **budget.trace.metadata(), 'trace': budget.trace.snapshot()})
+            'code': code, 'message': message, **budget.trace.metadata(), 'trace': budget.trace.snapshot(),
+            'provenance': budget.provenance_snapshot()})
 
     if not query_slots.acquire(blocking=False):
         raise failure_response(503, 'query_capacity_exhausted', 'All query workers are busy. Please retry later.')
@@ -169,7 +170,7 @@ def _run_query(request: QueryRequest, budget: RequestBudget):
                 "retry_counts": {kind: final_state.get(f"{kind}_retry_count", 0)
                                  for kind in ("sql", "context", "answer")},
                 "provider_calls": dict(budget.calls),
-                "provenance": budget.provenance
+                "provenance": budget.provenance_snapshot()
             }
         )
     except ExecutionFailure:

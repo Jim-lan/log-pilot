@@ -72,23 +72,39 @@ class LLMClient:
     def _complete(self, prompt, model_name, api_base, api_key, temperature):
         from shared.privacy import redact_outbound
         prompt = redact_outbound(prompt)
+        from shared.execution import current_budget
+        budget = current_budget()
+        call = {'requested_model': model_name, 'returned_model': None,
+                'temperature': temperature, 'system_fingerprint': None, 'outcome': 'started'}
+        if budget is not None:
+            with budget.lock:
+                budget.provenance['model_calls'].append(call)
+
+        def update(**fields):
+            if budget is not None:
+                with budget.lock:
+                    call.update(fields)
+            else:
+                call.update(fields)
+
         def request(timeout):
             if token_counter and token_counter.count_tokens(prompt, model_name) > self.max_input_tokens:
                 raise ExecutionFailure()
             client = self._get_client(api_base, api_key).with_options(timeout=timeout, max_retries=0)
             response = client.chat.completions.create(
                 model=model_name, messages=[{"role": "user", "content": prompt}], temperature=temperature)
-            from shared.execution import current_budget
-            budget = current_budget()
-            if budget is not None:
-                budget.provenance['model_calls'].append({
-                    'requested_model': model_name, 'returned_model': response.model,
-                    'temperature': temperature, 'system_fingerprint': response.system_fingerprint})
+            update(returned_model=response.model, system_fingerprint=response.system_fingerprint)
             content = response.choices[0].message.content
             if not isinstance(content, str) or not content.strip():
                 raise ExecutionFailure()
             return content
-        return invoke_provider("llm", request)
+        try:
+            result = invoke_provider('llm', request)
+        except BaseException:
+            update(outcome='failed')
+            raise
+        update(outcome='completed')
+        return result
 
     def _generate_legacy(self, prompt: str, model_type: str) -> str:
         # ... (Previous implementation for backward compatibility)

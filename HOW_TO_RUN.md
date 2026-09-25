@@ -88,3 +88,11 @@ The evaluation service uses its configured dataset. POST `/evaluate/batch` with 
 Model and request settings are documented in [technical reference](docs/technical_reference.md). Recreate affected containers when applying environment/binding changes. Do not change models, data schemas and deployment topology in one experiment; retain a comparable baseline and a recovery plan.
 
 For failed intake, run `python scripts/inspect_ingestion.py --data-dir data --limit 100` in a prepared backend environment. It reads recovery metadata without model startup or database initialization. Recognized transient ingestion failures receive at most two automatic retries by default; exhausted/unknown failures require explicit recovery. See the recovery guide before replaying.
+
+
+Evaluation startup now requires exclusive ownership of the local metrics
+database's `.runner.lock` file. Stop older evaluator processes before upgrading;
+do not delete a held lock file. Restart finalizes abandoned runs as interrupted
+and preserves completed case evidence. Begin a new run to repeat interrupted
+cases; no automatic provider calls occur during recovery. See the
+[evaluation recovery contract](docs/evaluation_contract.md#q06-interrupted-runs-and-execution-provenance).

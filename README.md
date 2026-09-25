@@ -9,7 +9,7 @@ LogPilot is a local-first AI observability prototype for asking questions about 
 - Embedded Chroma/LlamaIndex retrieval, artifact IDs/content hashes, attributed web snippets and rejection of unknown citation IDs.
 - Immutable-file ingestion with truthful acknowledgement, quarantine, transactional log event/outbox persistence and duplicate-safe protocol-2 log replay.
 - Safely rendered chat/evidence, best-effort provider-boundary redaction and opt-in external search.
-- Versioned evaluation contracts, honest failure denominators, separate retrieval/citation scores, reviewed claim-support fixtures and request provenance.
+- Versioned evaluation contracts, honest failure denominators, separate retrieval/citation scores, reviewed claim-support fixtures, interrupted-run recovery and execution provenance.
 - Isolated backend/browser regression tests and GitHub CI.
 
 The frontend uses vanilla JavaScript with Nginx; the backend uses Python/FastAPI, LangGraph, DuckDB, SQLite, Chroma, LlamaIndex and Drain3. Main Compose defines eight services, including Ollama, Sentry, evaluation, MCP and a demo generator. Chroma is embedded storage, not its own Compose server.

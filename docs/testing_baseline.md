@@ -337,3 +337,29 @@ evaluation failure evidence. Trace content excludes transcripts/tool arguments
 and upstream error messages. No application data or storage schema changed.
 Rollback must restore API trace consumers together; traces identify schema v2.
 Q04 remote CI passed [run 36153021615](https://github.com/Jim-lan/log-pilot/actions/runs/36153021615).
+
+
+## Q06 interrupted evaluation recovery and provenance (2026-09-25)
+
+Owner: Codex. Change based on `1318a7c`; design is the Q06 section of
+[evaluation contract](evaluation_contract.md). Final code passed **177 isolated
+Docker tests, zero failures/errors/skips**. A separate subprocess test passed
+all four crash/lock boundaries (roster committed, one result, all results before
+run finalization, and killed live lock owner), each followed by two recoveries.
+
+```sh
+docker compose -f compose.test.yml run --rm --no-deps baseline
+docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/evaluation_crash_smoke.py
+```
+
+Tests cover transaction rollback during failed recovery, refusal to replace a
+live owner, preserved case evidence/latency, rejection of terminal-run writes,
+scorer source hashes, multiple actual model/template versions, detached failure
+provenance and status-count reconciliation. The crash test is added to backend CI.
+No live application data or schema was migrated. Stop older evaluators before
+using the new exclusive-owner startup; retain terminal records during rollback.
+Q05 remote CI passed [run 36153640669](https://github.com/Jim-lan/log-pilot/actions/runs/36153640669).
+
+Q07 preflight found no running Docker services and no listener on local Ollama
+port 11434. No model download, provider call, application startup or live quality
+claim was made. Environment/model selection remains pending.

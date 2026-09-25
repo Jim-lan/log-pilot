@@ -94,7 +94,7 @@ def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.mono
                                 and len(detail['trace']) <= 256 and detail.get('code') in FAILURE_CODES):
                             reason = detail['code']
                             evidence = {'trace': detail['trace'], 'metadata': {
-                                key: detail.get(key) for key in ('request_id', 'trace_version', 'trace_dropped')}}
+                                key: detail.get(key) for key in ('request_id', 'trace_version', 'trace_dropped', 'provenance')}}
                     except (ValueError, TypeError, AttributeError):
                         pass
                 if conversation is not None:

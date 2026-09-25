@@ -26,6 +26,9 @@ jobs:
       - name: Run backend contracts without network or app data
         run: docker compose -f compose.test.yml run --rm --no-deps baseline
 
+      - name: Verify evaluator process crash and exclusive recovery
+        run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/evaluation_crash_smoke.py
+
       - name: Verify abrupt ingestion crash boundaries
         run: docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/ingestion_crash_smoke.py
 

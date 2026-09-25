@@ -4,7 +4,7 @@
 
 The previous runner skipped request failures, looked for context in the wrong response field, discarded measured latency and wrote `eval_runs_micro` while the dashboard read `eval_runs`. Those numbers cannot establish quality. New additive tables `evaluation_runs_v1` and `evaluation_cases_v1` are the common runner/dashboard contract. Existing tables and data remain untouched and are not relabeled as trustworthy results.
 
-A run persists its complete case roster before background execution. Cases start pending and become passed, failed, error or unscored. Every planned case remains in the denominator. A normal finish converts unprocessed cases to errors; a process crash leaves an explicitly running run and pending cases for operator investigation. There is no durable job resumption yet. Writes use short connections and transactions; cross-process DuckDB ownership remains a Phase 5 issue.
+A run persists its complete case roster before background execution. Cases start pending and become passed, failed, error or unscored. Every planned case remains in the denominator. A normal finish converts unprocessed cases to errors; a process crash leaves a running run until the next exclusive evaluator startup marks it explicitly interrupted (Q06 below). Requests are not automatically resumed. Writes use short connections and transactions; cross-process DuckDB ownership remains a Phase 5 issue.
 
 The runner reads top-level `context`, `sql`, `sql_result`, `answer` and response metadata. Latency is measured by a monotonic clock around each request, including failed requests. A missing latency remains null. Stored evidence is evaluation data and may contain sensitive material; use synthetic datasets only until the complete data policy is implemented.
 
@@ -12,7 +12,7 @@ The runner reads top-level `context`, `sql`, `sql_result`, `answer` and response
 
 Deterministic checks accept structured `expected_rows`, legacy `expected_sql_result`, or `expected_answer`. Structured rows compare JSON values against API `sql_rows`, preserving duplicates; `ordered: false` permits row reordering. Legacy text expectations compare actual returned strings exactly; SQL text or keyword matches alone cannot pass a case. Optional expected intent is checked in addition. Numeric type coercion and semantic answer equivalence are not inferred. Empty rows are distinct from missing/failed results. Legacy datasets without these expectations are unscored and cannot inflate pass rates. Optional `/evaluate` Ragas judge scores are separate from deterministic pass rates and initialize only on demand.
 
-Each run records the dataset SHA-256, limit, contract version and scorer. Each case now retains API metadata with requested/returned model identifiers, temperature, provider fingerprint when available, and SHA-256 hashes of templates used in that request. API keys, provider URLs and prompt content are excluded from this provenance. Run-level placeholders remain explicit; case metadata is the execution record. Model names/fingerprints are provider claims, not verified weight hashes. The versioned six-case SQL fixture corpus is `tests/isolated/quality_cases_v1.json`. Isolated multi-turn evaluation is defined below; repeated live-model measurements remain open. Simulated shadow output is disabled: copying a primary answer does not measure a second model.
+Each run records the dataset SHA-256, limit, contract version and scorer. Each case now retains API metadata with requested/returned model identifiers, temperature, provider fingerprint when available, and SHA-256 hashes of templates used in that request. API keys, provider URLs and prompt content are excluded from this provenance. Run-level finalization aggregates recorded per-case identities with explicit missing-case coverage; case metadata remains the execution record. Model names/fingerprints are provider claims, not verified weight hashes. The versioned six-case SQL fixture corpus is `tests/isolated/quality_cases_v1.json`. Isolated multi-turn evaluation is defined below; repeated live-model measurements remain open. Simulated shadow output is disabled: copying a primary answer does not measure a second model.
 
 ## API and display
 
@@ -92,3 +92,35 @@ failure code; arbitrary upstream error messages are not copied. Chat transcripts
 are no longer returned as execution traces. A timeout can leave running child
 spans in the snapshot; this is not a completed worker or durable job record.
 See [trace contract](request_budgets.md#q05-structured-execution-trace).
+
+## Q06 interrupted runs and execution provenance
+
+The evaluator uses one cooperating local process per metrics database, enforced
+by a nonblocking advisory lock held for its entire lifespan. After acquiring the
+lock and before accepting work, startup atomically marks previous `running` runs
+`interrupted` and their pending cases `error`/`interrupted`. Completed cases,
+evidence and measured latency remain unchanged. Recovery is idempotent. It does
+not resend requests or reconstruct lost multi-turn context; an explicit new run
+is required. A second evaluator fails startup rather than interrupting live work.
+Use one shared local lock path/filesystem; this is not distributed ownership or
+a solution to the separate API-reader/DuckDB concurrency gate in S05. Stop legacy
+evaluators that do not honor this lock before upgrading. Constructors and summary
+reads do not recover, create or migrate databases.
+
+Run provenance records contract/scorer version, hashes of scorer implementation
+files, selected case order and dataset identity/hash/limit. Finalization and
+interruption aggregate the model identifiers/settings and template hashes actually
+recorded per case, with explicit missing-case coverage. Provider failures record
+requested identity with unavailable returned identity; HTTP failure snapshots
+retain execution provenance. No API keys, provider URLs or rendered prompts are
+added. A returned model/fingerprint remains a provider assertion, not a verified
+weight identity. Missing provenance is visible rather than filled from current
+configuration. Old run identities are never reinterpreted as current results.
+
+Metrics additionally expose status counts and total cases for the UTC 24-hour
+window and each recent run. Pending/error/unscored cases remain in the pass-rate
+denominator, and unavailable storage yields null totals/counts. Existing v1 tables
+are reused without destructive migration. Terminal runs reject late case writes
+and cannot be finalized twice with a different outcome. Retain records and stop
+the evaluator before rollback; older code may display the new `interrupted`
+status but cannot provide these recovery/ownership guarantees.

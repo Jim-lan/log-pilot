@@ -83,7 +83,7 @@ Stable pattern vectors carry versioned UTC activity fields (`first_seen_at_unix`
 
 
 Citation scoring uses reviewed `citation_claims` fixtures with exact line text and
-source ID/content hash support pairs. Evaluation contract v3 records scorer
+source ID/content hash support pairs. Evaluation contract v4 records scorer
 `exact_result_citation_v2`; missing annotations produce null support/coverage.
 The search adapter returns `{context, sources}` for attributed snippets, with
 HTTP(S) URL and UTC retrieval timestamp. Original Markdown identity/span fields
@@ -96,3 +96,12 @@ request-local span store; graph guards and provider invocation add nested spans.
 `/query` finalizes the root for success, abstention or error and returns a detached
 snapshot. Error responses include it in `detail`; evaluation stores it per case.
 See [execution trace semantics](request_budgets.md#q05-structured-execution-trace).
+
+
+Q06 evaluator startup holds `<METRICS_DB_PATH>.runner.lock` on the local
+filesystem. One evaluator process is supported; stop legacy processes before
+upgrading. Startup marks abandoned v1 runs interrupted without replaying API
+requests or migrating tables. Run provenance includes scorer file hashes, case
+order, dataset hash and aggregated actual execution identities. Missing case
+provenance is explicit. Metrics reads remain read-only and expose reconciled
+status counts. This advisory lock does not solve cross-service DuckDB ownership.

@@ -183,6 +183,9 @@ class EvaluationContracts(unittest.TestCase):
             with duckdb.connect(self.path, read_only=True) as conn:
                 provenance = json.loads(conn.execute('SELECT provenance FROM evaluation_runs_v1 WHERE run_id=?',
                                                      [envelope_response.json()['run_id']]).fetchone()[0])
+            self.assertEqual(provenance['case_order'], ['b'])
+            self.assertEqual(provenance['contract_version'], 4)
+            self.assertEqual(len(provenance['scorer_sha256']), 64)
             self.assertEqual(provenance['dataset_split'], 'held_out')
             self.assertEqual(provenance['dataset_version'], '2.0.0')
             import hashlib

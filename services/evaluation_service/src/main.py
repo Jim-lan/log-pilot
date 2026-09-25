@@ -1,4 +1,5 @@
 """Evaluation API: explicit initialization, durable runs, optional judge."""
+from contextlib import asynccontextmanager
 import hashlib
 import json
 import os
@@ -8,11 +9,24 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from shared.evaluation_owner import evaluation_owner
+from shared.evaluation_provenance import scorer_identity
 from shared.evaluation import EvaluationStore
 from shared.evaluation_runner import run_cases
 from shared.evaluation_dataset import load_dataset
 
-app = FastAPI(title="LogPilot Evaluation Service")
+@asynccontextmanager
+async def lifespan(app):
+    with evaluation_owner(METRICS_DB_PATH):
+        EvaluationStore(METRICS_DB_PATH).interrupt_running()
+        app.state.evaluation_owner_ready = True
+        try:
+            yield
+        finally:
+            app.state.evaluation_owner_ready = False
+
+
+app = FastAPI(title="LogPilot Evaluation Service", lifespan=lifespan)
 PILOT_API_URL = os.getenv("PILOT_API_URL", "http://pilot-orchestrator:8000")
 METRICS_DB_PATH = os.getenv("METRICS_DB_PATH", "/app/data/target/metrics.duckdb")
 DATASET_PATH = os.getenv("EVALUATION_DATASET_PATH", "/app/tests/evaluation/golden_dataset.json")
@@ -56,6 +70,8 @@ def evaluate_single(req: EvaluateRequest):
 
 @app.post("/evaluate/batch")
 def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTasks):
+    if not getattr(app.state, 'evaluation_owner_ready', False):
+        raise HTTPException(status_code=503, detail='Evaluation owner is unavailable')
     # Restrict file access to the server-configured dataset, never an arbitrary client path.
     if req.dataset_path is not None and req.dataset_path != DATASET_PATH:
         raise HTTPException(status_code=400, detail="Use the configured evaluation dataset")
@@ -69,7 +85,7 @@ def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTa
     store = EvaluationStore(METRICS_DB_PATH)
     store.start(run_id, [c['id'] for c in cases], {
         **dataset_provenance, "dataset_sha256": hashlib.sha256(raw).hexdigest(), "limit": req.limit,
-        "contract_version": 3, "scorer": "exact_result_citation_v2",
-        "model_identity": "unrecorded", "prompt_version": "unrecorded"})
+        **scorer_identity(), 'case_order': [c['id'] for c in cases],
+        'execution': {'coverage': 'pending'}})
     background_tasks.add_task(run_cases, store, run_id, cases, PILOT_API_URL)
     return {"status": "started", "run_id": run_id, "schema_version": 1}

@@ -25,7 +25,8 @@ class PromptFactory:
             budget = current_budget()
             if budget is not None:
                 source, _, _ = self.env.loader.get_source(self.env, template_name)
-                budget.provenance['templates'][template_name] = hashlib.sha256(source.encode()).hexdigest()
+                with budget.lock:
+                    budget.provenance['templates'][template_name] = hashlib.sha256(source.encode()).hexdigest()
             return template.render(**kwargs)
         except Exception as e:
             raise ValueError(f"Failed to render template {template_name}: {e}")

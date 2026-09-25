@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+import copy
 import math
 import os
 import threading
@@ -55,6 +56,10 @@ class RequestBudget:
         self.provenance = {"model_calls": [], "templates": {}}
         self.failure = None
         self.lock = threading.RLock()
+
+    def provenance_snapshot(self):
+        with self.lock:
+            return copy.deepcopy(self.provenance)
 
     @classmethod
     def from_env(cls):

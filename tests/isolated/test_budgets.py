@@ -138,6 +138,10 @@ class ProviderContracts(unittest.TestCase):
             self.client.generate("question")
         self.assertEqual(len(seen), 1)
         self.assertNotIn("secret", str(error.exception))
+        call = self.budget.provenance['model_calls'][0]
+        self.assertEqual(call['outcome'], 'failed')
+        self.assertIsNone(call['returned_model'])
+        self.assertTrue(call['requested_model'])
 
     def test_legacy_provider_errors_are_typed(self):
         import httpx
