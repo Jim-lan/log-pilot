@@ -54,6 +54,17 @@ class LLMClient:
         """
         Generates text from the LLM using the Model Registry.
         """
+        from shared.execution import current_budget
+        budget = current_budget()
+        if budget is not None and budget.model_profile is not None:
+            if model_type not in ('fast', 'smart', 'reasoning', 'validator'):
+                raise ExecutionFailure()
+            role = 'validation' if model_type == 'validator' else 'generation'
+            settings = getattr(budget.model_profile, role)
+            return self._complete(prompt, settings.model, budget.model_api_base, 'ollama',
+                                  settings.temperature, settings.request_options(), role)
+        if model_type == 'validator':
+            model_type = 'fast'
         if registry:
             try:
                 config = registry.get(model_type)
@@ -69,12 +80,13 @@ class LLMClient:
 
         return self._complete(prompt, model_name, api_base, api_key, temperature)
 
-    def _complete(self, prompt, model_name, api_base, api_key, temperature):
+    def _complete(self, prompt, model_name, api_base, api_key, temperature, options=None, role=None):
         from shared.privacy import redact_outbound
         prompt = redact_outbound(prompt)
         from shared.execution import current_budget
         budget = current_budget()
-        call = {'requested_model': model_name, 'returned_model': None,
+        options = options or {'temperature': temperature}
+        call = {'role': role, 'settings': options, 'usage': None, 'requested_model': model_name, 'returned_model': None,
                 'temperature': temperature, 'system_fingerprint': None, 'outcome': 'started'}
         if budget is not None:
             with budget.lock:
@@ -92,8 +104,11 @@ class LLMClient:
                 raise ExecutionFailure()
             client = self._get_client(api_base, api_key).with_options(timeout=timeout, max_retries=0)
             response = client.chat.completions.create(
-                model=model_name, messages=[{"role": "user", "content": prompt}], temperature=temperature)
-            update(returned_model=response.model, system_fingerprint=response.system_fingerprint)
+                model=model_name, messages=[{"role": "user", "content": prompt}], **options)
+            usage = response.usage
+            update(returned_model=response.model, system_fingerprint=response.system_fingerprint,
+                   usage={key: getattr(usage, key, None) for key in
+                          ('prompt_tokens', 'completion_tokens', 'total_tokens')} if usage else None)
             content = response.choices[0].message.content
             if not isinstance(content, str) or not content.strip():
                 raise ExecutionFailure()

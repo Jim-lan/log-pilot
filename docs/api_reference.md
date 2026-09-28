@@ -72,3 +72,21 @@ The complete case roster is persisted before background execution. Each case cal
 | `logs://schema` | Fixed trusted `DESCRIBE logs` query |
 
 The proxy currently uses default history persistence and has a shorter timeout than the API deadline. Handler errors are returned as text, not the API typed error contract. In-process handler tests do not establish SSE transport readiness. Source/evidence-rich MCP responses and scoped identity are future designs.
+
+
+## Model harness
+
+`GET /model-profiles` on the orchestrator lists configured profile IDs, settings
+and fingerprints (503 when disabled). Stateless `/query` additionally accepts
+`model_profile`, optional `expected_profile_sha256` and
+`evaluation_data_revision`. Unknown profiles return 422; changed profile/data
+pins return 409. HTTP clients cannot set provider endpoints or credentials.
+
+Evaluation `POST /evaluate/compare` accepts `profiles` (2–4 unique IDs), `repeats`
+(1–5, default 3), optional `limit`, required `data_revision`, and optional
+`min_pass_rate`, `max_error_rate`, `max_p95_seconds` gates. Rates use 0–1, not
+percentages. All three gates are needed for a recommendation. The response
+contains a durable `comparison_id` and `run_ids`; it does not indicate a pass.
+`GET /evaluate/comparisons/{comparison_id}` retrieves a JSON report, or 404 if
+unknown. Batch and comparison submissions return 409 while another job is active.
+See [setup, comparability and limitations](model_harness.md).

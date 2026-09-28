@@ -83,7 +83,7 @@ Stable pattern vectors carry versioned UTC activity fields (`first_seen_at_unix`
 
 
 Citation scoring uses reviewed `citation_claims` fixtures with exact line text and
-source ID/content hash support pairs. Evaluation contract v4 records scorer
+source ID/content hash support pairs. Evaluation contract v5 records scorer
 `exact_result_citation_v2`; missing annotations produce null support/coverage.
 The search adapter returns `{context, sources}` for attributed snippets, with
 HTTP(S) URL and UTC retrieval timestamp. Original Markdown identity/span fields
@@ -105,3 +105,12 @@ requests or migrating tables. Run provenance includes scorer file hashes, case
 order, dataset hash and aggregated actual execution identities. Missing case
 provenance is explicit. Metrics reads remain read-only and expose reconciled
 status counts. This advisory lock does not solve cross-service DuckDB ownership.
+
+
+Model comparison entry points are `shared/model_profiles.py`,
+`shared/model_comparison.py` and `scripts/compare_models.py`. Set
+`LOGPILOT_MODEL_PROFILES_PATH` in both services to the same server-owned catalog;
+the orchestrator also requires `LOGPILOT_EVALUATION_DATA_REVISION` for pinned
+comparison requests. Compose forwards these opt-in settings and mounts the
+evaluator configuration read-only. Existing defaults remain active when no
+profile is selected. See [model harness](model_harness.md).

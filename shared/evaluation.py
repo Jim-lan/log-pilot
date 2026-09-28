@@ -14,21 +14,28 @@ class EvaluationStore:
         self.path = path
 
     def start(self, run_id, case_ids, provenance, timestamp=None):
-        if len(set(case_ids)) != len(case_ids) or not case_ids:
-            raise ValueError('Evaluation requires unique, nonempty case IDs')
+        self.start_many([(run_id, case_ids, provenance)], timestamp)
+
+    def start_many(self, runs, timestamp=None):
+        if not runs or len({r[0] for r in runs}) != len(runs):
+            raise ValueError('Expected unique run IDs')
+        for _, case_ids, _ in runs:
+            if not case_ids or len(set(case_ids)) != len(case_ids):
+                raise ValueError('Evaluation requires unique, nonempty case IDs')
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with duckdb.connect(self.path) as conn:
             conn.execute('BEGIN')
-            conn.execute('''CREATE TABLE IF NOT EXISTS evaluation_runs_v1 (
-                run_id VARCHAR PRIMARY KEY, timestamp TIMESTAMP, status VARCHAR,
-                provenance VARCHAR, failure_code VARCHAR)''')
-            conn.execute('''CREATE TABLE IF NOT EXISTS evaluation_cases_v1 (
-                run_id VARCHAR, case_id VARCHAR, status VARCHAR, latency DOUBLE,
-                evidence VARCHAR, failure_code VARCHAR, PRIMARY KEY(run_id, case_id))''')
-            conn.execute('INSERT INTO evaluation_runs_v1 VALUES (?, ?, ?, ?, NULL)',
-                         [run_id, timestamp or datetime.utcnow(), 'running', json.dumps(provenance)])
-            conn.executemany('INSERT INTO evaluation_cases_v1 VALUES (?, ?, ?, NULL, NULL, NULL)',
-                             [[run_id, case_id, 'pending'] for case_id in case_ids])
+            for run_id, case_ids, provenance in runs:
+                conn.execute('''CREATE TABLE IF NOT EXISTS evaluation_runs_v1 (
+                    run_id VARCHAR PRIMARY KEY, timestamp TIMESTAMP, status VARCHAR,
+                    provenance VARCHAR, failure_code VARCHAR)''')
+                conn.execute('''CREATE TABLE IF NOT EXISTS evaluation_cases_v1 (
+                    run_id VARCHAR, case_id VARCHAR, status VARCHAR, latency DOUBLE,
+                    evidence VARCHAR, failure_code VARCHAR, PRIMARY KEY(run_id, case_id))''')
+                conn.execute('INSERT INTO evaluation_runs_v1 VALUES (?, ?, ?, ?, NULL)',
+                             [run_id, timestamp or datetime.utcnow(), 'running', json.dumps(provenance)])
+                conn.executemany('INSERT INTO evaluation_cases_v1 VALUES (?, ?, ?, NULL, NULL, NULL)',
+                                 [[run_id, case_id, 'pending'] for case_id in case_ids])
             conn.execute('COMMIT')
 
     def record(self, run_id, case_id, status, latency, evidence, failure_code=None):

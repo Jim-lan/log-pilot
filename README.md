@@ -9,6 +9,7 @@ LogPilot is a local-first AI observability prototype for asking questions about 
 - Embedded Chroma/LlamaIndex retrieval, artifact IDs/content hashes, attributed web snippets and rejection of unknown citation IDs.
 - Immutable-file ingestion with truthful acknowledgement, quarantine, transactional log event/outbox persistence and duplicate-safe protocol-2 log replay.
 - Safely rendered chat/evidence, best-effort provider-boundary redaction and opt-in external search.
+- Opt-in model profiles, fixed-validator comparison runs and traceable reports with explicit acceptance gates.
 - Versioned evaluation contracts, honest failure denominators, separate retrieval/citation scores, reviewed claim-support fixtures, interrupted-run recovery and execution provenance.
 - Isolated backend/browser regression tests and GitHub CI.
 
@@ -28,6 +29,8 @@ The frontend uses vanilla JavaScript with Nginx; the backend uses Python/FastAPI
 | [Enterprise roadmap](docs/enterprise_roadmap.md) | Detailed phased implementation and learning plan |
 | [Feature coverage](docs/feature_contract_coverage.md) | Protected contracts, legacy test disposition and remaining verification gates |
 | [Verification history](docs/testing_baseline.md) | Reproducible commands and revision-specific evidence |
+
+Model experiments: [controlled comparison harness](docs/model_harness.md).
 
 Focused designs: [request budgets](docs/request_budgets.md), [SQL policy](docs/sql_execution_policy.md), [rendering/privacy](docs/rendering_and_privacy.md), [evaluation](docs/evaluation_contract.md), [ingestion recovery](docs/ingestion_recovery.md).
 

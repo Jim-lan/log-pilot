@@ -363,3 +363,26 @@ Q05 remote CI passed [run 36153640669](https://github.com/Jim-lan/log-pilot/acti
 Q07 preflight found no running Docker services and no listener on local Ollama
 port 11434. No model download, provider call, application startup or live quality
 claim was made. Environment/model selection remains pending.
+
+
+## Controlled model harness (2026-09-28)
+
+Owner: Codex. Parent revision `4cc85d2`. Design: [model harness](model_harness.md).
+Final standalone Docker suite passed **194 tests, zero failures/errors/skips**.
+All four abrupt evaluator crash/lock boundaries also passed. Both main and test
+Compose configurations validate, Git whitespace checks pass, and 53 changed/new
+documentation links resolve with balanced code fences.
+
+```sh
+docker compose -f compose.test.yml run --rm --no-deps baseline
+docker compose -f compose.test.yml run --rm --no-deps --entrypoint python baseline -B /workspace/tests/integration/evaluation_crash_smoke.py
+```
+
+New evidence covers real SDK forwarding of model settings/usage, concurrent
+generation/validator profile isolation, HTTP profile/data pin rejection,
+evidence-aware validation prompts, atomic comparison rosters, fixed judges,
+rotated repeats, end-to-end runner conversation isolation, missing usage, ties,
+profile/template drift, explicit gates, unexpected abstention, interrupted runs
+and CLI report preservation. External providers remain scripted in these tests.
+No live model quality ranking, benchmark release threshold, deployment or
+application-data migration is claimed.

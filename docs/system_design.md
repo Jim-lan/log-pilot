@@ -96,3 +96,12 @@ Q05 supplies bounded trace v2 request/node/provider spans with parent IDs, attem
 numbers, monotonic timing and sanitized outcomes. API timeouts expose honest
 point-in-time worker state. Prompt/history content is excluded from traces;
 broader operational logging/redaction work remains D06/I05.
+
+
+The [controlled model harness](model_harness.md) now supports explicit server-owned
+profiles and separately configured generation/validation roles. Repeated
+comparisons persist complete rosters, fixed-validator settings and reproducible
+configuration fingerprints. Runtime validation sees evidence; deterministic
+fixture scores remain independent. Reports include timing, usage availability,
+provenance checks and caller-defined gates. No automatic model promotion or live
+quality claim follows from this implementation; Q07 measured experiments remain.

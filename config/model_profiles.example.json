@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "api_base": "http://llm-service:11434/v1",
+  "profiles": {
+    "qwen-4b": {
+      "generation": {
+        "model": "qwen3.5:4b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      },
+      "validation": {
+        "model": "qwen3.5:4b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      }
+    },
+    "qwen-9b": {
+      "generation": {
+        "model": "qwen3.5:9b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      },
+      "validation": {
+        "model": "qwen3.5:4b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      }
+    },
+    "gemma-e4b": {
+      "generation": {
+        "model": "gemma4:e4b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      },
+      "validation": {
+        "model": "qwen3.5:4b",
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "max_tokens": 1024,
+        "seed": 42
+      }
+    }
+  }
+}

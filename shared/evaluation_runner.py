@@ -55,7 +55,8 @@ def score_case(case, response):
     return ('passed', None) if all(checks) else ('failed', 'incorrect_result')
 
 
-def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.monotonic):
+def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.monotonic,
+              *, model_profile=None, expected_profile_sha256=None, data_revision=None):
     """Context belongs only to this run and the explicitly named conversation."""
     conversations, blocked = {}, set()
     try:
@@ -69,13 +70,26 @@ def run_cases(store, run_id, cases, api_url, post=requests.post, clock=time.mono
             result = None
             try:
                 payload = {'query': case['question'], 'persist_history': False}
+                if model_profile is not None:
+                    payload.update(model_profile=model_profile, expected_profile_sha256=expected_profile_sha256,
+                                   evaluation_data_revision=data_revision)
                 if conversation is not None:
                     payload['evaluation_context'] = EvaluationContext.model_validate(
                         conversations.get(conversation, [])).model_dump()
                 result = post(api_url + '/query', json=payload, timeout=125)
                 result.raise_for_status()
                 response = result.json()
+                if model_profile is not None:
+                    provenance = (response.get('metadata') or {}).get('provenance') or {}
+                    selected = provenance.get('model_profile') or {}
+                    if (selected.get('profile_id') != model_profile
+                            or selected.get('profile_sha256') != expected_profile_sha256
+                            or provenance.get('evaluation_data_revision') != data_revision):
+                        raise ValueError('Profile execution provenance mismatch')
                 status, reason = score_case(case, response)
+                if (model_profile is not None and status == 'passed'
+                        and (response.get('metadata') or {}).get('outcome') != case.get('expected_outcome', 'validated')):
+                    status, reason = 'failed', 'unexpected_outcome'
                 evidence = {key: response.get(key) for key in ('answer', 'context', 'sources', 'sql', 'sql_result', 'sql_rows', 'intent', 'metadata', 'trace')}
                 evidence['dimensions'] = score_dimensions(case, response)
                 if conversation is not None:

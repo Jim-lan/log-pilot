@@ -96,3 +96,19 @@ do not delete a held lock file. Restart finalizes abandoned runs as interrupted
 and preserves completed case evidence. Begin a new run to repeat interrupted
 cases; no automatic provider calls occur during recovery. See the
 [evaluation recovery contract](docs/evaluation_contract.md#q06-interrupted-runs-and-execution-provenance).
+
+
+## Compare models in a prepared disposable environment
+
+Follow the [model harness guide](docs/model_harness.md). Main Compose forwards
+these variables when intentionally recreating the relevant services:
+
+```sh
+export LOGPILOT_MODEL_PROFILES_PATH=/app/config/model_profiles.example.json
+export LOGPILOT_EVALUATION_DATA_REVISION=synthetic-fixture-v1
+```
+
+Ensure the configured evaluation dataset corresponds to that frozen environment,
+stop ingestion for the experiment, and make the selected models available first.
+Setting these values alone does not start services or install models. The CLI
+starts a persisted comparison or fetches its report; no model is auto-promoted.

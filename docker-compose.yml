@@ -80,6 +80,8 @@ services:
       - ./config:/app/config
       - ./prompts:/app/prompts
     environment:
+      - LOGPILOT_MODEL_PROFILES_PATH=${LOGPILOT_MODEL_PROFILES_PATH:-}
+      - LOGPILOT_EVALUATION_DATA_REVISION=${LOGPILOT_EVALUATION_DATA_REVISION:-}
       - LOCAL_API_KEY=dummy
       - SHADOW_MODEL=shadow-gpt
       - LOGPILOT_ALLOW_WEB_SEARCH=${LOGPILOT_ALLOW_WEB_SEARCH:-false}
@@ -130,11 +132,13 @@ services:
       dockerfile: services/evaluation_service/Dockerfile
     container_name: log-pilot-eval
     volumes:
+      - ./config:/app/config:ro
       - ./data:/app/data
       - ./tests/evaluation:/app/tests/evaluation
     ports:
       - "127.0.0.1:8002:8001"
     environment:
+      - LOGPILOT_MODEL_PROFILES_PATH=${LOGPILOT_MODEL_PROFILES_PATH:-}
       - LLM_BASE_URL=http://log-pilot-llm:11434/v1
       - PILOT_API_URL=http://pilot-orchestrator:8000
     depends_on:

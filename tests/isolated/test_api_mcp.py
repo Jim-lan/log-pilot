@@ -116,6 +116,38 @@ class APIAndMCPContracts(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.graph.invoke.assert_not_called()
 
+    def test_model_profile_selection_is_pinned_stateless_and_request_local(self):
+        import json
+        from shared.model_profiles import ProfileCatalog
+        from shared.execution import current_budget
+        path = Path(self.scratch.name) / 'profiles.json'
+        value = {'schema_version': 1, 'api_base': 'http://fixture.invalid/v1', 'profiles': {
+            'small': {'generation': {'model': 'small'}, 'validation': {'model': 'judge'}}}}
+        path.write_text(json.dumps(value))
+        manifest = ProfileCatalog.model_validate(value).resolve('small')[1]
+        observed = []
+        def reply(state):
+            observed.append(current_budget().model_profile)
+            return self.sql_response(state)
+        self.graph.invoke.side_effect = reply
+        with patch.dict(os.environ, {'LOGPILOT_MODEL_PROFILES_PATH': str(path), 'LOGPILOT_EVALUATION_DATA_REVISION': 'fixture'}):
+            payload = {'query': 'q', 'persist_history': False, 'model_profile': 'small',
+                       'expected_profile_sha256': manifest['profile_sha256'], 'evaluation_data_revision': 'fixture'}
+            response = self.client.post('/query', json=payload)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['metadata']['provenance']['model_profile'], manifest)
+            self.assertEqual(self.client.post('/query', json={**payload, 'persist_history': True}).status_code, 422)
+            self.assertEqual(self.client.post('/query', json={**payload, 'model_profile': 'unknown'}).status_code, 422)
+            self.assertEqual(self.client.post('/query', json={**payload, 'evaluation_data_revision': 'changed'}).status_code, 409)
+            value['profiles']['small']['generation']['model'] = 'changed'
+            path.write_text(json.dumps(value))
+            self.assertEqual(self.client.post('/query', json=payload).status_code, 409)
+            self.assertEqual(self.client.post('/query', json={'query': 'q', 'persist_history': False}).status_code, 200)
+        self.assertEqual(observed[0].generation.model, 'small')
+        self.assertIsNone(observed[1])
+        self.assertEqual(self.graph.invoke.call_count, 2)
+        self.assertEqual(self.db.get_history(), [])
+
     def test_metrics_endpoint_reads_versioned_store(self):
         from shared.evaluation import EvaluationStore
         store = EvaluationStore("data/target/metrics.duckdb")

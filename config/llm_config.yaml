@@ -16,13 +16,13 @@ llm:
       # Since we heavily use Docker, we default to the service name.
       # If running locally without docker, user must override or use port forwarding.
       api_base: "http://llm-service:11434/v1" # Internal Docker DNS
-      default_model: "gemma4:e4b" # Effective 4B - Excellent balance for M4 Mac
+      default_model: "gemma4:e4b" # Current baseline; compare candidates using model_profiles.example.json
       # --- Model Selection Guide ---
       #
       # [Category A] Lightweight / Consumer Hardware (e.g., M1/M2/M3/M4 Mac, Consumer GPU)
       # 1. "gemma4:e4b" (Effective 4B) - [RECOMMENDED DEFAULT]
       #    - Capability: Excellent general purpose, optimized instruction following.
-      #    - Requirement: ~4GB RAM (2.5GB for weights).
+      #    - Memory: depends on quantization and context; E4B is not a RAM size.
       #    - Performance: Very fast on Apple Silicon.
       #
       # 2. "mistral" (7B)

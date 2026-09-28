@@ -519,7 +519,7 @@ def verify_context(state: AgentState) -> AgentState:
             context=context
         )
         # Use 'fast' model for verification
-        response = llm_client.generate(prompt, model_type="fast")
+        response = llm_client.generate(prompt, model_type="validator")
         
         import json
         import re
@@ -562,9 +562,12 @@ def validate_answer(state: AgentState) -> AgentState:
             "pilot_orchestrator",
             "validate_answer",
             query=query,
-            answer=answer
+            answer=answer,
+            evidence=(f"SQL: {state.get('sql_query')}\nRows: {state.get('sql_rows', state.get('sql_result'))}"
+                      if state.get('intent') == 'sql' else
+                      state.get('web_results') if state.get('intent') == 'web_search' else state.get('rag_context', ''))
         )
-        response = llm_client.generate(prompt, model_type="fast")
+        response = llm_client.generate(prompt, model_type="validator")
         
         import json
         if "```json" in response:

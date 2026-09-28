@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from shared.execution import RequestBudget, ExecutionFailure, DeadlineExceeded, use_budget, setting
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+from shared.model_profiles import load_catalog
 from shared.evaluation_context import EvaluationContext
 from typing import Dict, Any, Optional, List
 
@@ -33,11 +34,18 @@ class QueryRequest(BaseModel):
     query: str
     persist_history: bool = True
     evaluation_context: Optional[EvaluationContext] = None
+    model_profile: Optional[str] = Field(default=None, max_length=64, pattern=r'^[a-z0-9][a-z0-9_-]*$')
+    expected_profile_sha256: Optional[str] = Field(default=None, pattern=r'^[0-9a-f]{64}$')
+    evaluation_data_revision: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
     @model_validator(mode='after')
     def separate_evaluation_history(self):
         if self.evaluation_context is not None and self.persist_history:
             raise ValueError('Evaluation context requires persist_history=false')
+        if self.model_profile is not None and self.persist_history:
+            raise ValueError('Model profiles require persist_history=false')
+        if (self.expected_profile_sha256 or self.evaluation_data_revision) and not self.model_profile:
+            raise ValueError('Profile pins require a model profile')
         return self
 
 class QueryResponse(BaseModel):
@@ -50,6 +58,15 @@ class QueryResponse(BaseModel):
     intent: str
     metadata: Optional[Dict[str, Any]] = {}
     trace: Optional[List[Dict[str, Any]]] = None
+
+@app.get('/model-profiles')
+def model_profiles():
+    try:
+        catalog = load_catalog()
+        return {'profiles': [catalog.resolve(name)[1] for name in catalog.profiles]}
+    except (ValueError, OSError):
+        raise HTTPException(status_code=503, detail='Model profiles unavailable') from None
+
 
 @app.get("/health")
 def health_check():
@@ -66,6 +83,20 @@ async def run_query(request: QueryRequest):
         return HTTPException(status_code=status, detail={
             'code': code, 'message': message, **budget.trace.metadata(), 'trace': budget.trace.snapshot(),
             'provenance': budget.provenance_snapshot()})
+
+    if request.model_profile is not None:
+        try:
+            catalog = load_catalog()
+            profile, manifest = catalog.resolve(request.model_profile)
+        except (ValueError, OSError):
+            raise failure_response(422, 'model_profile_invalid', 'Model profile unavailable.') from None
+        if request.expected_profile_sha256 and request.expected_profile_sha256 != manifest['profile_sha256']:
+            raise failure_response(409, 'model_profile_changed', 'Model profile changed.')
+        if request.evaluation_data_revision and request.evaluation_data_revision != os.getenv('LOGPILOT_EVALUATION_DATA_REVISION'):
+            raise failure_response(409, 'evaluation_data_changed', 'Evaluation data revision does not match.')
+        budget.model_profile, budget.model_api_base = profile, catalog.api_base
+        budget.provenance['model_profile'] = manifest
+        budget.provenance['evaluation_data_revision'] = os.getenv('LOGPILOT_EVALUATION_DATA_REVISION')
 
     if not query_slots.acquire(blocking=False):
         raise failure_response(503, 'query_capacity_exhausted', 'All query workers are busy. Please retry later.')

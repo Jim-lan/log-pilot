@@ -151,6 +151,18 @@ class GraphContracts(unittest.TestCase):
         self.assertNotIn('fixture question', str(events))
         self.assertNotIn('One error.', str(events))
 
+    def test_answer_validator_receives_evidence_and_uses_validation_role(self):
+        with patch.object(self.nodes.llm_client, 'generate', wraps=self.nodes.llm_client.generate) as generate:
+            self.invoke()
+        calls = [c for c in generate.call_args_list if c.args[0].startswith('TASK:validate_answer')]
+        self.assertEqual(calls[0].kwargs['model_type'], 'validator')
+        self.assertIn('Rows: [[1]]', calls[0].args[0])
+        self.responses['intent_classifier'] = 'rag'
+        with patch.object(self.nodes.llm_client, 'generate', wraps=self.nodes.llm_client.generate) as generate:
+            self.invoke()
+        calls = [c for c in generate.call_args_list if c.args[0].startswith('TASK:validate_answer')]
+        self.assertIn('Runbook fixture evidence', calls[0].args[0])
+
     def test_template_provenance_is_request_local(self):
         from shared.execution import RequestBudget, use_budget
         first, second = RequestBudget(60, 16), RequestBudget(60, 16)

@@ -53,6 +53,8 @@ class RequestBudget:
         self.deadline = clock() + timeout
         self.limits = {"llm": max_llm_calls, "search": max_search_calls}
         self.calls = {"llm": 0, "search": 0}
+        self.model_profile = None
+        self.model_api_base = None
         self.provenance = {"model_calls": [], "templates": {}}
         self.failure = None
         self.lock = threading.RLock()

@@ -159,6 +159,43 @@ class ProviderContracts(unittest.TestCase):
         self.assertEqual(len(seen), 1)
         self.assertNotIn("private", str(error.exception))
 
+    def test_profiles_route_generator_and_validator_with_real_sdk_concurrently(self):
+        import json
+        import httpx
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        from shared.execution import RequestBudget, use_budget
+        from shared.model_profiles import ModelProfile
+        barrier = threading.Barrier(2)
+        seen = []
+        def response(request):
+            body = json.loads(request.content)
+            seen.append(body)
+            barrier.wait(timeout=5)
+            return httpx.Response(200, json={"id": "fixture", "object": "chat.completion", "created": 0,
+                "model": body['model'], "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "ok"}}]})
+        self.sdk(response)
+        def run(model):
+            budget = RequestBudget(30, 4)
+            budget.model_profile = ModelProfile.model_validate({'generation': {'model': model, 'max_tokens': 256, 'seed': 7},
+                'validation': {'model': 'fixed-judge', 'max_tokens': 128}})
+            budget.model_api_base = 'http://fixture.invalid/v1'
+            with use_budget(budget):
+                self.client.generate('question')
+                self.client.generate('validation', model_type='validator')
+            return budget.provenance_snapshot()['model_calls']
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(run, ['small', 'large']))
+        for model, calls in zip(['small', 'large'], results):
+            self.assertEqual([c['requested_model'] for c in calls], [model, 'fixed-judge'])
+            self.assertEqual([c['role'] for c in calls], ['generation', 'validation'])
+            self.assertEqual(calls[0]['usage']['total_tokens'], 7)
+        for body in seen:
+            self.assertEqual(body['max_tokens'], 128 if body['model'] == 'fixed-judge' else 256)
+            self.assertEqual(body['seed'], 42 if body['model'] == 'fixed-judge' else 7)
+            self.assertEqual(body['top_p'], 1)
+
     def test_search_client_timeout_and_cleanup(self):
         from shared.execution import use_budget
         factory = Mock()

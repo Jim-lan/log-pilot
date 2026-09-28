@@ -98,3 +98,15 @@ Normal intake now retries recognized transient journaled failures with a bounded
 Legacy ledger/vector reconciliation now has a copied-snapshot dry-run tool ([ADR 0002](decisions/0002-legacy-reconciliation.md)). It maps evidence and reports conflicts without modifying original stores; no live migration or automatic legacy ownership assignment is implied.
 
 Pattern retention now tracks monotonic event/index activity and offers dry-run candidates only. Unknown legacy ages are retained. The old destructive cleanup entry point is disabled until operational retention/restore gates pass; no startup cleanup is enabled.
+
+
+## Controlled model experiments
+
+Stateless queries may select a server-owned, request-local model profile. The
+profile separates generation and validation roles; settings and profile hashes
+are recorded with provider usage and trace IDs. Runtime answer validation receives
+source/SQL evidence. The evaluation service persists comparison rosters atomically
+and runs one evaluation job at a time, with independent conversations per
+candidate/repetition and a fixed validator. Read-only reports separate deterministic
+correctness from judge approval and refuse recommendations without acceptance
+gates and matching provenance. See [model harness](model_harness.md).

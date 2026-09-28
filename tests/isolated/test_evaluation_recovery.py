@@ -81,7 +81,7 @@ class EvaluationRecoveryContracts(unittest.TestCase):
         for name, digest in identity['scorer_files'].items():
             path = Path(evaluation_provenance.__file__).parent / name
             self.assertEqual(digest, hashlib.sha256(path.read_bytes()).hexdigest())
-        self.assertEqual(identity['contract_version'], 4)
+        self.assertEqual(identity['contract_version'], 5)
 
     def test_startup_recovers_before_accepting_new_work(self):
         import importlib.util

@@ -8,6 +8,7 @@ _ACTIVE_STAGE = ContextVar('logpilot_trace_stage', default=None)
 FAILURE_CODES = frozenset({
     'dependency_error', 'deadline_exceeded', 'call_budget_exceeded', 'provider_timeout',
     'sql_execution_failed', 'query_capacity_exhausted', 'internal_error',
+    'model_profile_invalid', 'model_profile_changed', 'evaluation_data_changed',
     'validation_rejected', 'retrieval_unavailable', 'web_search_disabled',
     'web_search_unavailable', 'insufficient_evidence',
 })

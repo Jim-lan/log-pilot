@@ -124,3 +124,17 @@ are reused without destructive migration. Terminal runs reject late case writes
 and cannot be finalized twice with a different outcome. Retain records and stop
 the evaluator before rollback; older code may display the new `interrupted`
 status but cannot provide these recovery/ownership guarantees.
+
+
+## Controlled comparisons (contract v5)
+
+The [model harness](model_harness.md) adds fingerprinted per-request model
+profiles and fixed-validator repeated experiments. All comparison runs/cases are
+committed in one transaction before execution. One batch/comparison job is admitted
+per evaluator process; overlapping submissions return 409. Status reports include
+case results, separate judge acceptance, latency quantiles, token availability and
+explicit gate decisions. Neither reports nor runtime validation promote a model.
+The scorer fingerprint now covers profile and comparison code too. Per-call
+provenance records role, requested settings and available provider token usage.
+Data revision labels are operator assertions; frozen SQL/vector fixtures remain
+a prerequisite for the live Q07 experiment.

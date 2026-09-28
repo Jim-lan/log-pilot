@@ -4,11 +4,14 @@ import hashlib
 import json
 import os
 import uuid
+import threading
 from pathlib import Path
 from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from shared.model_profiles import load_catalog
+from shared.model_comparison import ComparisonRequest, plan_comparison, run_comparison, comparison_report
 from shared.evaluation_owner import evaluation_owner
 from shared.evaluation_provenance import scorer_identity
 from shared.evaluation import EvaluationStore
@@ -30,6 +33,26 @@ app = FastAPI(title="LogPilot Evaluation Service", lifespan=lifespan)
 PILOT_API_URL = os.getenv("PILOT_API_URL", "http://pilot-orchestrator:8000")
 METRICS_DB_PATH = os.getenv("METRICS_DB_PATH", "/app/data/target/metrics.duckdb")
 DATASET_PATH = os.getenv("EVALUATION_DATASET_PATH", "/app/tests/evaluation/golden_dataset.json")
+
+
+evaluation_job = threading.Lock()
+
+
+def run_owned_job(operation, *args):
+    try:
+        operation(*args)
+    finally:
+        evaluation_job.release()
+
+
+def admit_runs(store, runs):
+    if not evaluation_job.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail='An evaluation job is already active')
+    try:
+        store.start_many(runs)
+    except Exception:
+        evaluation_job.release()
+        raise
 
 
 class EvaluateRequest(BaseModel):
@@ -83,9 +106,36 @@ def trigger_batch_eval(req: BatchEvaluateRequest, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="Invalid or unavailable evaluation dataset")
     run_id = str(uuid.uuid4())
     store = EvaluationStore(METRICS_DB_PATH)
-    store.start(run_id, [c['id'] for c in cases], {
+    provenance = {
         **dataset_provenance, "dataset_sha256": hashlib.sha256(raw).hexdigest(), "limit": req.limit,
         **scorer_identity(), 'case_order': [c['id'] for c in cases],
-        'execution': {'coverage': 'pending'}})
-    background_tasks.add_task(run_cases, store, run_id, cases, PILOT_API_URL)
+        'execution': {'coverage': 'pending'}}
+    admit_runs(store, [(run_id, [c['id'] for c in cases], provenance)])
+    background_tasks.add_task(run_owned_job, run_cases, store, run_id, cases, PILOT_API_URL)
     return {"status": "started", "run_id": run_id, "schema_version": 1}
+
+
+@app.post('/evaluate/compare')
+def compare_models(req: ComparisonRequest, background_tasks: BackgroundTasks):
+    if not getattr(app.state, 'evaluation_owner_ready', False):
+        raise HTTPException(status_code=503, detail='Evaluation owner is unavailable')
+    try:
+        raw = Path(DATASET_PATH).read_bytes()
+        cases, provenance = load_dataset(json.loads(raw))
+        cases = cases[:req.limit] if req.limit else cases
+        comparison_id, runs = plan_comparison(req, load_catalog(), cases,
+            {**provenance, 'dataset_sha256': hashlib.sha256(raw).hexdigest(), 'limit': req.limit})
+    except (ValueError, OSError):
+        raise HTTPException(status_code=400, detail='Invalid dataset or comparison configuration') from None
+    store = EvaluationStore(METRICS_DB_PATH)
+    admit_runs(store, runs)
+    background_tasks.add_task(run_owned_job, run_comparison, store, runs, cases, PILOT_API_URL)
+    return {'status': 'started', 'comparison_id': comparison_id, 'run_ids': [r[0] for r in runs]}
+
+
+@app.get('/evaluate/comparisons/{comparison_id}')
+def get_comparison(comparison_id: uuid.UUID):
+    report = comparison_report(METRICS_DB_PATH, str(comparison_id))
+    if report is None:
+        raise HTTPException(status_code=404, detail='Comparison not found')
+    return report
