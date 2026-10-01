@@ -1,6 +1,8 @@
 # LogPilot architecture
 
-Current implementation baseline: `4895c91`, 2026-09-17. This is a local prototype with selected reliability controls. Proposed enterprise boundaries and feature designs are in [system design](system_design.md); release gates are in the [roadmap](enterprise_roadmap.md).
+Reviewed 2026-10-01 against implementation `e190d1f` and status checkpoint `0fb3701`. This document describes implemented code, not a verified running deployment. LogPilot remains a local prototype with tested ingestion recovery, bounded orchestration and controlled model evaluation. Proposed enterprise boundaries are in [system design](system_design.md); release gates are in the [task tracker](implementation_tasks.md).
+
+The latest implementation passed 194 isolated tests and [GitHub CI](https://github.com/Jim-lan/log-pilot/actions/runs/36437720719). Live model quality, shared-user isolation and full-stack readiness remain unproven. See the [current status report](status_2026-10-01.md).
 
 ## Runtime components
 
@@ -14,7 +16,7 @@ The main Compose file defines eight services. Chroma is embedded persistent stor
 | `ingestion-worker` | Bounded directory polling, parsing/redaction, Drain3 patterns, durable log/index work | None |
 | `sentry-service` | Error-rate polling and persisted alerts | None |
 | `mcp-server` | FastMCP SSE tools/resources | `127.0.0.1:8001` |
-| `evaluation-service` | Batch contracts, optional Ragas judge, durable evaluation records | `127.0.0.1:8002` |
+| `evaluation-service` | Batch/model comparisons, deterministic scoring, optional Ragas judge, durable records | `127.0.0.1:8002` |
 | `log-generator` | Demo log generation/catalog copy, then stays running | None |
 
 ```mermaid
@@ -27,7 +29,11 @@ flowchart TD
     SQL --> LOG[(logs.duckdb)]
     G --> KB[Embedded retrieval adapter]
     KB --> V[(Chroma persistent index)]
-    G --> LLM[Configured chat endpoint]
+    C[Server-owned model profiles] -.-> API
+    C -.-> E
+    G --> P[Request-local generation and validation roles]
+    P --> LLM[Configured chat endpoint]
+    G --> T[Bounded trace and request provenance]
     API --> H[(history.duckdb)]
     GEN[Demo generator] --> F[Immutable landing files]
     F --> W[Ingestion worker]
@@ -36,7 +42,8 @@ flowchart TD
     W --> V
     S[Sentry] --> LOG
     S --> H
-    E[Evaluation service] --> API
+    CLI[Comparison CLI] --> E[Evaluation service]
+    E -->|Stateless queries with profile and data pins| API
     E --> MET[(metrics.duckdb)]
     API --> MET
 ```
@@ -77,7 +84,7 @@ Drain3 owns the serialization format for template snapshots. Explicit saves must
 
 The transaction/outbox flow applies to protocol-2 logs. Event identity combines file fingerprint and physical line number. Replay skips committed records before parsing/mining, then drains pending indexing work. A crash after vector upsert can repeat the same stable-ID upsert. A failed final file move can retry without duplicating completed work. Identical completed content deduplicates even if renamed.
 
-SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Ledger/outbox guards now enforce recovery of older pending log work before admitting newer pattern versions; ordinary startup refuses unresolved log recovery. Pending path memory is bounded through directory polling; distributed leases and legacy vector reconciliation remain future work. See [full recovery protocol](ingestion_recovery.md).
+SQLite, DuckDB and Chroma do not share one transaction. Local worker/replay locking and stable IDs bridge these boundaries within a single-writer contract. Failed inputs are quarantined; legacy protocol-1 inputs require review; new Markdown uses a separate durable document journal. Ledger/outbox guards now enforce recovery of older pending log work before admitting newer pattern versions; ordinary startup refuses unresolved log recovery. Pending path memory is bounded through directory polling; distributed leases remain future work; legacy reconciliation is available as copied-snapshot dry-run tooling. See [full recovery protocol](ingestion_recovery.md).
 
 ## Evaluation and alerts
 
@@ -89,9 +96,9 @@ Sentry polls every 10 seconds. Both query windows share one UTC observation time
 
 ## Boundaries still to establish
 
-No authenticated users, tenant authorization, isolated conversations or production deployment qualification exist yet. Embedded storage ownership, document provenance, retention, operational telemetry and backup/restore gates remain open. Kafka, cloud object ingestion, a migration coordinator and automatic fine-tuning are not active components. Older exploratory designs are [historical references](design_history/README.md).
+No authenticated users, tenant authorization, isolated conversations or production deployment qualification exist yet. Embedded storage ownership, precise claim-level source spans, replacement-version activation, enforced retention, broader operational telemetry and backup/restore gates remain open. Kafka, cloud object ingestion, a migration coordinator and automatic fine-tuning are not active components. Older exploratory designs are [historical references](design_history/README.md).
 
-Document recovery is being extended through [ADR 0001](decisions/0001-document-identity.md). New Markdown ingestion now uses its identity/span helper and journals original bytes, the topic plan and immutable card payloads in SQLite before stable-ID vector writes. First-version ingestion and same-version replay are supported; replacement versions and legacy records require review. Whole-document source spans do not prove claim-level support.
+Document recovery implements [ADR 0001](decisions/0001-document-identity.md). New Markdown ingestion now uses its identity/span helper and journals original bytes, the topic plan and immutable card payloads in SQLite before stable-ID vector writes. First-version ingestion and same-version replay are supported; replacement versions and legacy records require review. Whole-document source spans do not prove claim-level support.
 
 Normal intake now retries recognized transient journaled failures with a bounded backoff (default two retries). Permanent unadmitted inputs and invalid document output are quarantined; unknown/partially persisted log failures stop the serialized log pipeline. Read-only recovery inspection avoids loading models. See [retry and inspection semantics](ingestion_recovery.md).
 
@@ -100,13 +107,99 @@ Legacy ledger/vector reconciliation now has a copied-snapshot dry-run tool ([ADR
 Pattern retention now tracks monotonic event/index activity and offers dry-run candidates only. Unknown legacy ages are retained. The old destructive cleanup entry point is disabled until operational retention/restore gates pass; no startup cleanup is enabled.
 
 
-## Controlled model experiments
+## Model control and validation
 
-Stateless queries may select a server-owned, request-local model profile. The
-profile separates generation and validation roles; settings and profile hashes
-are recorded with provider usage and trace IDs. Runtime answer validation receives
-source/SQL evidence. The evaluation service persists comparison rosters atomically
-and runs one evaluation job at a time, with independent conversations per
-candidate/repetition and a fixed validator. Read-only reports separate deterministic
-correctness from judge approval and refuse recommendations without acceptance
-gates and matching provenance. See [model harness](model_harness.md).
+Model selection is opt-in through `LOGPILOT_MODEL_PROFILES_PATH`. Both the
+orchestrator and evaluator load the server-owned catalog. Clients select an
+allowed profile ID; they cannot supply an endpoint or credentials. Ordinary
+chat keeps its existing configuration. Profile selection requires
+`persist_history:false`, so experiments do not change shared chat history or
+mutate the default model registry.
+
+Each frozen profile separates generation from validation and records model tag,
+temperature, top-p, seed, output-token cap and optional reasoning effort. The
+request budget carries the resolved settings. The shared LLM client routes
+`fast`, `smart` and `reasoning` roles to the selected generator, and `validator`
+to the selected validator. Without a profile, the validator uses the existing
+fast-model configuration. Embeddings, ingestion synthesis and the optional
+Ragas endpoint are separate paths, not controlled by this comparison profile.
+
+```mermaid
+flowchart TD
+    Q[Query with allowed profile ID and expected hash] --> PIN[Resolve profile and check configuration/data pins]
+    PIN --> B[Request budget and immutable model settings]
+    B --> G[Generation: routing, SQL, answer]
+    G --> E[SQL rows or retrieved/web evidence]
+    E --> D[Deterministic SQL and citation identity checks]
+    D --> V[Validation role checks context and answer evidence]
+    V --> O[Validated answer, clarification, abstention or failure]
+    B -.-> T[Request provenance and bounded stage/provider traces]
+    G -.-> T
+    V -.-> T
+```
+
+This diagram summarizes responsibilities; graph routing and bounded retries can
+revisit stages. Runtime validation receives actual SQL or retrieved/web evidence.
+A judge acceptance is recorded separately from offline correctness. Deterministic
+citation identity checks reject unknown IDs but do not prove semantic support.
+
+## Comparison execution and release decision
+
+```mermaid
+sequenceDiagram
+    participant U as CLI or API caller
+    participant E as Evaluation service
+    participant S as Evaluation store
+    participant A as Orchestrator
+    participant M as Model endpoint
+    U->>E: Profiles, repetitions, data revision, optional gates
+    E->>E: Load dataset/catalog; require identical validator settings
+    E->>S: Atomically persist every run and case roster
+    loop Serial candidate runs with rotated order across repetitions
+        E->>A: Stateless query, isolated context, profile/data pins
+        A->>A: Reject changed pins before provider work
+        A->>M: Generation and evidence-aware validation
+        M-->>A: Response and available usage
+        A-->>E: Outcome, evidence, rows, trace and provenance
+        E->>S: Deterministic scores and per-case results
+    end
+    U->>E: Fetch comparison report
+    E->>S: Read persisted evidence
+    E-->>U: Metrics, provenance checks and gated recommendation
+```
+
+`POST /evaluate/compare` admits 2–4 profiles, 1–5 repetitions and at most 5,000
+case executions. Only one batch/comparison job runs per evaluator. Each
+candidate/repetition has independent ephemeral conversation context; expected
+answers remain in the scorer and are never sent as query context. A startup
+owner lock prevents competing evaluators and marks abandoned runs interrupted,
+preserving completed cases without automatically replaying requests.
+
+`GET /evaluate/comparisons/{id}` separates pass/error/unscored rates, latency
+p50/p95, citation dimensions, validator acceptance and available token usage.
+Missing usage remains unavailable; no monetary cost is inferred. Unexpected
+abstention cannot pass merely because SQL rows match. Recommendations require
+complete scored results, matching observed provenance and all explicit
+quality/error/latency gates. Exact ties produce no recommendation. Default-model
+promotion remains a separate reviewed action.
+
+## Traceability and remaining evidence gaps
+
+| Record | Implemented evidence | Limit |
+|---|---|---|
+| Model execution | Profile/endpoint fingerprints, requested settings, returned model names, available usage | Tags/names are not verified weight digests; context/runtime configuration is external |
+| Prompts and scoring | Template hashes, scorer identity, reporter fingerprint | Stable hashes do not prove correctness |
+| Evaluation input | Dataset hash/version/split, case order, comparison plan and data revision | Data revision is an operator assertion, not a database/vector snapshot |
+| Request execution | Bounded request/node/provider spans, parent IDs, attempts, timing and sanitized outcomes | No forced cancellation of synchronous work; traces exclude prompt/history content |
+| Quality | Deterministic expected rows/answers and reviewed citation claims; separate judge result | Synthetic coverage and judge approval do not establish live accuracy |
+
+The next architecture increment is Q07: frozen disposable SQL/vector fixtures,
+live repeated comparisons and reviewed thresholds. Stronger model/data identity,
+judge-error audits and memory/runtime measurements improve reproducibility.
+Authentication and workspace scope, explicit storage owners, bounded SQL process
+execution, deploy/rollback tests and restore drills remain required before a
+shared pilot. These are planned boundaries, not present components.
+
+See [harness setup and configuration](model_harness.md),
+[evaluation contracts](evaluation_contract.md) and
+[prioritized improvement plan](status_2026-10-01.md).

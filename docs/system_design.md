@@ -1,6 +1,6 @@
 # LogPilot system design and evolution plan
 
-Design baseline: 2026-09-17, implementation commit `4895c91`. Status: local prototype under staged hardening; not approved for shared enterprise use. This document consolidates implemented capabilities and proposed designs. The [roadmap](enterprise_roadmap.md) retains the detailed implementation sequence; [architecture](architecture.md) describes the running code.
+Design refreshed 2026-10-01 against implementation `e190d1f` and status checkpoint `0fb3701`; original baseline `4895c91` is retained only as historical evidence. Status: local prototype under staged hardening; not approved for shared enterprise use. This document consolidates implemented capabilities and proposed designs. The [roadmap](enterprise_roadmap.md) retains the detailed implementation sequence; [architecture](architecture.md) describes the implemented code and current model/validation flows.
 
 Actionable next steps: [implementation task tracker](implementation_tasks.md), with task IDs, dependencies and completion evidence.
 
@@ -19,15 +19,15 @@ Prefer narrow, reversible changes backed by synthetic regression fixtures. Separ
 | Retrieval and runbooks | LlamaIndex/Chroma retrieval, log-template knowledge and Markdown topic synthesis | Original versions/whole-document input spans and durable replay now implemented for new documents; precise support spans and replacement activation remain open |
 | Evidence | Retrieved artifact IDs/content hashes; unknown citation IDs rejected before judge; evidence displayed safely | Reviewed exact-claim coverage/support and web snippet attribution are tested; general semantic entailment and mandatory runtime coverage remain unproven |
 | Conversation | History serialization repairs and follow-up context; `persist_history:false` supports isolated requests | Shared default session; no user/workspace isolation; isolated multi-turn evaluation uses bounded runner-owned context |
-| Bounded orchestration | Separate SQL/context/answer retries; deadlines, provider call budgets, four active query slots per API process; typed query failures | Running synchronous work cannot be forcibly stopped; trace is a message transcript |
-| Local-first inference | Configured OpenAI-compatible chat endpoint; Ollama in Compose; external search opt-in | Model availability, hardware sizing and quality must be measured; embeddings have a separate data path |
+| Bounded orchestration | Separate SQL/context/answer retries; deadlines, provider call budgets, four active query slots per API process; typed query failures | Structured trace v2 records request/node/provider spans; running synchronous work cannot be forcibly stopped |
+| Local-first inference | Configured chat endpoint; opt-in server-owned model profiles with separate generation/validation roles, request-local settings and fingerprints; external search opt-in | Live quality and hardware sizing unmeasured; tags are not weight digests; embeddings/ingestion and optional Ragas judge remain separate |
 | Rendering and egress | Escaped plain fields, allowlisted Markdown, vendored renderer/sanitizer, best-effort PII and credential redaction | No comprehensive DLP, raw-data lifecycle or authenticated deployment |
 | File ingestion | Immutable-file contract, content fingerprint, SQLite acknowledgement ledger, quarantine and successful-only acknowledgement | Append/tail sources unsupported; pending paths are bounded by disk-backed polling, distributed ownership remains absent |
 | Log recovery | Atomic DuckDB rows/event keys/index outbox; deterministic vector upsert; explicit protocol-2 replay skips committed lines | Recover older pending files before newer pattern versions; legacy vectors/Markdown need separate migration; new documents use their own journal |
 | Alerts | Polling Sentry detects elevated global error volume and persists alerts with read acknowledgement | Heuristic global baseline; no per-service learned detector or scoped ownership |
 | MCP | Restricted SQL tool, natural-language query proxy, recent-log and schema resources | No identity/authorization; transport integration coverage remains open |
 | Evaluation | Persisted run roster, exact row/answer contracts, honest denominators, retrieval/citation dimensions, UTC metrics, versioned dataset/split and request provenance | Scripted fixtures are not live-model quality; restart finalizes abandoned runs as interrupted; multi-turn contexts are ephemeral and requests are not resumed |
-| Verification | Isolated backend Docker profile, browser contracts, pinned test dependencies, CI and abrupt transaction crash checks | Full application deployment, clean-install vector smoke and operational qualification remain open |
+| Verification | Isolated backend Docker profile, browser contracts, pinned test dependencies, CI and abrupt transaction crash checks | Clean-install vector and recovery CI pass; full application deployment and operational qualification remain open |
 
 ## Decisions and tradeoffs
 
@@ -40,12 +40,12 @@ Prefer narrow, reversible changes backed by synthetic regression fixtures. Separ
 
 ## Proposed designs and rollout sequence
 
-Everything below is **planned**, not implemented by this documentation update. Each row may require several small PRs. Identity and storage decisions may be designed in parallel, but shared rollout waits for all isolation and operational gates.
+The sequence below combines completed foundations and remaining work. R01–R09 and Q01–Q06 are verified; the controlled comparison harness is implemented, while Q07 live measurements remain open. Steps 3–7 are planned. Each row may require several small PRs. Shared rollout waits for all isolation and operational gates.
 
 | Step | Design and new behavior | Acceptance evidence | Rollback boundary |
 |---|---|---|---|
-| 1. Complete recovery | Preserve Markdown source/version/span; journal document indexing; bounded ingestion queue, retry/backoff and inspectable quarantine; reconcile legacy vectors | Crash/restart and vector outage tests for logs and documents; no missing/duplicated acknowledged records; clean-install vector smoke | Additive journal versions; stop ingestion and restore compatible worker; retain pending jobs and source bytes |
-| 2. Establish quality baseline | Held-out questions with exact rows and source facts; isolated multi-turn conversations; structured stage events (Q05); repeated live-model runs with latency/cost/variance | Separate answer, retrieval, citation and availability results; failures retained; versioned dataset/model/template identities | Retain prior dataset/scorer and prompt versions; never rewrite previous run results |
+| 1. Recovery foundations — implemented R01–R09 | Preserve Markdown source/version/span; journal document indexing; bounded ingestion queue, retry/backoff and inspectable quarantine; reconcile legacy vectors | Crash/restart and vector outage tests for logs and documents; no missing/duplicated acknowledged records; clean-install vector smoke | Additive journal versions; stop ingestion and restore compatible worker; retain pending jobs and source bytes |
+| 2. Quality foundations — implemented; live baseline open | Held-out questions with exact rows and source facts; isolated multi-turn conversations; structured stage events and controlled repeated comparisons with fixed validator, profile/data pins and gated reports; live runs and thresholds still required | Separate answer, retrieval, citation and availability results; failures retained; versioned dataset/model/template identities | Retain prior dataset/scorer and prompt versions; never rewrite previous run results |
 | 3. Introduce identity and scope | Choose identity provider in an ADR; explicit local development identity; user/workspace/conversation ownership; enforce authorization outside model-generated SQL and retrieval | Cross-user/workspace denial tests across query, history, alerts, vectors, metrics and MCP; anonymous access rejected in shared mode | Keep shared mode disabled until complete; do not downgrade populated scoped data to anonymous access |
 | 4. Establish storage ownership | Repository interfaces and one explicit owner per mutable store; decide single-owner service versus server database from concurrency needs; remove constructor writes | Concurrent read/write and lock tests; copy/backfill/reconciliation; backup restore; migrate history/alerts before evaluation and analytics | Preserve old data and migration ledger; reconcile post-cutover writes before reverting |
 | 5. Package a deployable pilot | Pin runtime artifacts; separate model preparation/demo generation from startup; same-origin UI, explicit CORS, liveness/readiness; request IDs, stage timing, redacted diagnostics; query process and payload limits | Disposable full-stack and MCP tests; model outage, overload and startup failures; no secrets in diagnostics | Versioned configuration/images; rehearsed rollback with schema compatibility check |
@@ -105,3 +105,9 @@ configuration fingerprints. Runtime validation sees evidence; deterministic
 fixture scores remain independent. Reports include timing, usage availability,
 provenance checks and caller-defined gates. No automatic model promotion or live
 quality claim follows from this implementation; Q07 measured experiments remain.
+
+
+Current review entry point: [latest architecture](architecture.md), including runtime,
+model-control and comparison diagrams. [Status on 2026-10-01](status_2026-10-01.md)
+records the successful implementation CI and prioritized evidence gaps. No model
+promotion, deployment, data migration or live benchmark is implied by this design refresh.
