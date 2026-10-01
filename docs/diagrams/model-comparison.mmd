@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant U as CLI or API caller
+    participant E as Evaluation service
+    participant S as Evaluation store
+    participant A as Orchestrator
+    participant M as Model endpoint
+    U->>E: Profiles, repetitions, data revision, optional gates
+    E->>E: Load dataset/catalog; require identical validator settings
+    E->>S: Atomically persist every run and case roster
+    loop Serial candidate runs with rotated order across repetitions
+        E->>A: Stateless query, isolated context, profile/data pins
+        A->>A: Reject changed pins before provider work
+        A->>M: Generation and evidence-aware validation
+        M-->>A: Response and available usage
+        A-->>E: Outcome, evidence, rows, trace and provenance
+        E->>S: Deterministic scores and per-case results
+    end
+    U->>E: Fetch comparison report
+    E->>S: Read persisted evidence
+    E-->>U: Metrics, provenance checks and gated recommendation

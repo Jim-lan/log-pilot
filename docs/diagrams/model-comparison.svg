@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1120" viewBox="0 0 1500 1120" role="img" aria-labelledby="title desc">
+<title id="title">Comparison execution and release decision</title>
+<desc id="desc">Sequence of comparison admission, persisted rosters, repeated model requests, scoring and a gated report. The report does not automatically promote a model.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#334155"/></marker></defs>
+<rect width="1500" height="1120" fill="#ffffff"/>
+<g font-family="Arial, sans-serif" fill="#0f172a">
+<text x="50" y="48" font-size="28" font-weight="bold">Comparison execution and release decision</text>
+<rect x="25" y="82" width="250" height="56" rx="8" fill="#e8f0fe" stroke="#94a3b8"/>
+<text x="150" y="117" font-size="20" text-anchor="middle">CLI / API caller</text>
+<line x1="150" y1="138" x2="150" y2="1040" stroke="#cbd5e1" stroke-dasharray="6 6"/>
+<rect x="325" y="82" width="250" height="56" rx="8" fill="#e8f0fe" stroke="#94a3b8"/>
+<text x="450" y="117" font-size="20" text-anchor="middle">Evaluation service</text>
+<line x1="450" y1="138" x2="450" y2="1040" stroke="#cbd5e1" stroke-dasharray="6 6"/>
+<rect x="625" y="82" width="250" height="56" rx="8" fill="#e8f0fe" stroke="#94a3b8"/>
+<text x="750" y="117" font-size="20" text-anchor="middle">Evaluation store</text>
+<line x1="750" y1="138" x2="750" y2="1040" stroke="#cbd5e1" stroke-dasharray="6 6"/>
+<rect x="925" y="82" width="250" height="56" rx="8" fill="#e8f0fe" stroke="#94a3b8"/>
+<text x="1050" y="117" font-size="20" text-anchor="middle">Orchestrator</text>
+<line x1="1050" y1="138" x2="1050" y2="1040" stroke="#cbd5e1" stroke-dasharray="6 6"/>
+<rect x="1225" y="82" width="250" height="56" rx="8" fill="#e8f0fe" stroke="#94a3b8"/>
+<text x="1350" y="117" font-size="20" text-anchor="middle">Model endpoint</text>
+<line x1="1350" y1="138" x2="1350" y2="1040" stroke="#cbd5e1" stroke-dasharray="6 6"/>
+<rect x="325" y="345" width="1140" height="505" rx="8" fill="#f0fdf4" fill-opacity="0.65" stroke="#86a993"/>
+<text x="345" y="376" font-size="19" font-weight="bold">Repeat serially; rotate candidate order between repetitions</text>
+<line x1="150" y1="200" x2="450" y2="200" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="162" y="186" font-size="17">Profiles, repetitions, data revision, optional gates</text>
+<path d="M450,251 H540 V277 H450" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="462" y="240" font-size="17">Load dataset/catalog; require identical validator settings</text>
+<line x1="450" y1="325" x2="750" y2="325" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="462" y="311" font-size="17">Persist all run and case rosters atomically</text>
+<line x1="450" y1="430" x2="1050" y2="430" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="462" y="416" font-size="17">Stateless query + isolated context + profile/data pins</text>
+<path d="M1050,491 H1140 V517 H1050" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1062" y="480" font-size="17">Check pins before provider work</text>
+<line x1="1050" y1="580" x2="1350" y2="580" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1062" y="566" font-size="17">Generate and validate evidence</text>
+<line x1="1350" y1="650" x2="1050" y2="650" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="1062" y="636" font-size="17">Response + available usage</text>
+<line x1="1050" y1="720" x2="450" y2="720" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="462" y="706" font-size="17">Outcome, evidence, rows, trace and provenance</text>
+<line x1="450" y1="800" x2="750" y2="800" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="462" y="786" font-size="17">Store deterministic scores and case results</text>
+<line x1="150" y1="905" x2="450" y2="905" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="162" y="891" font-size="17">Fetch comparison report</text>
+<line x1="450" y1="970" x2="750" y2="970" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="462" y="956" font-size="17">Read persisted evidence</text>
+<line x1="450" y1="1035" x2="150" y2="1035" stroke="#334155" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="162" y="1021" font-size="17">Metrics, provenance checks, gated recommendation</text>
+<text x="50" y="1090" font-size="18" fill="#475569">A recommendation requires complete evidence and explicit gates. Default-model promotion remains a separate reviewed action.</text>
+</g></svg>

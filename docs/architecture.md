@@ -145,28 +145,9 @@ citation identity checks reject unknown IDs but do not prove semantic support.
 
 ## Comparison execution and release decision
 
-```mermaid
-sequenceDiagram
-    participant U as CLI or API caller
-    participant E as Evaluation service
-    participant S as Evaluation store
-    participant A as Orchestrator
-    participant M as Model endpoint
-    U->>E: Profiles, repetitions, data revision, optional gates
-    E->>E: Load dataset/catalog; require identical validator settings
-    E->>S: Atomically persist every run and case roster
-    loop Serial candidate runs with rotated order across repetitions
-        E->>A: Stateless query, isolated context, profile/data pins
-        A->>A: Reject changed pins before provider work
-        A->>M: Generation and evidence-aware validation
-        M-->>A: Response and available usage
-        A-->>E: Outcome, evidence, rows, trace and provenance
-        E->>S: Deterministic scores and per-case results
-    end
-    U->>E: Fetch comparison report
-    E->>S: Read persisted evidence
-    E-->>U: Metrics, provenance checks and gated recommendation
-```
+![Comparison execution and release decision](diagrams/model-comparison.svg)
+
+[Editable Mermaid source](diagrams/model-comparison.mmd). The image displays in Markdown viewers that do not render Mermaid.
 
 `POST /evaluate/compare` admits 2–4 profiles, 1–5 repetitions and at most 5,000
 case executions. Only one batch/comparison job runs per evaluator. Each
