@@ -1,6 +1,10 @@
 # LogPilot implementation task tracker
 
-Updated 2026-09-28. Derived from the [system design](system_design.md) and [enterprise roadmap](enterprise_roadmap.md). Implementation baseline: `4895c91`. This is the actionable queue for remaining work; unchecked tasks are planned, not started by this documentation update. Task groups follow the new design's seven stages; the older roadmap phase numbers differ and are mapped below.
+Updated 2026-10-01. Derived from the [system design](system_design.md) and [enterprise roadmap](enterprise_roadmap.md). Implementation baseline: `4895c91`. This is the actionable queue for remaining work; unchecked tasks are planned, not started by this documentation update. Task groups follow the new design's seven stages; the older roadmap phase numbers differ and are mapped below.
+
+Latest [status and improvement priorities](status_2026-10-01.md): model harness
+commit `e190d1f` is pushed and [CI run 36437720719](https://github.com/Jim-lan/log-pilot/actions/runs/36437720719)
+passed, verified on October 1. Q07 still requires live measurements.
 
 ## Current position and next move
 
